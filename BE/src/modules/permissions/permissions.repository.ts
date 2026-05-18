@@ -275,7 +275,7 @@ export class PermissionsRepository {
 	): Promise<boolean> {
 		// Lấy projectId từ boardId
 		const board = await this.prismaService.boards.findUnique({
-			where: { id: boardId, deletedAt: null },
+			where: { id: boardId },
 			select: { projectId: true },
 		});
 

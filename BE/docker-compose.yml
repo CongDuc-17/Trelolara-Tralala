@@ -1,20 +1,30 @@
 version: '3.8'
 
 services:
-    trip-database:
+    # 1. Phục hồi cấu hình Database theo đúng container đang chạy
+    trello-database:
         image: postgres:17.2-bookworm
-        container_name: trip-database
+        container_name: trello-database
         restart: on-failure
         environment:
             POSTGRES_USER: root
             POSTGRES_PASSWORD: root
-            POSTGRES_DB: trip
+            POSTGRES_DB: trello
         ports:
             - '5434:5432'
 
-    trip-backend:
+    # 2. Bổ sung thêm Redis có trong ảnh của bạn
+    # trello-redis:
+    #     image: redis:8.4.0-alpine3.22
+    #     container_name: trello-redis
+    #     restart: on-failure
+    #     ports:
+    #         - '6380:6379'
+
+    # 3. Cập nhật lại Backend
+    trello-backend:
         working_dir: /app
-        container_name: trip-backend
+        container_name: be-trello
         build:
             context: .
             dockerfile: Dockerfile
@@ -22,7 +32,8 @@ services:
         ports:
             - '3001:3000'
         depends_on:
-            - trip-database
+            - trello-database
+            # - trello-redis
         env_file:
             - .env
-        command: ['node', 'dist/src/main.js']
+        command: ['node', 'dist/app.js']
