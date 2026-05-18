@@ -51,16 +51,19 @@ enum PermissionStatusEnum {
 enum ProjectStatusEnum {
   ACTIVE   @map("active")
   ARCHIVED @map("archived")
+  DELETED  @map("deleted")
 }
 
 enum BoardStatusEnum {
   ACTIVE   @map("active")
   ARCHIVED @map("archived")
+  DELETED  @map("deleted")
 }
 
 enum ListStatusEnum {
   ACTIVE   @map("active")
   ARCHIVED @map("archived")
+ 
 }
 
 enum CardStatusEnum {

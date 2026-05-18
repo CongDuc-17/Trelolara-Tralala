@@ -1,9 +1,12 @@
-import { Address } from 'nodemailer/lib/mailer';
+
 
 export class SendEmailDto {
-	sender?: Address;
-	recipients: Address[];
+	sender?: {
+		address: string;
+		name: string;
+	};
+	recipients: string | string[];
 	subject: string;
-	html: string;
-	text?: string;
+	html?: string| undefined;
+	text?: string| undefined;
 }

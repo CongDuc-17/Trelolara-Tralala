@@ -252,12 +252,7 @@ export class AuthService {
 		const otp = await this.otpsService.generateOtp({ userId: user.id });
 
 		await this.mailsService.sendEmail({
-			recipients: [
-				{
-					address: user.email,
-					name: user.name,
-				},
-			],
+			recipients: user.email,
 			subject: 'Mã xác thực',
 			html: `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`,
 		});
