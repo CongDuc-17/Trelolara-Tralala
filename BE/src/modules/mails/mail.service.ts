@@ -1,6 +1,6 @@
-import { CreateEmailOptions } from 'resend';
+import { SendMailOptions } from 'nodemailer';
 import { SendEmailDto } from './dtos';
-import { MailConfig, ResendConfig } from '@/configs/mails.config';
+import { MailConfig, TransporterConfig } from '@/configs/mails.config';
 
 export class MailsService {
 	constructor() {}
@@ -11,20 +11,22 @@ export class MailsService {
 		try {
 			const { sender, recipients, subject, html, text } = data;
 
+			// Nodemailer bọc tên người gửi trong ngoặc kép "" để hiển thị tốt nhất
 			const fromAddress = sender
-				? `${sender.name} <${sender.address}>`
-				: `${MailConfig.senderName} <${MailConfig.senderAddress}>`;
+				? `"${sender.name}" <${sender.address}>`
+				: `"${MailConfig.senderName}" <${MailConfig.senderAddress}>`;
 
-			// SỬA Ở ĐÂY: Khởi tạo toàn bộ payload cùng 1 lúc và ép kiểu
-			const payload = {
+			// Ép kiểu sang SendMailOptions của Nodemailer
+			const payload: SendMailOptions = {
 				from: fromAddress,
-				to: recipients,
+				to: recipients, 
 				subject,
 				...(html && { html }), 
 				...(text && { text }), 
-			} as CreateEmailOptions;
+			};
 
-			await ResendConfig.emails.send(payload);
+			// Sử dụng transporter thay vì ResendConfig
+			await TransporterConfig.sendMail(payload);
 
 			return { success: true };
 		} catch (error) {

@@ -15,14 +15,19 @@ import { apiClient } from "@/lib/apiClient";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast, Toaster } from "sonner";
+
 export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(""); // Clear previous error
+    setIsLoading(true);
+
     try {
       await apiClient.post(
         "/auth/login",
@@ -35,11 +40,15 @@ export function Login() {
 
       toast.success("Login successful");
       navigate("/dashboard", { replace: true });
-    } catch (error) {
+    } catch (error: any) {
       const message = error?.response?.data?.message || "Login failed";
-      toast.error(message);
       setError(message);
-      console.log("Login failed", error);
+      toast.error(message, {
+        duration: 5000, // Hiển thị 5 giây
+      });
+      console.error("Login failed", error);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -64,8 +73,10 @@ export function Login() {
             </CardAction>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit}>
+            <form >
               <div className="flex flex-col gap-6">
+        
+
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -73,8 +84,11 @@ export function Login() {
                     type="email"
                     placeholder="Email"
                     required
+                    disabled={isLoading}
+                    value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
+                      setError(""); // Clear error when user types
                     }}
                   />
                 </div>
@@ -93,13 +107,16 @@ export function Login() {
                     type="password"
                     placeholder="Password"
                     required
+                    disabled={isLoading}
+                    value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
+                      setError(""); // Clear error when user types
                     }}
                   />
                 </div>
-                <Button type="submit" className="w-full ">
-                  Login
+                <Button type="button" className="w-full" disabled={isLoading} onClick={handleSubmit}>
+                  {isLoading ? "Logging in..." : "Login"}
                 </Button>
               </div>
               <div className="relative mt-6">
@@ -110,6 +127,7 @@ export function Login() {
                   <Button
                     variant="outline"
                     type="button"
+                    disabled={isLoading}
                     onClick={() => handleLoginGoogle()}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">

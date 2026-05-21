@@ -120,7 +120,6 @@ export function Dashboard() {
         </div>
 
         <div className="pl-8">
-          {loading && <div>Loading...</div>}
           {error && <div>Error: {error}</div>}
 
           {!loading && !error && projects.length === 0 && (
