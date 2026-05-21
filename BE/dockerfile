@@ -22,7 +22,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY ./prisma ./prisma
 
-RUN npm install --production && npm install resend
+RUN npm install --production 
 
 COPY --from=builder /app/dist /app/dist
 
