@@ -22,6 +22,7 @@ import { ProjectsScheduler } from './modules/projects/project.scheduler';
 const app: Express = express();
 
 app.use(express.json());
+app.use(cors({ origin: appEnv.CORS_ORIGIN, credentials: true }));
 
 // Set the application to trust the reverse proxy
 app.set('trust proxy', true);
@@ -34,7 +35,6 @@ app.use(setCookieMiddleware);
 app.use(passport.initialize());
 
 // Middlewares
-app.use(cors({ origin: appEnv.CORS_ORIGIN, credentials: true }));
 app.use(helmet());
 app.use(morgan('combined'));
 

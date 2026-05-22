@@ -24,11 +24,11 @@ export const setCookieMiddleware: RequestHandler = (req, res, next): void => {
 
 			Object.keys(cookies).forEach((name) => {
 				const cookieValue = cookies[name];
-
+				const isProduction = appEnv.NODE_ENV === 'production';
 				const defaultOptions: ICookieOptions = {
 					httpOnly: true,
-					secure: appEnv.NODE_ENV === 'production',
-					sameSite: 'lax',
+					secure: isProduction,
+					sameSite: isProduction ? 'none' : 'lax',
 					path: '/',
 				};
 
