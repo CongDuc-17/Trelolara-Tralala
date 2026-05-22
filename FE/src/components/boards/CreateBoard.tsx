@@ -18,7 +18,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Card } from "../ui/card";
 import { Spinner } from "../ui/spinner";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 
 export function CreateBoard({ projectId }: { projectId: string }) {
   const [name, setName] = useState("");
