@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 
 type List = { id: string; name: string; position: number };
@@ -8,29 +8,26 @@ export const useLists = (boardId: string, options = { enabled: true }) => {
   const [error, setError] = useState<unknown>(null);
   const [lists, setLists] = useState<List[]>([]);
 
-  async function fetchLists(boardId: string) {
-    try {
-      setLoading(true);
-      const response = await apiClient.get(
-        `/boards/${boardId}/lists?status=ACTIVE`,
-      );
-      const payload = (response as { data?: unknown }).data ?? response;
-
-      setLists(Array.isArray(payload) ? (payload as List[]) : []);
-      setError(null);
-    } catch (error) {
-      console.error("Failed to fetch lists", error);
-      setError(error);
-    } finally {
-      setLoading(false);
-    }
+const fetchLists = useCallback(async (boardId: string) => {
+  try {
+    setLoading(true);
+    const response = await apiClient.get(`/boards/${boardId}/lists?status=ACTIVE`);
+    const payload = (response as { data?: unknown }).data ?? response;
+    setLists(Array.isArray(payload) ? (payload as List[]) : []);
+    setError(null);
+  } catch (error) {
+    console.error("Failed to fetch lists", error);
+    setError(error);
+  } finally {
+    setLoading(false);
   }
+}, []);
 
-  useEffect(() => {
-    if (options.enabled && boardId) {
-      fetchLists(boardId);
-    }
-  }, [boardId, options.enabled]);
+useEffect(() => {
+  if (options.enabled && boardId) {
+    fetchLists(boardId);
+  }
+}, [boardId, options.enabled, fetchLists]);
 
   async function createList(
     boardId: string,

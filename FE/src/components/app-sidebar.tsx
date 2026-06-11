@@ -11,18 +11,36 @@ import {
   SidebarMenuButton,
   SidebarRail,
   SidebarTrigger,
-  useSidebar, // 1. Import useSidebar hook
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useUserStore } from "@/stores/user.store";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjects, type Board } from "@/hooks/useProjects";
 
 import { GiSharkFin } from "react-icons/gi";
 import { Link } from "react-router";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useUserStore();
-  const { projects } = useProjects({ includeBoards: true });
+  // LẤY THÊM TRẠNG THÁI LOADING TỪ HOOK
+  const { projects, userBoards, loading } = useProjects({
+    includeBoards: true,
+  });
   const { open, setOpen } = useSidebar();
+
+  const guestBoardsList: Board[] = [];
+  const memberProjectIds = new Set(projects.map((project) => project.id));
+
+  for (const board of userBoards) {
+    if (memberProjectIds.has(board.projectId ?? "")) {
+      continue;
+    }
+
+    if (board.status === "ARCHIVED") {
+      continue;
+    } else if (board.status === "ACTIVE") {
+      guestBoardsList.push(board);
+    }
+  }
 
   return (
     <Sidebar collapsible="icon" {...props} className="relative">
@@ -57,7 +75,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain projects={projects} />
+        {/* TRUYỀN isLoading XUỐNG NAVMAIN */}
+        <NavMain
+          projects={projects}
+          guestBoards={guestBoardsList}
+          isLoading={loading}
+        />
       </SidebarContent>
 
       <SidebarFooter>

@@ -3,6 +3,7 @@ import { BoardsService } from './boards.service';
 import {
 	CreateBoardRequestDto,
 	BoardsResponseDto,
+	UserBoardResponseDto,
 	UpdateBoardResponseDto,
 	UpdateInformationBoardRequestDto,
 	GetBoardMembersResponseDto,
@@ -16,6 +17,24 @@ import { GetBoardResponseDto } from './dtos/responses/getBoard.response';
 
 export class BoardsController {
 	constructor(private boardsService: BoardsService = new BoardsService()) {}
+
+	async getMyBoards(req: Request): Promise<Response> {
+		const pagination: PaginationDto = new PaginationDto(req.query);
+		const status: GetBoardsOfProjectRequestDto = new GetBoardsOfProjectRequestDto(
+			req.query,
+		);
+		const userId = (req.user as { id: string }).id;
+		const result = await this.boardsService.getBoardsOfUser(
+			userId,
+			status,
+			pagination,
+		);
+		if (result instanceof Exception) {
+			return new HttpResponseDto().exception(result);
+		}
+		return new HttpResponseDto().success<UserBoardResponseDto[]>(result);
+	}
+
 	async createBoard(req: Request): Promise<Response> {
 		const projectId = req.params.projectId as string;
 		const createBoardDto = new CreateBoardRequestDto(req.body);

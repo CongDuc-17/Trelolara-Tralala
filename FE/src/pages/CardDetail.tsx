@@ -28,10 +28,11 @@ import {
 
 import { Progress } from "@/components/ui/progress";
 import { useBoards } from "@/hooks/useBoards";
-
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCardsStore } from "@/stores/cards.store";
+import { Skeleton } from "@/components/ui/skeleton";
+
 interface Card {
   id: string;
   title: string;
@@ -65,8 +66,6 @@ export function CardDetail() {
     state.cards.find((c) => c.id === cardId),
   );
 
-  console.log("Card from store in CardDetail:", card);
-
   useEffect(() => {
     fetchLabelsBoard();
   }, [boardId]);
@@ -79,12 +78,11 @@ export function CardDetail() {
       );
       setCurrentCardId(cardId || null);
 
-      // Dùng getState() tránh stale closure, luôn merge
       const existingCard = useCardsStore
         .getState()
         .cards.find((c) => c.id === cardId);
       if (existingCard) {
-        updateCard(response.data); // merge nhờ fix ở store
+        updateCard(response.data);
       } else {
         setCards([...useCardsStore.getState().cards, response.data]);
       }
@@ -116,10 +114,8 @@ export function CardDetail() {
       });
 
       updateCard({ ...card, checklists: updatedChecklists });
-
       setInputValue("");
       setActiveChecklistId(null);
-      console.log("Checklist item added", response.data);
     } catch (error) {
       console.error("Error adding checklist item:", error);
     }
@@ -133,11 +129,10 @@ export function CardDetail() {
       if (!card) return;
 
       const updatedChecklists = card.checklists?.map((checklist: any) => {
-        // Thêm ( || [] ) để tránh lỗi văng app nếu checklist rỗng
         const updatedItems = (checklist.checklistItems || []).map(
           (item: any) => {
             if (item.id === checklistItemId) {
-              return { ...item, completed: newCheckedState }; // Dùng luôn state mới
+              return { ...item, completed: newCheckedState };
             }
             return item;
           },
@@ -192,8 +187,17 @@ export function CardDetail() {
   return (
     <Dialog open={true} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="w-10/12 max-w-none! left-1/2 !top-0 !translate-y-0 transform -translate-x-1/2 mt-10 max-h-[90vh] bg-background rounded-lg shadow-md p-6 ">
-        {card && (
-          <DialogHeader className="flex  justify-between">
+        {/* SKELETON HEADER */}
+        {loading && (
+          <DialogHeader className="flex flex-col gap-2 mb-4">
+            <Skeleton className="h-7 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+          </DialogHeader>
+        )}
+
+        {/* ACTUAL HEADER */}
+        {!loading && card && (
+          <DialogHeader className="flex justify-between mb-4">
             <DialogTitle className="text-xl font-bold">
               {card.title}
             </DialogTitle>
@@ -201,11 +205,33 @@ export function CardDetail() {
           </DialogHeader>
         )}
 
+        {/* SKELETON BODY */}
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <p className="text-muted-foreground">Loading card details...</p>
+          <div className="grid grid-cols-2 gap-8">
+            <div className="w-full flex flex-col gap-6">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-24 w-full rounded-md" />
+              </div>
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-10 w-24 rounded-full" />
+                <Skeleton className="h-10 w-24 rounded-md" />
+                <Skeleton className="h-10 w-24 rounded-md" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-32 w-full rounded-md" />
+                <Skeleton className="h-32 w-full rounded-md" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-10 w-full rounded-md" />
+              </div>
+            </div>
           </div>
         ) : card ? (
+          /* ACTUAL BODY */
           <div className="grid grid-cols-2 gap-8">
             <div className="w-full flex flex-col gap-4 ">
               <div>
@@ -223,16 +249,13 @@ export function CardDetail() {
               <div className="flex items-center flex-wrap pr-4 gap-2">
                 {card.cardMembers && card.cardMembers?.length > 0 ? (
                   <AvatarGroup className="">
-                    {/* 2. Map over the members INSIDE the AvatarGroup */}
                     {card.cardMembers.map((cardMember: any) => {
                       const memberDetail = cardMember?.user;
                       if (!memberDetail) return null;
 
                       return (
-                        // 3. Always provide a unique 'key' when rendering elements in a list
                         <Avatar key={memberDetail.id}>
                           <AvatarImage
-                            // Use the actual user's avatar URL from your data
                             src={memberDetail.avatar || ""}
                             alt={`@${memberDetail.name}`}
                           />

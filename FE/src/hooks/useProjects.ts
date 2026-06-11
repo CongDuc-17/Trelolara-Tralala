@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/apiClient";
 import { useProjectsStore } from "@/stores/projects.store";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 type ApiResponse<T> = {
   success: boolean;
@@ -8,7 +8,7 @@ type ApiResponse<T> = {
   pagination?: unknown;
 };
 
-type Project = {
+export type Project = {
   id: string;
   name: string;
   description?: string;
@@ -21,13 +21,17 @@ type Project = {
   members?: ProjectMember[];
 };
 
-type Board = {
+export type Board = {
   id: string;
   projectId?: string;
   name: string;
   description?: string;
   background?: string;
   status?: string;
+  roleId?: string;
+  roleName?: string;
+  projectName?: string;
+  projectStatus?: string;
   membersCount?: number;
   listsCount?: number;
 };
@@ -54,6 +58,7 @@ export const useProjects = ({
   includeBoards = false,
   autoFetch = true,
 }: UseProjectsOptions = {}) => {
+  const [userBoards, setUserBoards] = useState<Board[]>([]);
   const {
     projects,
     setProjects,
@@ -72,6 +77,9 @@ export const useProjects = ({
         "/projects",
       )) as unknown as ApiResponse<Project[]>;
 
+      console.log("Response object:", response);  
+      // console.log("Response data:", response.data);  
+    
       setProjects(
         response.data.map((project: Project) => ({
           ...project,
@@ -120,6 +128,22 @@ export const useProjects = ({
     }
   }
 
+  async function fetchUserBoards() {
+    try {
+      const response = (await apiClient.get(
+        "/boards",
+      )) as unknown as ApiResponse<Board[]>;
+
+      setUserBoards(response.data);
+      setError(null);
+      return response.data;
+    } catch (error) {
+      console.error("Failed to fetch user boards", error);
+      setError(toStoreError(error));
+      return [];
+    }
+  }
+
   async function fetchProjectMembers(projectId: string) {
     try {
       const response = (await apiClient.get(
@@ -145,14 +169,25 @@ export const useProjects = ({
         "/projects",
       )) as unknown as ApiResponse<Project[]>;
       const projects = projectsResponse.data;
-      const boardResults = await Promise.allSettled(
-        projects.map(
-          async (project: Project) =>
-            (await apiClient.get(
-              `/projects/${project.id}/boards`,
-            )) as unknown as ApiResponse<Board[]>,
+      const [boardResults, userBoardsResult] = await Promise.all([
+        Promise.allSettled(
+          projects.map(
+            async (project: Project) =>
+              (await apiClient.get(
+                `/projects/${project.id}/boards`,
+              )) as unknown as ApiResponse<Board[]>,
+          ),
         ),
+        Promise.allSettled([
+          apiClient.get("/boards") as unknown as Promise<ApiResponse<Board[]>>,
+        ]),
+      ]);
+      setUserBoards(
+        userBoardsResult[0].status === "fulfilled"
+          ? userBoardsResult[0].value.data
+          : [],
       );
+
       const projectsWithBoards = projects.map((project: Project, index) => ({
         ...project,
         boards:
@@ -211,11 +246,13 @@ export const useProjects = ({
     loading,
     error,
     createProject,
+    userBoards,
     getProjectBoards,
     getProjectById,
     fetchProjects,
     fetchProjectById,
     fetchProjectBoards,
+    fetchUserBoards,
     fetchProjectMembers,
     fetchProjectsWithBoards,
   };

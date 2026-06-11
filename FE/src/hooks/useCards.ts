@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 
 type Card = {
@@ -13,7 +13,7 @@ export const useCards = (listIds: string[]) => {
   const [error, setError] = useState<unknown>(null);
   const [cards, setCards] = useState<Card[]>([]);
 
-  async function createCard(listId: string, title: string) {
+  const createCard = useCallback(async (listId: string, title: string) => {
     try {
       setLoading(true);
       const response = await apiClient.post(`/lists/${listId}/cards`, {
@@ -32,9 +32,9 @@ export const useCards = (listIds: string[]) => {
       setError(error);
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function fetchCards(targetListIds: string[]) {
+  const fetchCards = useCallback(async (targetListIds: string[]) => {
     if (!targetListIds.length) {
       setCards([]);
       setLoading(false);
@@ -50,7 +50,7 @@ export const useCards = (listIds: string[]) => {
             `/lists/${listId}/cards?status=ACTIVE`,
           );
           console.log("API Response for cards in list", listId, response);
-          const payload = (response as { data?: unknown }).data ?? response;
+          const payload = Array.isArray(response?.data) ? response.data : [];
           const listCards = Array.isArray(payload)
             ? (payload as Array<{
                 id: string;
@@ -71,14 +71,11 @@ export const useCards = (listIds: string[]) => {
       setError(error);
       setLoading(false);
     }
-  }
-
-  const listIdsKey = listIds.join("|");
+  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCards(listIds);
-  }, [listIds, listIdsKey]);
+  }, [listIds, fetchCards]);
 
   return { cards, loading, error, fetchCards, createCard };
 };

@@ -16,44 +16,58 @@ import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 
 let ws: WebSocket | null = null;
+let isMountedGlobal = true;
 
 const initWebSocket = async (
   onNotification: (notification: any) => void,
   onUnreadCount: (count: number) => void,
 ) => {
+  // Kiểm tra xem component còn mounted hay không
+  if (!isMountedGlobal) return;
+
   // Đóng connection cũ nếu đang tồn tại
   if (ws && ws.readyState !== WebSocket.CLOSED) {
     ws.close();
   }
 
-  ws = new WebSocket(import.meta.env.VITE_WS_URL);
+  if (!isMountedGlobal) return;
 
-  ws.onopen = () => {
-    console.log("[WS] Connected");
-  };
+  try {
+    ws = new WebSocket(import.meta.env.VITE_WS_URL);
 
-  ws.onmessage = (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      console.log("[WS] Message received:", message);
+    ws.onopen = () => {
+      if (!isMountedGlobal) return;
+      console.log("[WS] Connected");
+    };
 
-      if (message.event === "notification:new") {
-        onNotification(message.data);
-      } else if (message.event === "notification:unread-count") {
-        onUnreadCount(message.data.count);
+    ws.onmessage = (event) => {
+      if (!isMountedGlobal) return;
+      try {
+        const message = JSON.parse(event.data);
+        console.log("[WS] Message received:", message);
+
+        if (message.event === "notification:new") {
+          onNotification(message.data);
+        } else if (message.event === "notification:unread-count") {
+          onUnreadCount(message.data.count);
+        }
+      } catch (error) {
+        console.error("[WS] Error parsing message:", error);
       }
-    } catch (error) {
-      console.error("[WS] Error parsing message:", error);
-    }
-  };
+    };
 
-  ws.onerror = (error) => {
-    console.error("[WS] Error:", error);
-  };
+    ws.onerror = (error) => {
+      if (!isMountedGlobal) return;
+      console.error("[WS] Error:", error);
+    };
 
-  ws.onclose = () => {
-    console.log("[WS] Disconnected");
-  };
+    ws.onclose = () => {
+      if (!isMountedGlobal) return;
+      console.log("[WS] Disconnected");
+    };
+  } catch (error) {
+    console.error("[WS] Connection error:", error);
+  }
 };
 
 const disconnectWebSocket = () => {
@@ -99,7 +113,7 @@ export function Notifications() {
   const getUnreadCount = useCallback(async () => {
     try {
       const response = await apiClient.get("/notifications/unread-count");
-      setUnreadCount(response.data.count);
+      setUnreadCount(response?.data?.count ?? 0);
     } catch (error) {
       console.error("Error fetching unread count:", error);
     }
@@ -129,6 +143,7 @@ export function Notifications() {
   }, [handleUnreadCountUpdate]);
 
   useEffect(() => {
+    isMountedGlobal = true;
     initWebSocket(
       (n) => onNotificationRef.current(n),
       (c) => onUnreadCountRef.current(c),
@@ -139,9 +154,10 @@ export function Notifications() {
     getUnreadCount();
 
     return () => {
+      isMountedGlobal = false;
       disconnectWebSocket();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [getNotifications, getUnreadCount]);
 
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {

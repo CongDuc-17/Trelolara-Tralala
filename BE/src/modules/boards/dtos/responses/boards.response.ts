@@ -65,6 +65,36 @@ export class BoardsResponseDto {
 	}
 }
 
+export class UserBoardResponseDto extends BoardsResponseDto {
+	roleId: string;
+	roleName: string;
+	projectName: string;
+	projectStatus: string;
+
+	constructor(data: {
+		projectId: string;
+		projectName: string;
+		projectStatus: string;
+		id: string;
+		name: string;
+		description?: string;
+		background?: string;
+		status: string;
+		roleId: string;
+		roleName: string;
+		_count?: {
+			members: number;
+			lists: number;
+		};
+	}) {
+		super(data);
+		this.roleId = data.roleId;
+		this.roleName = data.roleName;
+		this.projectName = data.projectName;
+		this.projectStatus = data.projectStatus;
+	}
+}
+
 export const BoardsResponseDTOSchema = z.object({
 	projectId: z.string(),
 	id: z.string(),
@@ -74,4 +104,11 @@ export const BoardsResponseDTOSchema = z.object({
 	status: z.string(),
 	membersCount: z.number(),
 	listsCount: z.number(),
+});
+
+export const UserBoardResponseDTOSchema = BoardsResponseDTOSchema.extend({
+	roleId: z.string(),
+	roleName: z.string(),
+	projectName: z.string(),
+	projectStatus: z.string(),
 });

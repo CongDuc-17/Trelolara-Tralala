@@ -2,29 +2,29 @@ version: '3.8'
 
 services:
     # 1. Phục hồi cấu hình Database theo đúng container đang chạy
-    trello-database:
+    trelolara-database:
         image: postgres:17.2-bookworm
-        container_name: trello-database
+        container_name: trelolara-database
         restart: on-failure
         environment:
             POSTGRES_USER: root
             POSTGRES_PASSWORD: root
-            POSTGRES_DB: trello
+            POSTGRES_DB: trelolara
         ports:
             - '5434:5432'
 
     # 2. Bổ sung thêm Redis có trong ảnh của bạn
-    # trello-redis:
+    # trelolara-redis:
     #     image: redis:8.4.0-alpine3.22
-    #     container_name: trello-redis
+    #     container_name: trelolara-redis
     #     restart: on-failure
     #     ports:
     #         - '6380:6379'
 
     # 3. Cập nhật lại Backend
-    trello-backend:
+    trelolara-backend:
         working_dir: /app
-        container_name: be-trello
+        container_name: be-trelolara
         build:
             context: .
             dockerfile: Dockerfile
@@ -32,8 +32,8 @@ services:
         ports:
             - '3001:3000'
         depends_on:
-            - trello-database
-            # - trello-redis
+            - trelolara-database
+            # - trelolara-redis
         env_file:
             - .env
         command: ['node', 'dist/app.js']

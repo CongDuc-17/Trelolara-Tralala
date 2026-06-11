@@ -5,6 +5,7 @@ import { useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { Input } from "../ui/input";
 import { useProjectsStore } from "@/stores/projects.store";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,9 +32,11 @@ import { toast } from "sonner";
 export function HeaderProject({
   projectId,
   projectName,
+  isLoading, // Thêm prop isLoading
 }: {
   projectId: string;
   projectName?: string;
+  isLoading?: boolean;
 }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -62,7 +65,6 @@ export function HeaderProject({
   async function handleArchiveProject() {
     try {
       await apiClient.patch(`/projects/${projectId}/archive`);
-      // await fetchProject();
       toast.success("Project archived successfully");
       navigate("/dashboard", { replace: true });
     } catch (error) {
@@ -71,8 +73,25 @@ export function HeaderProject({
     }
   }
 
+  // SKELETON RENDER NẾU ĐANG LOADING
+  if (isLoading) {
+    return (
+      <div className="sticky top-0 z-10 shadow-md flex justify-between items-center px-4 py-3 bg-white">
+        <div className="px-2">
+          <Skeleton className="h-8 w-64 rounded-md" />
+        </div>
+        <div className="flex items-center gap-4 pr-2">
+          {/* Skeleton cho Members (nhóm avatar) */}
+          <Skeleton className="h-10 w-32 rounded-full" />
+          {/* Skeleton cho nút Menu Ellipsis */}
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="sticky top-0 z-10 shadow-md flex justify-between items-center px-4 py-2">
+    <div className="sticky top-0 z-10 shadow-md flex justify-between items-center px-4 py-2 bg-white">
       <div className=" p-4 text-2xl font-bold border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 px-0">
         {editing ? (
           <Input
@@ -105,7 +124,6 @@ export function HeaderProject({
       </div>
       <div className="flex items-center gap-4">
         {/* avatars */}
-
         <MembersProject projectId={projectId} />
 
         <AlertDialog>

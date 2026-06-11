@@ -11,6 +11,7 @@ import {
 	updateBoardResponseDtoSchema,
 	UpdateInformationBoardRequestSchema,
 	getBoardMembersResponseDtoSchema,
+	UserBoardResponseDTOSchema,
 } from './dtos';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
 import { createListRequestSchema, listResponseDtoSchema } from '../lists/dtos';
@@ -39,6 +40,18 @@ const router = express.Router();
 autoBindUtil(boardsController);
 autoBindUtil(listsController);
 autoBindUtil(labelsController);
+
+boardsRegistry.registerPath({
+	method: 'get',
+	path: '/boards',
+	tags: ['Boards'],
+	responses: createApiResponse(
+		UserBoardResponseDTOSchema.array(),
+		'Success',
+		StatusCodes.OK,
+	),
+});
+router.get('/', authMiddleware.verifyAccessToken, boardsController.getMyBoards);
 
 boardsRegistry.registerPath({
 	method: 'get',
