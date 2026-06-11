@@ -17,6 +17,24 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "data" in error.response &&
+    typeof error.response.data === "object" &&
+    error.response.data !== null &&
+    "message" in error.response.data
+  ) {
+    return String(error.response.data.message);
+  }
+
+  return fallback;
+}
+
 export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -42,8 +60,8 @@ export function Login() {
 
       toast.success("Login successful");
       navigate("/dashboard", { replace: true });
-    } catch (error: any) {
-      const message = error?.response?.data?.message || "Login failed";
+    } catch (error) {
+      const message = getErrorMessage(error, "Login failed");
       setError(message);
       toast.error(message, {
         duration: 5000, // Hiển thị 5 giây
@@ -95,12 +113,12 @@ export function Login() {
                 <div className="grid gap-2">
                   <div className="flex items-center">
                     <Label htmlFor="password">Password</Label>
-                    <a
-                      href="#"
+                    <Link
+                      to="/forgot-password"
                       className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                     >
                       Forgot your password?
-                    </a>
+                    </Link>
                   </div>
                   <div className="relative">
                     <Input
@@ -136,6 +154,7 @@ export function Login() {
                 >
                   {isLoading ? "Logging in..." : "Login"}
                 </Button>
+                {error && <p className="text-sm text-red-600">{error}</p>}
               </div>
               <div className="relative mt-6">
                 <FieldSeparator className="mb-4">
