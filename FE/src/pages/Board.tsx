@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { MessageSquareText, SquareCheck } from "lucide-react";
@@ -34,6 +34,7 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type List = {
   id: string;
@@ -85,19 +86,27 @@ export function Board() {
   const [previewBackground, setPreviewBackground] = useState<string | null>(
     null,
   );
+  const prevPreviewRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (
+      prevPreviewRef.current &&
+      prevPreviewRef.current !== previewBackground
+    ) {
+      URL.revokeObjectURL(prevPreviewRef.current);
+    }
+    prevPreviewRef.current = previewBackground;
+
     return () => {
-      // Hàm cleanup này sẽ chạy trước khi useEffect chạy lần tiếp theo,
-      // hoặc khi component Board unmount
-      if (previewBackground) {
-        URL.revokeObjectURL(previewBackground);
+      if (prevPreviewRef.current) {
+        URL.revokeObjectURL(prevPreviewRef.current);
       }
     };
   }, [previewBackground]);
   const displayBackground = previewBackground || board?.background;
 
   const listIds = useMemo(() => lists.map((list) => list.id), [lists]);
-  const listIdsKey = listIds.join(",");
+  // const listIdsKey = listIds.join(",");
 
   const baseLists = useMemo<List[]>(
     () =>
@@ -139,7 +148,7 @@ export function Board() {
     return [...mappedLists, ...missingLists];
   }, [visibleLists, listOrder]);
 
-  const fetchActiveCards = async (targetListIds: string[]) => {
+  const fetchActiveCards = useCallback(async (targetListIds: string[]) => {
     if (!targetListIds.length) {
       setCards([]);
       return;
@@ -166,15 +175,11 @@ export function Board() {
     } catch {
       toast.error("Failed to fetch cards");
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchActiveCards(listIds);
-  }, [listIdsKey]);
-
-  useEffect(() => {
-    fetchArchivedCards(archivedLists);
-  }, [archivedLists]);
+  }, [listIds, fetchActiveCards]);
 
   useEffect(() => {
     setListOrder((prev) => {
@@ -193,7 +198,7 @@ export function Board() {
     });
   }, [visibleLists]);
 
-  const fetchArchivedLists = async () => {
+  const fetchArchivedLists = useCallback(async () => {
     try {
       const response = await apiClient.get(
         `/boards/${boardId}/lists?status=ARCHIVED`,
@@ -213,14 +218,15 @@ export function Board() {
     } catch {
       toast.error("Failed to fetch archived lists");
     }
-  };
+  }, [boardId]);
+
   useEffect(() => {
     if (!boardId || !isActiveBoard) {
       return;
     }
 
     fetchArchivedLists();
-  }, [boardId, isActiveBoard]);
+  }, [boardId, isActiveBoard, fetchArchivedLists]);
 
   const allListsForArchivedCards = useMemo(() => {
     const merged = [...baseLists, ...archivedLists];
@@ -232,41 +238,40 @@ export function Board() {
     return uniqueLists;
   }, [baseLists, archivedLists]);
 
-  const fetchArchivedCards = async (listsToScan: { id: string }[]) => {
-    if (!listsToScan.length) {
-      setArchivedCards([]);
-      return;
-    }
+  const fetchArchivedCards = useCallback(
+    async (listsToScan: { id: string }[]) => {
+      if (!listsToScan.length) {
+        setArchivedCards([]);
+        return;
+      }
 
-    try {
-      const archivedCardsByList = await Promise.all(
-        listsToScan.map(async (list) => {
-          const response = await apiClient.get(
-            `/lists/${list.id}/cards?status=ARCHIVED`,
-          );
+      try {
+        const archivedCardsByList = await Promise.all(
+          listsToScan.map(async (list) => {
+            const response = await apiClient.get(
+              `/lists/${list.id}/cards?status=ARCHIVED`,
+            );
 
-          const payload = (response as { data?: unknown }).data ?? response;
-          const listCards = Array.isArray(payload) ? payload : [];
+            const payload = (response as { data?: unknown }).data ?? response;
+            const listCards = Array.isArray(payload) ? payload : [];
 
-          return listCards.map((card: any) => ({
-            ...card,
-            listId: list.id,
-            previousIndex: 0,
-            previousCardId: null,
-            nextCardId: null,
-          }));
-        }),
-      );
+            return listCards.map((card: any) => ({
+              ...card,
+              listId: list.id,
+              previousIndex: 0,
+              previousCardId: null,
+              nextCardId: null,
+            }));
+          }),
+        );
 
-      setArchivedCards(archivedCardsByList.flat());
-    } catch {
-      toast.error("Failed to fetch archived cards");
-    }
-  };
-
-  useEffect(() => {
-    fetchArchivedCards(allListsForArchivedCards);
-  }, [allListsForArchivedCards]);
+        setArchivedCards(archivedCardsByList.flat());
+      } catch {
+        toast.error("Failed to fetch archived cards");
+      }
+    },
+    [],
+  );
 
   const getCurrentCards = () => useCardsStore.getState().cards;
 
@@ -384,7 +389,32 @@ export function Board() {
 
   async function handleCardDropToList(targetListId: string, data: string) {
     try {
-      const draggedCard = JSON.parse(data) as BoardCard;
+      // Trim whitespace and check if data is valid
+      const trimmedData = (data || "").trim();
+
+      if (!trimmedData) {
+        console.error("Data is empty/null after trimming");
+        toast.error("Invalid card data");
+        return;
+      }
+
+      console.log("Raw data received:", trimmedData);
+
+      let draggedCard: BoardCard;
+      try {
+        draggedCard = JSON.parse(trimmedData);
+        console.log("Parsed successfully:", draggedCard);
+      } catch (parseError) {
+        console.error("JSON.parse failed:", parseError, "Data:", trimmedData);
+        toast.error("Error parsing card data");
+        return;
+      }
+
+      if (!draggedCard.id) {
+        console.error("Card has no ID");
+        toast.error("Invalid card: no ID");
+        return;
+      }
 
       if (draggedCard.listId === targetListId) {
         return;
@@ -406,7 +436,7 @@ export function Board() {
         toast.error("Error updating card position");
       }
     } catch (error) {
-      console.error("Error parsing card data:", error);
+      console.error("Error in handleCardDropToList:", error);
       toast.error("Error parsing card data");
     }
   }
@@ -421,7 +451,32 @@ export function Board() {
     }
 
     try {
-      const draggedCard = JSON.parse(data) as BoardCard;
+      // Trim whitespace and check if data is valid
+      const trimmedData = (data || "").trim();
+
+      if (!trimmedData) {
+        console.error("Data is empty/null after trimming");
+        toast.error("Invalid card data");
+        return;
+      }
+
+      console.log("Raw card-to-card data:", trimmedData);
+
+      let draggedCard: BoardCard;
+      try {
+        draggedCard = JSON.parse(trimmedData);
+        console.log("Parsed successfully:", draggedCard);
+      } catch (parseError) {
+        console.error("JSON.parse failed:", parseError, "Data:", trimmedData);
+        toast.error("Error parsing card data");
+        return;
+      }
+
+      if (!draggedCard.id) {
+        console.error("Card has no ID");
+        toast.error("Invalid card: no ID");
+        return;
+      }
 
       if (draggedCard.id === targetCardId) {
         return;
@@ -471,7 +526,8 @@ export function Board() {
       }
 
       return nextCards;
-    } catch {
+    } catch (error) {
+      console.error("Error in handleCardDropToCard:", error);
       toast.error("Error parsing card data");
     }
   }
@@ -592,12 +648,13 @@ export function Board() {
     setIsDragOverArchive(false);
 
     const cardData = e.dataTransfer.getData("kanban-board-card");
-    if (cardData) {
+    if (cardData && cardData.trim()) {
       try {
         const card = JSON.parse(cardData) as BoardCard;
         archiveCard(card);
         return;
-      } catch {
+      } catch (error) {
+        console.error("Failed to parse card data for archive:", error);
         toast.error("Error parsing card data");
         return;
       }
@@ -761,8 +818,37 @@ export function Board() {
       toast.error("Failed to restore list");
     }
   };
+
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex h-full w-full flex-col overflow-hidden bg-gray-50/50">
+        {/* Header Board Skeleton */}
+        <div className="flex items-center justify-between px-6 py-3 border-b bg-white ">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-8 w-48 rounded-md" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </div>
+        </div>
+
+        {/* Kanban Columns Skeleton */}
+        <div className="flex-1 overflow-x-auto p-4 flex gap-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="w-88 flex-shrink-0 flex flex-col gap-3 rounded-xl bg-gray-200/50 p-3 h-max"
+            >
+              <Skeleton className="h-6 w-32 mb-2" />
+              <Skeleton className="h-28 w-full rounded-lg bg-white/80" />
+              <Skeleton className="h-28 w-full rounded-lg bg-white/80" />
+              <Skeleton className="h-8 w-full rounded-md mt-2 bg-black/5" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (error) {

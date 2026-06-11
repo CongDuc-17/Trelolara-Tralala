@@ -1,13 +1,12 @@
 import { CreateBoard } from "@/components/boards/CreateBoard";
-
 import { HeaderProject } from "@/components/projects/HeaderProject";
 import { Card } from "@/components/ui/card";
-
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectsStore } from "@/stores/projects.store";
 import { Toaster } from "sonner";
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function ProjectDetail() {
   const projectId = useParams().projectId as string;
@@ -48,10 +47,24 @@ export function ProjectDetail() {
   return (
     <>
       <Toaster position="top-right" />
-      <HeaderProject projectId={projectId} projectName={project?.name} />
+      <HeaderProject
+        projectId={projectId}
+        projectName={project?.name}
+        isLoading={isLoading}
+      />
       <main className="">
         <div className="grid grid-cols-4 gap-6 p-8">
           {error && <div>Error: {String(error)}</div>}
+
+          {/* SKELETON LOADING UI CHỜ RENDER BOARDS */}
+          {isLoading && (
+            <>
+              <Skeleton className="h-36 w-full rounded-xl" />
+              <Skeleton className="h-36 w-full rounded-xl" />
+              <Skeleton className="h-36 w-full rounded-xl" />
+              <Skeleton className="h-36 w-full rounded-xl" />
+            </>
+          )}
 
           {!isLoading &&
             !error &&
@@ -78,7 +91,8 @@ export function ProjectDetail() {
               </Link>
             ))}
 
-          <CreateBoard projectId={projectId} />
+          {/* CHỈ HIỂN THỊ NÚT TẠO KHI ĐÃ LOAD XONG */}
+          {!isLoading && !error && <CreateBoard projectId={projectId} />}
         </div>
       </main>
     </>

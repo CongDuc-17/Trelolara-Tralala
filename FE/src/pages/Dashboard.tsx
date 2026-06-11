@@ -1,7 +1,8 @@
-import { useMemo } from "react"; // 1. Import thêm useMemo
+import { useMemo } from "react";
 import { CreateProject } from "@/components/projects/CreateProject";
 import { Card } from "@/components/ui/card";
 import { useProjects } from "@/hooks/useProjects";
+import type { Board, Project } from "@/hooks/useProjects";
 import { Trello, EllipsisVertical } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CreateBoard } from "@/components/boards/CreateBoard";
@@ -10,55 +11,81 @@ import { Toaster } from "@/components/ui/sonner";
 
 import { Archived } from "@/components/Archived";
 import { apiClient } from "@/lib/apiClient";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Dashboard() {
-  const { projects, loading, error, fetchProjectsWithBoards } = useProjects({
-    includeBoards: true,
-  });
+  const { projects, userBoards, loading, error, fetchProjectsWithBoards } =
+    useProjects({
+      includeBoards: true,
+    });
 
-  const myProjects = useMemo(
-    () =>
-      projects
-        .filter((p) => p.roleName === "PROJECT_ADMIN")
-        .filter((p) => p.status === "ACTIVE"),
-    [projects],
-  );
+  const {
+    myProjects,
+    sharedProjects,
+    guestBoards,
+    archivedProjects,
+    archivedBoards,
+  } = useMemo(() => {
+    const my: Project[] = [];
+    const shared: Project[] = [];
+    const guestBoardsList: Board[] = [];
+    const archived: Project[] = [];
+    const archivedBoardsList: Board[] = [];
+    const memberProjectIds = new Set(projects.map((project) => project.id));
 
-  const clientProjects = useMemo(
-    () =>
-      projects
-        .filter((p) => p.roleName !== "PROJECT_ADMIN")
-        .filter((p) => p.status === "ACTIVE"),
-    [projects],
-  );
+    for (const project of projects) {
+      project.boards?.forEach((board) => {
+        if (board.status === "ARCHIVED") {
+          archivedBoardsList.push({ ...board, projectName: project.name });
+        }
+      });
+
+      if (project.status === "ARCHIVED") {
+        archived.push(project);
+      } else if (project.status === "ACTIVE") {
+        if (project.roleName === "PROJECT_ADMIN") {
+          my.push(project);
+        } else if (
+          project.roleName === "PROJECT_MEMBER" ||
+          project.roleName === "PROJECT_VIEWER" ||
+          project.roleName === "MEMBER"
+        ) {
+          shared.push(project);
+        } else {
+          project.boards?.forEach((board) => {
+            if (board.status === "ACTIVE") {
+              guestBoardsList.push({ ...board, projectName: project.name });
+            }
+          });
+        }
+      }
+    }
+
+    for (const board of userBoards) {
+      if (memberProjectIds.has(board.projectId ?? "")) {
+        continue;
+      }
+
+      if (board.status === "ARCHIVED") {
+        archivedBoardsList.push(board);
+      } else if (board.status === "ACTIVE") {
+        guestBoardsList.push(board);
+      }
+    }
+
+    return {
+      myProjects: my,
+      sharedProjects: shared,
+      guestBoards: guestBoardsList,
+      archivedProjects: archived,
+      archivedBoards: archivedBoardsList,
+    };
+  }, [projects, userBoards]);
 
   const projectGroups = [
     { id: "my-projects", title: "My Projects", data: myProjects },
-    { id: "client-projects", title: "Client Projects", data: clientProjects },
+    { id: "shared-projects", title: "Shared Projects", data: sharedProjects },
   ];
-
-  const archivedProjects = useMemo(
-    () => projects.filter((p) => p.status === "ARCHIVED"),
-    [projects],
-  );
-
-  const archivedBoards = useMemo(() => {
-    const boards = [] as any[];
-
-    projects.forEach((project) => {
-      project.boards?.forEach((board) => {
-        if (board.status === "ARCHIVED") {
-          boards.push({
-            ...board,
-            projectName: project.name,
-            projectStatus: project.status,
-          });
-        }
-      });
-    });
-
-    return boards;
-  }, [projects]);
 
   const handleRestoreProject = async (projectId: string) => {
     try {
@@ -80,7 +107,6 @@ export function Dashboard() {
 
   const handleRestoreBoard = async (boardId: string) => {
     try {
-      console.log("Restoring board with ID:", boardId);
       await apiClient.patch(`/boards/${boardId}/restore`);
       await fetchProjectsWithBoards();
     } catch (error) {
@@ -113,24 +139,59 @@ export function Dashboard() {
               tasks efficiently.
             </div>
           </div>
-
           <div>
             <CreateProject />
           </div>
         </div>
 
         <div className="pl-8">
-          {error && <div>Error: {error}</div>}
+          {error && <div>Error: {String(error)}</div>}
 
-          {!loading && !error && projects.length === 0 && (
-            <div className="text-gray-500">No projects found.</div>
-          )}
-          {loading && projects.length === 0 && <div>Loading...</div>}
-          {!error && projects.length > 0 && (
+          {!loading &&
+            !error &&
+            projects.length === 0 &&
+            userBoards.length === 0 && (
+              <div className="text-gray-500">No projects found.</div>
+            )}
+
+          {/* SKELETON LOADING UI (Mô phỏng chính xác layout Project) */}
+          {loading && projects.length === 0 && userBoards.length === 0 && (
             <div className="flex flex-col gap-12">
+              <section>
+                {/* Tên Section (VD: My Projects) */}
+                <Skeleton className="h-8 w-48 mb-6" />
+
+                <div className="mb-8">
+                  <div className="flex justify-between items-start mr-8">
+                    <div className="w-full">
+                      {/* Icon Trello + Tên Project */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                        <Skeleton className="h-8 w-64 rounded-md" />
+                      </div>
+                      {/* Description Project */}
+                      <Skeleton className="h-5 w-96 mb-6 rounded-md" />
+                    </div>
+                    {/* Nút Options (Ellipsis) */}
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                  </div>
+
+                  {/* Lưới chứa 2 Boards */}
+                  <div className="grid grid-cols-4 gap-6 pr-8">
+                    <Skeleton className="h-36 w-full rounded-xl" />
+                    <Skeleton className="h-36 w-full rounded-xl" />
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {!error && (projects.length > 0 || userBoards.length > 0) && (
+            <div className="flex flex-col gap-12">
+              {/* RENDER MY PROJECTS & SHARED PROJECTS */}
               {projectGroups.map(
                 (group) =>
-                  group.data.length > 0 && ( // Chỉ hiển thị section nếu có project trong nhóm đó
+                  group.data.length > 0 && (
                     <section key={group.id}>
                       <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2 mr-8">
                         {group.title}
@@ -173,7 +234,6 @@ export function Dashboard() {
                                     }
                                   >
                                     <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-
                                     <div className="absolute bottom-0 w-full text-center p-2 bg-white/90 backdrop-blur-sm font-medium border-t">
                                       {b.name}
                                     </div>
@@ -181,6 +241,7 @@ export function Dashboard() {
                                 </Link>
                               ))}
 
+                            {/* Chỉ hiển thị nút CreateBoard ở những project thực sự là thành viên */}
                             <CreateBoard projectId={project.id} />
                           </div>
                         </div>
@@ -189,6 +250,41 @@ export function Dashboard() {
                   ),
               )}
 
+              {/* RENDER GUEST BOARDS */}
+              {guestBoards.length > 0 && (
+                <section>
+                  <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2 mr-8">
+                    Guest Boards
+                  </h2>
+                  <div className="grid grid-cols-4 gap-6 pr-8">
+                    {guestBoards.map((b) => (
+                      <Link to={`/boards/${b.id}`} key={b.id}>
+                        <Card
+                          className="h-36 cursor-pointer hover:shadow-lg transition-shadow relative overflow-hidden group"
+                          style={
+                            b.background
+                              ? {
+                                  backgroundImage: `url(${b.background})`,
+                                  backgroundSize: "cover",
+                                  backgroundPosition: "center",
+                                }
+                              : { backgroundColor: "#f3f4f6" }
+                          }
+                        >
+                          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
+                          <div className="absolute bottom-0 w-full flex flex-col p-2 bg-white/90 backdrop-blur-sm border-t text-center">
+                            <span className="font-medium truncate">
+                              {b.name}
+                            </span>
+                          </div>
+                        </Card>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* ARCHIVED SECTION */}
               <Archived
                 projects={archivedProjects}
                 boards={archivedBoards}
