@@ -12,6 +12,7 @@ import { CardDetail } from "./pages/CardDetail";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Profile } from "./pages/Profile";
 import { VerifyEmail } from "./components/VerifyEmail";
+import { ForgotPassword } from "./pages/ForgotPassword";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify" element={<VerifyEmail />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects/:projectId" element={<ProjectDetail />} />
