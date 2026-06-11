@@ -18,6 +18,7 @@ import {
 	CreateBoardRequestDto,
 	UpdateInformationBoardRequestDto,
 	BoardsResponseDto,
+	UserBoardResponseDto,
 	UpdateBoardResponseDto,
 	GetBoardMembersResponseDto,
 } from './dtos';
@@ -134,6 +135,51 @@ export class BoardsService {
 					description: board.board.description ?? undefined,
 					background: board.board.background ?? undefined,
 					status: board.board.status,
+					_count: {
+						lists: board.board._count.lists,
+						members: board.board._count.boardMembers,
+					},
+				}),
+		);
+
+		return {
+			success: true,
+			data: boardDtos,
+			pagination:
+				paginationUtils.convertPaginationResponseDtoFromTotalRecords(totalBoards),
+		};
+	}
+
+	async getBoardsOfUser(
+		userId: string,
+		getBoardsOfProjectRequestDto: GetBoardsOfProjectRequestDto,
+		pagination: PaginationDto,
+	): Promise<HttpResponseBodySuccessDto<UserBoardResponseDto[]>> {
+		const { status } = getBoardsOfProjectRequestDto;
+		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
+			pagination,
+		);
+
+		const [boards, totalBoards] = await this.boardMembersRepository.getBoardsOfUser({
+			userId,
+			status: status as BoardStatusEnum,
+			skip: paginationUtils.skip,
+			take: paginationUtils.take,
+		});
+
+		const boardDtos = boards.map(
+			(board) =>
+				new UserBoardResponseDto({
+					projectId: board.board.projectId,
+					projectName: board.board.project.name,
+					projectStatus: board.board.project.status,
+					id: board.boardId,
+					name: board.board.name,
+					description: board.board.description ?? undefined,
+					background: board.board.background ?? undefined,
+					status: board.board.status,
+					roleId: board.role.id,
+					roleName: board.role.name,
 					_count: {
 						lists: board.board._count.lists,
 						members: board.board._count.boardMembers,
