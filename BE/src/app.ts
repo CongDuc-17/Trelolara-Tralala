@@ -48,6 +48,7 @@ app.use('/cards', Modules.cardsRouter);
 app.use('/labels', Modules.labelsRouter);
 app.use('/checklists', Modules.checklistsRouter);
 app.use('/checklist-items', Modules.checklistItemsRouter);
+app.use('/comments', Modules.commentsRouter);
 app.use('/invitations', Modules.invitationsRouter);
 app.use('/notifications', Modules.notificationsRouter);
 app.use('/roles', Modules.rolesRouter);

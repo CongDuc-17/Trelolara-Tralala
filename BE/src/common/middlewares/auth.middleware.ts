@@ -223,6 +223,17 @@ class AuthMiddleware extends BaseAutoBindMiddleware {
 				let listId = req.params.listId as string;
 				let cardId = req.params.cardId as string;
 				let checklistId = req.params.checklistId as string;
+				let commentId = req.params.commentId as string;
+
+				if (!cardId && commentId) {
+					const comment = await this.prismaService.cardComments.findUnique({
+						where: { id: commentId },
+						select: { cardId: true },
+					});
+					if (comment) {
+						cardId = comment.cardId;
+					}
+				}
 
 				if (!cardId && checklistId) {
 					const checklist = await this.prismaService.checklists.findUnique({

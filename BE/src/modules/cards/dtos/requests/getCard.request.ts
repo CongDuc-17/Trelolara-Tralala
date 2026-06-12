@@ -1,11 +1,14 @@
 import z from 'zod';
 import { ZodValidationSchema } from '@/common';
-import { ca } from 'zod/v4/locales';
 import { CardStatusEnum } from '@prisma/client';
 
 export const getCardRequestParams = z.object({
 	cardId: z.string().uuid('Invalid card ID'),
 });
+
+export const getCardRequestParamsSchema = {
+	params: getCardRequestParams,
+};
 
 const getCardRequestQuery = z.object({
 	include: z
