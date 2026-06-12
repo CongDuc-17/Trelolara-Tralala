@@ -30,8 +30,15 @@ import { Progress } from "@/components/ui/progress";
 import { useBoards } from "@/hooks/useBoards";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useCardsStore } from "@/stores/cards.store";
+import {
+  useCardsStore,
+  type CardLabel,
+  type CardMember,
+  type Checklist,
+} from "@/stores/cards.store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUserStore } from "@/stores/user.store";
+import { Spinner } from "@/components/ui/spinner";
 
 interface Card {
   id: string;
@@ -41,14 +48,17 @@ interface Card {
   position: number;
   createdAt?: string;
   updatedAt?: string;
-  cardMembers?: any[];
-  cardLabels?: any[];
-  checklists?: any[];
+  cardMembers?: CardMember[];
+  cardLabels?: CardLabel[];
+  checklists?: Checklist[];
+  comments?: any[];
 }
 
 export function CardDetail() {
   const { cardId, boardId } = useParams();
   const navigate = useNavigate();
+
+  const { user: currentUser } = useUserStore();
 
   const [loading, setLoading] = useState(true);
   const [newDescription, setNewDescription] = useState("");
@@ -59,6 +69,14 @@ export function CardDetail() {
   const [inputValue, setInputValue] = useState("");
   const [confirmDeleteChecklistId, setConfirmDeleteChecklistId] =
     useState(false);
+
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isAddingChecklistItem, setIsAddingChecklistItem] = useState(false);
+  const [isDeletingChecklistId, setIsDeletingChecklistId] = useState<
+    string | null
+  >(null);
 
   const { labelsBoard, fetchLabelsBoard } = useBoards();
   const { cards, setCurrentCardId, setCards, updateCard } = useCardsStore();
@@ -74,7 +92,7 @@ export function CardDetail() {
     try {
       setLoading(true);
       const response = await apiClient.get(
-        `/cards/${cardId}?include=members,labels,checklists`,
+        `/cards/${cardId}?include=members,labels,checklists,comments`,
       );
       setCurrentCardId(cardId || null);
 
@@ -94,8 +112,9 @@ export function CardDetail() {
   };
 
   async function handleAddChecklistItem(checklistId: string) {
+    if (!inputValue.trim() || !card) return;
     try {
-      if (!card) return;
+      setIsAddingChecklistItem(true); // Bật loading
       const response = await apiClient.post(`/checklists/${checklistId}`, {
         title: inputValue,
       });
@@ -118,6 +137,8 @@ export function CardDetail() {
       setActiveChecklistId(null);
     } catch (error) {
       console.error("Error adding checklist item:", error);
+    } finally {
+      setIsAddingChecklistItem(false); // Tắt loading
     }
   }
 
@@ -155,22 +176,75 @@ export function CardDetail() {
     }
   }
 
+  async function handleSubmitComment() {
+    if (!newComments.trim() || !card) return;
+    try {
+      setIsSubmittingComment(true); // Bật loading
+      if (editingCommentId) {
+        await apiClient.patch(`/comments/${editingCommentId}`, {
+          content: newComments,
+        });
+
+        const updatedComments = card.comments?.map((c: any) =>
+          c.id === editingCommentId || c.commentId === editingCommentId
+            ? {
+                ...c,
+                content: newComments,
+                updatedAt: new Date().toISOString(),
+              }
+            : c,
+        );
+
+        updateCard({ ...card, comments: updatedComments });
+        setComments("");
+        setEditingCommentId(null);
+      } else {
+        const response = await apiClient.post(`/cards/${cardId}/comments`, {
+          content: newComments,
+        });
+
+        const newCommentData = {
+          id: response.data.commentId,
+          content: response.data.content,
+          createdAt: response.data.createdAt,
+          updatedAt: response.data.updatedAt,
+          user: response.data.user,
+          userId: response.data.user?.id,
+          userName: response.data.user?.name,
+          userAvatar: response.data.user?.avatar,
+        };
+        updateCard({
+          ...card,
+          comments: [...(card.comments || []), newCommentData],
+        });
+        setComments("");
+      }
+    } catch (error) {
+      console.error("Error saving comment:", error);
+    } finally {
+      setIsSubmittingComment(false); // Tắt loading
+    }
+  }
+
   async function handleDeleteChecklist(checklistId: string) {
     if (!card) return;
     const previousCard = { ...card };
-    setConfirmDeleteChecklistId(true);
-
-    const updatedCard = {
-      ...card,
-      checklists: card.checklists?.filter((c) => c.id !== checklistId),
-    };
-    updateCard(updatedCard);
 
     try {
+      setIsDeletingChecklistId(checklistId); // Bật loading ở đúng popup đang xóa
+
+      const updatedCard = {
+        ...card,
+        checklists: card.checklists?.filter((c) => c.id !== checklistId),
+      };
+      updateCard(updatedCard);
+
       await apiClient.delete(`/checklists/${checklistId}`);
     } catch (error) {
       updateCard(previousCard);
       alert("Xóa thất bại, vui lòng thử lại!");
+    } finally {
+      setIsDeletingChecklistId(null); // Tắt loading
     }
   }
 
@@ -187,7 +261,6 @@ export function CardDetail() {
   return (
     <Dialog open={true} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="w-10/12 max-w-none! left-1/2 !top-0 !translate-y-0 transform -translate-x-1/2 mt-10 max-h-[90vh] bg-background rounded-lg shadow-md p-6 ">
-        {/* SKELETON HEADER */}
         {loading && (
           <DialogHeader className="flex flex-col gap-2 mb-4">
             <Skeleton className="h-7 w-2/3" />
@@ -195,7 +268,6 @@ export function CardDetail() {
           </DialogHeader>
         )}
 
-        {/* ACTUAL HEADER */}
         {!loading && card && (
           <DialogHeader className="flex justify-between mb-4">
             <DialogTitle className="text-xl font-bold">
@@ -205,7 +277,6 @@ export function CardDetail() {
           </DialogHeader>
         )}
 
-        {/* SKELETON BODY */}
         {loading ? (
           <div className="grid grid-cols-2 gap-8">
             <div className="w-full flex flex-col gap-6">
@@ -231,7 +302,6 @@ export function CardDetail() {
             </div>
           </div>
         ) : card ? (
-          /* ACTUAL BODY */
           <div className="grid grid-cols-2 gap-8">
             <div className="w-full flex flex-col gap-4 ">
               <div>
@@ -283,7 +353,6 @@ export function CardDetail() {
                 <AddChecklist />
               </div>
 
-              {/* checklist */}
               <div className="overflow-y-auto max-h-[45vh] flex flex-col gap-4 ">
                 {card.checklists?.map((checklist, index) => {
                   const totalItems = checklist.checklistItems?.length || 0;
@@ -326,8 +395,12 @@ export function CardDetail() {
                               onClick={() =>
                                 handleDeleteChecklist(checklist.id)
                               }
+                              disabled={isDeletingChecklistId === checklist.id}
                               className="hover:bg-red-500 transition cursor-pointer"
                             >
+                              {isDeletingChecklistId === checklist.id && (
+                                <Spinner className="mr-2 h-4 w-4" />
+                              )}
                               I understand, delete checklist
                             </Button>
                           </DialogContent>
@@ -369,19 +442,30 @@ export function CardDetail() {
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !isAddingChecklistItem) {
+                                e.preventDefault();
+                                handleAddChecklistItem(checklist.id);
+                              }
+                            }}
                           />
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => {
-                              handleAddChecklistItem(checklist.id);
-                            }}
+                            disabled={
+                              isAddingChecklistItem || !inputValue.trim()
+                            }
+                            onClick={() => handleAddChecklistItem(checklist.id)}
                           >
-                            Add
+                            {isAddingChecklistItem && (
+                              <Spinner className="mr-2 h-4 w-4" />
+                            )}
+                            {isAddingChecklistItem ? "Adding..." : "Add"}
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={isAddingChecklistItem}
                             onClick={() => {
                               setActiveChecklistId(null);
                               setInputValue("");
@@ -410,14 +494,124 @@ export function CardDetail() {
                 <Label className="pb-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Comments
                 </Label>
-                <Input
-                  id="comments"
-                  name="comments"
-                  type="text"
-                  onChange={(e) => {
-                    setComments(e.target.value);
-                  }}
-                />
+
+                <div className="flex gap-2 mb-4 mt-1">
+                  <Input
+                    id="comments"
+                    name="comments"
+                    type="text"
+                    value={newComments}
+                    placeholder="Write a comment..."
+                    disabled={isSubmittingComment}
+                    onChange={(e) => {
+                      setComments(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !isSubmittingComment) {
+                        e.preventDefault();
+                        handleSubmitComment();
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={handleSubmitComment}
+                    disabled={isSubmittingComment || !newComments.trim()}
+                  >
+                    {isSubmittingComment && (
+                      <Spinner className="mr-2 h-4 w-4" />
+                    )}
+                    {editingCommentId ? "Update" : "Comment"}
+                  </Button>
+
+                  {editingCommentId && (
+                    <Button
+                      variant="outline"
+                      disabled={isSubmittingComment}
+                      onClick={() => {
+                        setEditingCommentId(null);
+                        setComments("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-4 max-h-[55vh] overflow-y-auto pr-2">
+                  {card.comments?.map((comment: any) => {
+                    const commentId = comment.id || comment.commentId;
+
+                    const isOwner =
+                      currentUser &&
+                      (comment.user?.id === currentUser.id ||
+                        comment.userId === currentUser.id);
+
+                    const isEdited =
+                      comment.updatedAt &&
+                      new Date(comment.updatedAt).getTime() >
+                        new Date(comment.createdAt).getTime();
+
+                    return (
+                      <div key={commentId} className="flex gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage
+                            src={
+                              comment.userAvatar ||
+                              comment.user?.avatar ||
+                              undefined
+                            }
+                          />
+                          <AvatarFallback>
+                            {comment.userName || comment.user?.name
+                              ? (comment.userName || comment.user?.name)
+                                  .charAt(0)
+                                  .toUpperCase()
+                              : "?"}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="flex flex-col animate-fade-in">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm">
+                              {comment.userName || comment.user?.name}
+                            </span>
+
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              {isEdited
+                                ? new Date(comment.updatedAt).toLocaleString()
+                                : new Date(comment.createdAt).toLocaleString()}
+
+                              {isEdited && (
+                                <span className="text-[11px] text-gray-400 italic font-normal ml-1">
+                                  (edited)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+
+                          <p className="text-sm mt-1 bg-gray-100/50 p-2 rounded-md">
+                            {comment.content}
+                          </p>
+
+                          {isOwner && (
+                            <div className="mt-1">
+                              <span
+                                className="text-[11px] font-medium text-gray-400 hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                                onClick={() => {
+                                  setEditingCommentId(commentId);
+                                  setComments(comment.content);
+                                  document.getElementById("comments")?.focus();
+                                }}
+                              >
+                                Edit
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

@@ -2,11 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Popover,
   PopoverContent,
@@ -27,7 +23,7 @@ export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
   const cardMemberIds = membersCard.map(
     (member) => member.userId || member.user?.id,
   );
-  console.log("Card members in AddMember component:", membersCard);
+
   async function handleAddMemberToCard(memberId: string) {
     try {
       await apiClient.post(`/cards/${cardId}/members`, {
@@ -35,7 +31,9 @@ export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
       });
 
       // Optimistic update
-      const memberToAdd = boardMembers.find((member) => member.userId === memberId);
+      const memberToAdd = boardMembers.find(
+        (member) => member.userId === memberId,
+      );
       if (memberToAdd) {
         const newMember = {
           id: memberId,

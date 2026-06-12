@@ -9,7 +9,7 @@ import {
 } from '@/common';
 import { BoardsRepository } from './boards.repository';
 
-import { BoardStatusEnum, RoleStatusEnum } from '@prisma/client';
+import { BoardStatusEnum, ProjectStatusEnum, RoleStatusEnum } from '@prisma/client';
 
 import { RolesRepository } from '../roles/roles.repository';
 import { Forbidden } from '@tsed/exceptions';
@@ -177,7 +177,10 @@ export class BoardsService {
 					name: board.board.name,
 					description: board.board.description ?? undefined,
 					background: board.board.background ?? undefined,
-					status: board.board.status,
+					status:
+						board.board.project.status === ProjectStatusEnum.ARCHIVED
+							? BoardStatusEnum.ARCHIVED
+							: board.board.status,
 					roleId: board.role.id,
 					roleName: board.role.name,
 					_count: {
@@ -209,6 +212,12 @@ export class BoardsService {
 		const board = await this.boardsRepository.getBoardById(boardId);
 		if (!board) {
 			throw new NotFoundException('Board not found');
+		}
+		const project = await this.projectsRepository.getProjectById(board.projectId);
+		if (project && project.status === ProjectStatusEnum.ARCHIVED) {
+			throw new Forbidden(
+				'Cannot access this board because its parent project is archived',
+			);
 		}
 
 		return {

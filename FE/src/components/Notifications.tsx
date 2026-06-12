@@ -202,6 +202,7 @@ export function Notifications() {
 
   const getNotificationLink = useCallback((notification: any) => {
     const { entityType, entityId, metadata } = notification;
+    console.log("Generating link for notification:", notification);
     switch (entityType) {
       case "BOARD":
         return `/boards/${entityId}`;

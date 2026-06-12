@@ -30,6 +30,7 @@ export class CommentsRepository {
 			},
 			data: {
 				content,
+				updatedAt: new Date(),
 			},
 			include: {
 				user: true,
