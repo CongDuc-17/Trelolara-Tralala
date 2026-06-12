@@ -104,7 +104,7 @@ export class CardsRepository {
 						cardMembers: true,
 						cardLabels: true,
 						checklists: true,
-						// comments: true  // nếu có comments table
+						comments: true,
 					},
 				},
 			},
@@ -161,6 +161,19 @@ export class CardsRepository {
 						orderBy: { createdAt: 'asc' },
 					},
 				},
+			};
+		}
+
+		if (include.comments) {
+			selectOptions.comments = {
+				select: {
+					id: true,
+					content: true,
+					createdAt: true,
+					updatedAt: true,
+					user: { select: { id: true, name: true, avatar: true } },
+				},
+				orderBy: { createdAt: 'asc' },
 			};
 		}
 

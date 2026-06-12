@@ -139,6 +139,17 @@ export class CardsService {
 							.length,
 					}))
 				: undefined,
+
+			comments: include.comments
+				? card.comments?.map((cm: any) => ({
+						id: cm.id,
+						content: cm.content,
+						createdAt: cm.createdAt,
+						updatedAt: cm.updatedAt,
+						userName: cm.user.name,
+						userAvatar: cm.user.avatar,
+					}))
+				: undefined,
 		} as CardWithIncludesResponseDto;
 	}
 
