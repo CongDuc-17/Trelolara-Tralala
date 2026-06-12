@@ -20,6 +20,7 @@ import {
 	notificationsRegistry,
 	notificationsRouter,
 } from './notifications/notifications.router';
+import { commentsRegistry, commentsRouter } from './comments/comments.router';
 export const Registries = [
 	healthCheckRegistry,
 	authRegistry,
@@ -31,6 +32,7 @@ export const Registries = [
 	labelsRegistry,
 	checklistsRegistry,
 	checklistItemsRegistry,
+	commentsRegistry,
 	invitationsRegistry,
 	notificationsRegistry,
 	rolesRegistry,
@@ -47,6 +49,7 @@ export const Modules = {
 	labelsRouter,
 	checklistsRouter,
 	checklistItemsRouter,
+	commentsRouter,
 	invitationsRouter,
 	notificationsRouter,
 	rolesRouter,
