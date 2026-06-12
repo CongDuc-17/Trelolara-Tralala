@@ -147,7 +147,7 @@ export function Login() {
                   </div>
                 </div>
                 <Button
-                  type="button"
+                  type="submit"
                   className="w-full"
                   disabled={isLoading}
                   onClick={handleSubmit}

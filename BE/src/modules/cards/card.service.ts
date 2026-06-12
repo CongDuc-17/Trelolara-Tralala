@@ -146,6 +146,7 @@ export class CardsService {
 						content: cm.content,
 						createdAt: cm.createdAt,
 						updatedAt: cm.updatedAt,
+						userId: cm.user.id,
 						userName: cm.user.name,
 						userAvatar: cm.user.avatar,
 					}))

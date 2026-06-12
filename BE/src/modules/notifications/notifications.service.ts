@@ -56,6 +56,16 @@ interface NotifyBoardInvitedInput {
 	boardName: string;
 }
 
+interface NotifyCardCommentedInput {
+	recipientUserId: string;
+	actorId: string;
+	actorName: string;
+	cardId: string;
+	cardTitle: string;
+	content: string;
+	boardId: string;
+}
+
 export class NotificationsService {
 	constructor(
 		private readonly notificationsRepository: NotificationsRepository = new NotificationsRepository(),
@@ -211,6 +221,25 @@ export class NotificationsService {
 				cardId: input.cardId,
 				cardTitle: input.cardTitle,
 				actorName: input.actorName,
+			},
+		});
+	}
+
+	async notifyCardCommented(input: NotifyCardCommentedInput): Promise<Notifications> {
+		return this.createNotification({
+			recipientUserId: input.recipientUserId,
+			actorId: input.actorId,
+			type: NotificationTypeEnum.CARD_COMMENTED,
+			title: 'New comment on a card you follow',
+			content: `${input.actorName} commented on card ${input.cardTitle}: "${input.content}"`,
+			entityType: NotificationEntityTypeEnum.CARD,
+			entityId: input.cardId,
+			metadata: {
+				cardId: input.cardId,
+				cardTitle: input.cardTitle,
+				actorName: input.actorName,
+				commentContent: input.content,
+				boardId: input.boardId,
 			},
 		});
 	}

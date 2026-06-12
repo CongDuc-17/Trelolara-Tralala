@@ -16,7 +16,7 @@ export interface CardLabel {
 export interface User {
   id: string;
   name: string;
-  avatar: string;
+  avatar?: string | null;
 }
 
 export interface CardMember {
@@ -40,6 +40,17 @@ export interface Checklist {
   checklistItems: ChecklistItem[];
 }
 
+export interface Comment {
+  id: string;
+  cardId: string;
+  content: string;
+
+  user?: User;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Card {
   id: string;
   title: string;
@@ -53,6 +64,7 @@ export interface Card {
   cardLabels?: CardLabel[];
   cardMembers?: CardMember[];
   checklists?: Checklist[];
+  comments?: Comment[];
   commentsCount?: number;
 }
 
@@ -89,7 +101,42 @@ export const useCardsStore = create<CardsStore>((set, get) => ({
   loading: false,
   error: null,
 
-  setCards: (cards) => set({ cards, error: null }),
+  setCards: (incomingCards) =>
+    set((state) => {
+      // 1. Lưu state cũ thành Map để tra cứu ID cho nhanh
+      const existingCardsMap = new Map(state.cards.map((c) => [c.id, c]));
+
+      // 2. Map mảng mới và hòa trộn (merge) nếu card đã tồn tại
+      const mergedCards = incomingCards.map((incomingCard) => {
+        const existingCard = existingCardsMap.get(incomingCard.id);
+        if (existingCard) {
+          return {
+            ...existingCard, // Lấy nền cũ
+            ...incomingCard, // Đè thông tin cơ bản mới lên (title, position...)
+            // 3. Giữ lại comments nếu API load board không trả về comments
+            comments: incomingCard.comments ?? existingCard.comments,
+          };
+        }
+        return incomingCard;
+      });
+
+      // 4. BẢO HIỂM: Nếu user đang mở 1 card chi tiết nhưng API của Board load chậm
+      // chưa kịp trả về card đó, ta ráng nhét nó lại vào mảng để UI modal không bị crash
+      if (state.currentCardId) {
+        const isCurrentCardInMerged = mergedCards.some(
+          (c) => c.id === state.currentCardId,
+        );
+        if (!isCurrentCardInMerged) {
+          const currentCardData = existingCardsMap.get(state.currentCardId);
+          if (currentCardData) {
+            mergedCards.push(currentCardData);
+          }
+        }
+      }
+
+      return { cards: mergedCards, error: null };
+    }),
+
   setCurrentCardId: (cardId) => set({ currentCardId: cardId }),
   getCurrentCard: () => {
     const { cards, currentCardId } = get();
@@ -111,21 +158,19 @@ export const useCardsStore = create<CardsStore>((set, get) => ({
   setError: (error) => set({ error }),
 
   // --- LOGIC XỬ LÝ LỒNG NHAU (Khớp với Prisma Join Table) ---
-
   addLabel: (cardId, label) =>
     set((state) => ({
       cards: state.cards.map((card) =>
         card.id === cardId
           ? {
               ...card,
-              // Tự động fake object trung gian để UI ăn ngay
               cardLabels: [
                 ...(card.cardLabels || []),
                 {
                   id: `temp-${Date.now()}`,
                   cardId: cardId,
                   labelId: label.id,
-                  label: label, // <--- Bọc label vào trong object
+                  label: label,
                 },
               ],
             }
@@ -139,7 +184,6 @@ export const useCardsStore = create<CardsStore>((set, get) => ({
         card.id === cardId
           ? {
               ...card,
-              // Lọc theo ID của bản thân cái label (chứ không phải ID của bảng nối)
               cardLabels: card.cardLabels?.filter(
                 (cl) =>
                   cl.labelId !== labelIdToRemove &&
