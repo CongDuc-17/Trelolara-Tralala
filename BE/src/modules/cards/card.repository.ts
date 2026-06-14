@@ -264,6 +264,17 @@ export class CardsRepository {
 			await this.checklistRepository.deleteChecklist(checklist.id);
 		}
 
+		const comments = await this.prismaService.cardComments.findMany({
+			where: { cardId: cardId },
+			select: { id: true },
+		});
+
+		for (const comment of comments) {
+			await this.prismaService.cardComments.delete({
+				where: { id: comment.id },
+			});
+		}
+
 		return this.prismaService.cards.delete({
 			where: { id: cardId },
 		});

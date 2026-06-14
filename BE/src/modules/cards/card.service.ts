@@ -15,6 +15,7 @@ import { CardBasicResponseDto, CardWithIncludesResponseDto } from './dtos';
 import { UsersRepository } from '../users/users.repository';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BoardRoleEnum } from '@/common/enums/roles';
+import { ListStatusEnum } from '@prisma/client';
 
 export class CardsService {
 	constructor(
@@ -255,6 +256,14 @@ export class CardsService {
 		const list = await this.listsRepository.getListById(card.listId);
 		if (!list) {
 			throw new Exception(404, 'List not found');
+		}
+		if (list.status === ListStatusEnum.ARCHIVED) {
+			throw new Exception(
+				400,
+				'Cannot restore card in an archived list, Please restore the list' +
+					`"${list.name}"` +
+					'first',
+			);
 		}
 		const restoredCard = await this.cardsRepository.restoreCard(cardId);
 		return {

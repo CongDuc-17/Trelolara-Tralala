@@ -75,7 +75,7 @@ export class ProjectsRepository {
 			where: { id: projectId },
 			data: {
 				deletedAt: new Date(),
-				status: ProjectStatusEnum.ARCHIVED,
+				status: ProjectStatusEnum.DELETED,
 			},
 		});
 	}

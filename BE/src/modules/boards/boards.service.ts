@@ -313,9 +313,7 @@ export class BoardsService {
 			throw new NotFoundException('Board not found');
 		}
 
-		await this.boardsRepository.updateBoard(boardId, {
-			status: BoardStatusEnum.ARCHIVED,
-		});
+		await this.boardsRepository.archiveBoard(boardId);
 		return {
 			success: true,
 			data: null,

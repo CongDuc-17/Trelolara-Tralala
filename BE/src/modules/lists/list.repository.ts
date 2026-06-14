@@ -12,7 +12,7 @@ export class ListsRepository {
 		return this.prismaService.lists.findMany({
 			where: {
 				boardId: boardId,
-				deletedAt: null,
+
 				status: status as ListStatusEnum,
 			},
 			orderBy: { position: 'asc' },

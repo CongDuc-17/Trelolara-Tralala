@@ -21,10 +21,10 @@ const getBoardByIdRequestQuery = z
 
 export const GetBoardByIdRequestValidationSchema: ZodValidationSchema = {
 	params: getBoardByIdRequestParams,
-	// query: getBoardByIdRequestQuery,
+	query: getBoardByIdRequestQuery,
 };
 
 export const GetBoardByIdRequestSchema = {
 	params: getBoardByIdRequestParams,
-	// query: getBoardByIdRequestQuery,
+	query: getBoardByIdRequestQuery,
 };
