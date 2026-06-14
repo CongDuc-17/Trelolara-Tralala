@@ -49,11 +49,17 @@ axiosClient.interceptors.response.use(
     };
 
     // Skip refresh token nếu đang ở auth pages
-    const authPages = ['/login', '/register', '/verify', '/forgot-password'];
-    const isAuthPage = authPages.some(page => window.location.pathname.includes(page));
+    const authPages = ["/login", "/register", "/verify", "/forgot-password"];
+    const isAuthPage = authPages.some((page) =>
+      window.location.pathname.includes(page),
+    );
 
     // Kiểm tra nếu lỗi 401 và chưa được retry (và không phải auth page)
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthPage) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isAuthPage
+    ) {
       if (isRefreshing) {
         // Nếu đang trong quá trình refresh, đẩy request này vào hàng đợi
         return new Promise((resolve, reject) => {
@@ -78,7 +84,7 @@ axiosClient.interceptors.response.use(
             withCredentials: true, // Để gửi kèm HttpOnly Cookie chứa refreshToken
           },
         );
-        console.log("Refresh token response:", res);
+
         const { accessToken } = res.data;
 
         cookieStore.set("accessToken", accessToken);

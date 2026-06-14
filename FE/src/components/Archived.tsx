@@ -16,7 +16,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArchiveRestore, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "./ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +61,7 @@ type ArchivedProps = {
   handleRestoreBoard: (boardId: string) => void;
   handleDeleteBoard: (boardId: string) => void;
 };
+
 export function Archived({
   projects,
   boards,
@@ -65,89 +71,121 @@ export function Archived({
   handleDeleteBoard,
 }: ArchivedProps) {
   const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
 
-  const onDeleteConfirm = async () => {
+  // GOM CHUNG HÀM XỬ LÝ: Tự động kiểm tra xem đang xóa Board hay Project
+  const handleConfirmDeletion = async () => {
     if (boardToDelete) {
       await handleDeleteBoard(boardToDelete);
-      setIsAlertOpen(false);
       setBoardToDelete(null);
+    } else if (projectToDelete) {
+      await handleDeleteProject(projectToDelete);
+      setProjectToDelete(null);
+    }
+    setIsAlertOpen(false);
+  };
+
+  // Reset state khi người dùng bấm Hủy (Cancel) hoặc click ra ngoài popup
+  const handleOpenChange = (open: boolean) => {
+    setIsAlertOpen(open);
+    if (!open) {
+      setBoardToDelete(null);
+      setProjectToDelete(null);
     }
   };
 
   return (
-    <Dialog>
-      <form>
-        <DialogTrigger asChild>
-          <Button variant="outline">Archived Items</Button>
-        </DialogTrigger>
+    <TooltipProvider>
+      <Dialog>
+        {/* Chuyển from <div> thay vì <form> vì Dialog Trigger tự xử lý onSubmit */}
+        <div className="inline-block">
+          <DialogTrigger asChild>
+            <Button variant="outline">Archived Items</Button>
+          </DialogTrigger>
 
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Archived Items</DialogTitle>
-          </DialogHeader>
-          <Tabs defaultValue="projects" className="w-full">
-            <TabsList className="w-full">
-              <TabsTrigger value="projects">
-                Projects
-                <Badge variant="outline" className="ml-2">
-                  {projects.filter((p) => p.status === "ARCHIVED").length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="boards">
-                Boards
-                <Badge variant="outline" className="ml-2">
-                  {boards.filter((b) => b.status === "ARCHIVED").length}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="projects">
-              <div className="grid grid-cols-1 gap-4">
-                {projects.map((project) => (
-                  <Card
-                    key={project.id}
-                    className="flex flex-row items-center justify-between gap-2"
-                  >
-                    <CardHeader>
-                      <div className="flex items-center gap-3">
-                        <CardTitle>{project.name}</CardTitle>
-                        <Badge>{project.boardsCount} boards</Badge>
-                        <Badge variant="outline">
-                          {project.membersCount} members
-                        </Badge>
-                      </div>
-                      <CardDescription>{project.description}</CardDescription>
-                    </CardHeader>
-                    <div className="flex gap-2 pr-4">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <ArchiveRestore
-                            className="hover:cursor-pointer hover:text-blue-500 transition-colors"
-                            onClick={() => handleRestoreProject(project.id)}
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Restore Project</p>
-                        </TooltipContent>
-                      </Tooltip>
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Archived Items</DialogTitle>
+            </DialogHeader>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Trash2
-                            className="hover:cursor-pointer hover:text-[#ff0000] transition-colors"
-                            onClick={() => handleDeleteProject(project.id)}
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Delete Project</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-            <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+            <Tabs defaultValue="projects" className="w-full">
+              <TabsList className="w-full">
+                <TabsTrigger value="projects">
+                  Projects
+                  <Badge variant="outline" className="ml-2">
+                    {projects.filter((p) => p.status === "ARCHIVED").length}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="boards">
+                  Boards
+                  <Badge variant="outline" className="ml-2">
+                    {boards.filter((b) => b.status === "ARCHIVED").length}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="projects">
+                <div className="grid grid-cols-1 gap-4">
+                  {projects.map(
+                    (project) =>
+                      project.status === "ARCHIVED" && (
+                        <Card
+                          key={project.id}
+                          className="flex flex-row items-center justify-between gap-2"
+                        >
+                          <CardHeader>
+                            <div className="flex items-center gap-3">
+                              <CardTitle>{project.name}</CardTitle>
+                              <Badge>{project.boardsCount} boards</Badge>
+                              <Badge variant="outline">
+                                {project.membersCount} members
+                              </Badge>
+                            </div>
+                            <CardDescription>
+                              {project.description}
+                            </CardDescription>
+                          </CardHeader>
+                          <div className="flex gap-2 pr-4">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRestoreProject(project.id)
+                                  }
+                                >
+                                  <ArchiveRestore className="hover:cursor-pointer hover:text-blue-500 transition-colors" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Restore Project</p>
+                              </TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProjectToDelete(project.id);
+                                    setIsAlertOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="hover:cursor-pointer hover:text-[#ff0000] transition-colors" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete Project</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </Card>
+                      ),
+                  )}
+                </div>
+              </TabsContent>
+
               <TabsContent value="boards">
                 <div className="grid grid-cols-2 gap-6 pr-8">
                   {boards.map(
@@ -173,10 +211,12 @@ export function Archived({
                             <div className="flex gap-2 ">
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <ArchiveRestore
-                                    className="hover:cursor-pointer hover:text-blue-500 transition-colors"
+                                  <button
+                                    type="button"
                                     onClick={() => handleRestoreBoard(board.id)}
-                                  />
+                                  >
+                                    <ArchiveRestore className="hover:cursor-pointer hover:text-blue-500 transition-colors" />
+                                  </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p>Restore Board</p>
@@ -204,19 +244,22 @@ export function Archived({
                   )}
                 </div>
               </TabsContent>
+            </Tabs>
+
+            {/* ĐƯA ALERT DIALOG RA NGOÀI ĐỂ KHÔNG BỊ RÀNG BUỘC BỞI TABS */}
+            <AlertDialog open={isAlertOpen} onOpenChange={handleOpenChange}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This action cannot be undone. This will permanently delete
-                    the board and all of its data.
+                    the item and all of its data.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-
                   <AlertDialogAction
-                    onClick={onDeleteConfirm}
+                    onClick={handleConfirmDeletion}
                     className="bg-red-600 hover:bg-red-700"
                   >
                     Confirm
@@ -224,9 +267,9 @@ export function Archived({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </Tabs>
-        </DialogContent>
-      </form>
-    </Dialog>
+          </DialogContent>
+        </div>
+      </Dialog>
+    </TooltipProvider>
   );
 }

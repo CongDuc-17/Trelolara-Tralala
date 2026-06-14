@@ -49,7 +49,7 @@ export const useCards = (listIds: string[]) => {
           const response = await apiClient.get(
             `/lists/${listId}/cards?status=ACTIVE`,
           );
-          console.log("API Response for cards in list", listId, response);
+
           const payload = Array.isArray(response?.data) ? response.data : [];
           const listCards = Array.isArray(payload)
             ? (payload as Array<{

@@ -86,7 +86,7 @@ export function AddLabel({
 
       if (isSelected) {
         // Optimistic Update: Xóa khỏi UI ngay lập tức
-        console.log("❌ Removing label from store...");
+
         removeLabel(cardId, labelId);
         await apiClient.delete(`/cards/${cardId}/labels/${labelId}`);
       } else {
@@ -100,14 +100,6 @@ export function AddLabel({
       // Defensive check
     } catch (error) {
       console.error("❗ Error toggling label:", error);
-      // // Rollback nếu API lỗi
-      // if (isSelected) {
-      //   console.log("🔄 Rolling back - re-adding label");
-      //   addLabel(cardId, fullLabelObj);
-      // } else {
-      //   console.log("🔄 Rolling back - removing label");
-      //   removeLabel(cardId, labelId);
-      // }
     } finally {
       setPendingLabelIds((prev) => {
         const newSet = new Set(prev);
