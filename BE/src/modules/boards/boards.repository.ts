@@ -61,10 +61,10 @@ export class BoardsRepository {
 		});
 	}
 
-	async softDeleteBoard(boardId: string): Promise<boards> {
+	async archiveBoard(boardId: string): Promise<boards> {
 		return this.prismaService.boards.update({
 			where: { id: boardId },
-			data: { deletedAt: new Date() },
+			data: { deletedAt: new Date(), status: BoardStatusEnum.DELETED },
 		});
 	}
 

@@ -63,12 +63,15 @@ enum BoardStatusEnum {
 enum ListStatusEnum {
   ACTIVE   @map("active")
   ARCHIVED @map("archived")
+
  
 }
 
 enum CardStatusEnum {
   ACTIVE   @map("active")
   ARCHIVED @map("archived")
+  
+
 }
 
 enum InvitationStatusEnum {
