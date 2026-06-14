@@ -77,13 +77,11 @@ export const useProjects = ({
         "/projects",
       )) as unknown as ApiResponse<Project[]>;
 
-      console.log("Response object:", response);  
-      // console.log("Response data:", response.data);  
     
       setProjects(
         response.data.map((project: Project) => ({
           ...project,
-          boards: [],
+          // boards: [],
           members: [],
         })),
       );

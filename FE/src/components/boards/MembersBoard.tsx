@@ -105,7 +105,6 @@ export function MembersBoard({
   }
 
   async function handleInvite() {
-    console.log("Inviting email:", email, "to boardId:", boardId);
     if (!validateEmail(email)) {
       return;
     }
@@ -124,9 +123,7 @@ export function MembersBoard({
       setEmail("");
       setSelectedRoleId("");
       await fetchBoardMembers();
-      console.log("Invitation response:", response);
     } catch (error) {
-      console.error("Error inviting member:", error);
       const message =
         (error as any)?.response?.data?.message || "Error inviting member";
       toast.error(message);
@@ -140,7 +137,6 @@ export function MembersBoard({
       });
       await fetchBoardMembers();
     } catch (error) {
-      console.error("Error removing member:", error);
       const message =
         (error as any)?.response?.data?.message || "Error removing member";
       toast.error(message);

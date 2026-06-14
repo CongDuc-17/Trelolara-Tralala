@@ -27,6 +27,7 @@ type NavMainProps = {
 
 export function NavMain({ projects, guestBoards, isLoading }: NavMainProps) {
   // NẾU ĐANG LOADING THÌ RENDER SKELETON
+
   if (isLoading) {
     return (
       <>
@@ -76,35 +77,42 @@ export function NavMain({ projects, guestBoards, isLoading }: NavMainProps) {
       <SidebarGroup>
         <SidebarGroupLabel>Projects</SidebarGroupLabel>
         <SidebarMenu>
-          {projects.map((item) => (
-            <Collapsible key={item.id} asChild className="group/collapsible">
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.name}>
-                    <FolderKanban />
-                    <span>{item.name}</span>
-                    <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    {item.boards
-                      ?.filter((board) => board.status === "ACTIVE")
-                      .map((board) => (
-                        <SidebarMenuSubItem key={board.id}>
-                          <SidebarMenuSubButton asChild>
-                            <Link to={`/boards/${board.id}`}>
-                              <KanbanSquare />
-                              <span>{board.name}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
-          ))}
+          {projects.map(
+            (item) =>
+              item.status === "ACTIVE" && (
+                <Collapsible
+                  key={item.id}
+                  asChild
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton tooltip={item.name}>
+                        <FolderKanban />
+                        <span>{item.name}</span>
+                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {item.boards
+                          ?.filter((board) => board.status === "ACTIVE")
+                          .map((board) => (
+                            <SidebarMenuSubItem key={board.id}>
+                              <SidebarMenuSubButton asChild>
+                                <Link to={`/boards/${board.id}`}>
+                                  <KanbanSquare />
+                                  <span>{board.name}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              ),
+          )}
         </SidebarMenu>
       </SidebarGroup>
 

@@ -211,9 +211,9 @@ export function Dashboard() {
                                 {project.description}
                               </div>
                             </div>
-                            <div className="flex items-center gap-4 cursor-pointer hover:bg-gray-100 p-2 rounded-full transition-colors">
+                            {/* <div className="flex items-center gap-4 cursor-pointer hover:bg-gray-100 p-2 rounded-full transition-colors">
                               <EllipsisVertical className="text-gray-500" />
-                            </div>
+                            </div> */}
                           </div>
 
                           <div className="grid grid-cols-4 gap-6 pr-8">

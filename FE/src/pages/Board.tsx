@@ -273,6 +273,10 @@ export function Board() {
     [],
   );
 
+  useEffect(() => {
+    fetchArchivedCards(allListsForArchivedCards);
+  }, [allListsForArchivedCards, fetchArchivedCards]);
+
   const getCurrentCards = () => useCardsStore.getState().cards;
 
   const updateCards = (updater: (currentCards: BoardCard[]) => BoardCard[]) => {
@@ -398,12 +402,9 @@ export function Board() {
         return;
       }
 
-      console.log("Raw data received:", trimmedData);
-
       let draggedCard: BoardCard;
       try {
         draggedCard = JSON.parse(trimmedData);
-        console.log("Parsed successfully:", draggedCard);
       } catch (parseError) {
         console.error("JSON.parse failed:", parseError, "Data:", trimmedData);
         toast.error("Error parsing card data");
@@ -411,7 +412,6 @@ export function Board() {
       }
 
       if (!draggedCard.id) {
-        console.error("Card has no ID");
         toast.error("Invalid card: no ID");
         return;
       }
@@ -460,12 +460,9 @@ export function Board() {
         return;
       }
 
-      console.log("Raw card-to-card data:", trimmedData);
-
       let draggedCard: BoardCard;
       try {
         draggedCard = JSON.parse(trimmedData);
-        console.log("Parsed successfully:", draggedCard);
       } catch (parseError) {
         console.error("JSON.parse failed:", parseError, "Data:", trimmedData);
         toast.error("Error parsing card data");
@@ -473,7 +470,6 @@ export function Board() {
       }
 
       if (!draggedCard.id) {
-        console.error("Card has no ID");
         toast.error("Invalid card: no ID");
         return;
       }
@@ -747,14 +743,21 @@ export function Board() {
     });
 
     try {
-      await apiClient.patch(`/cards/${card.id}/restore`);
+      const res = await apiClient.patch(`/cards/${card.id}/restore`);
+
       await fetchActiveCards(listIds);
       await fetchArchivedCards(allListsForArchivedCards);
       toast.success(`Restored card "${card.title}"`);
-    } catch {
+    } catch (error) {
       setArchivedCards((prev) => [...prev, card]);
       updateCards((current) => current.filter((c) => c.id !== card.id));
-      toast.error("Failed to restore card");
+      const errorMessage =
+        error?.response?.data?.message || // Lấy message từ JSON của backend
+        error?.message || // Lấy message của trình duyệt nếu sập mạng
+        "Failed to restore card";
+
+      // 3. Hiển thị lên Toast
+      toast.error(errorMessage);
     }
   };
 

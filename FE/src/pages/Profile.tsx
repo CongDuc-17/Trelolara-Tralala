@@ -80,12 +80,8 @@ export function Profile() {
         formData.append("avatar", avatarFile);
       }
 
-      for (let [key, value] of formData.entries()) {
-        console.log(`${key}:`, value);
-      }
-
       const response = await apiClient.put("/users/me", formData);
-      console.log("Profile updated successfully:", response.data);
+
       await getMyInformation();
       setEditing(false);
       setAvatarFile(null);
