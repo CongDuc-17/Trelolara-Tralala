@@ -13,10 +13,12 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { Profile } from "./pages/Profile";
 import { VerifyEmail } from "./components/VerifyEmail";
 import { ForgotPassword } from "./pages/ForgotPassword";
+import { Home } from "./pages/Home";
 
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify" element={<VerifyEmail />} />
