@@ -48,9 +48,9 @@ export class AuthController {
 	// Redirect to Google OAuth
 	googleAuth = (req: Request, res: Response, next: NextFunction) => {
 		passport.authenticate('google', {
-			scope: ['profile', 'email'],  // Yêu cầu quyền lấy tên + email
-			accessType: 'offline',		  // Yêu cầu refresh token
-			prompt: 'consent',				 // Bắt user chọn tài khoản lần nữa
+			scope: ['profile', 'email'], // Yêu cầu quyền lấy tên + email
+			accessType: 'offline', // Yêu cầu refresh token
+			prompt: 'consent', // Bắt user chọn tài khoản lần nữa
 		})(req, res, next);
 	};
 
@@ -86,16 +86,17 @@ export class AuthController {
 				}
 
 				const cookies = result.cookies ?? {};
+				const isProduction = appEnv.NODE_ENV === 'production';
 				Object.entries(cookies).forEach(([name, value]) => {
 					res.cookie(name, String(value), {
 						httpOnly: true,
-						secure: appEnv.NODE_ENV === 'production',
-						sameSite: 'lax',
+						secure: isProduction,
+						sameSite: isProduction ? 'none' : 'lax',
 						path: '/',
 					});
 				});
 
-				return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard`);
+				return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
 			},
 		)(req, res, next);
 	};
