@@ -63,6 +63,7 @@ export interface Card {
   deletedAt?: string | null;
   cardLabels?: CardLabel[];
   cardMembers?: CardMember[];
+
   checklists?: Checklist[];
   comments?: Comment[];
   commentsCount?: number;

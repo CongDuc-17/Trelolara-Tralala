@@ -216,6 +216,7 @@ export function CardDetail() {
         updateCard({
           ...card,
           comments: [...(card.comments || []), newCommentData],
+          commentsCount: (card.commentsCount || 0) + 1,
         });
         setComments("");
       }

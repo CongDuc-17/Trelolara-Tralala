@@ -70,7 +70,7 @@ export function Board() {
     fetchLists,
   } = useLists(boardId, { enabled: isActiveBoard });
 
-  const { cards, setCards } = useCardsStore();
+  const { cards, setCards, deleteCard } = useCardsStore();
 
   const [listOrder, setListOrder] = useState<string[] | null>(null);
   const [draggedListId, setDraggedListId] = useState<string | null>(null);
@@ -167,6 +167,7 @@ export function Board() {
           return listCards.map((card: any) => ({
             ...card,
             listId,
+            commentsCount: card._count?.comments || 0,
           }));
         }),
       );
@@ -545,8 +546,12 @@ export function Board() {
     setIsDragOverArchive(false);
   }
 
-  async function archiveCard(card: BoardCard) {
+  async function archiveCard(draggedCardData: BoardCard) {
     const currentCards = getCurrentCards();
+
+    const card = currentCards.find((c) => c.id === draggedCardData.id);
+    if (!card) return;
+
     const cardsInSameList = getCardsInList(card.listId, currentCards);
     const previousIndex = cardsInSameList.findIndex(
       (currentCard) => currentCard.id === card.id,
@@ -577,15 +582,16 @@ export function Board() {
           ],
     );
 
-    updateCards((current) =>
-      current.filter((currentCard) => currentCard.id !== card.id),
-    );
+    deleteCard(card.id);
 
     try {
       await apiClient.patch(`/cards/${card.id}/archive`);
       toast.success(`Archived card "${card.title}"`);
+
+      await fetchActiveCards(listIds);
+      await fetchArchivedCards(allListsForArchivedCards);
     } catch (error) {
-      setCards(currentCards);
+      setCards(currentCards); // Rollback nếu lỗi
       setArchivedCards((prev) => prev.filter((c) => c.id !== card.id));
       toast.error("Failed to archive card");
     }
@@ -629,6 +635,8 @@ export function Board() {
     try {
       await apiClient.patch(`/lists/${list.id}/archive`);
       toast.success(`Archived list "${list.name}"`);
+      await fetchLists(boardId);
+      await fetchArchivedLists();
     } catch (error) {
       setListOrder((prev) => {
         const currentOrder = prev ?? baseLists.map((baseList) => baseList.id);
@@ -822,7 +830,7 @@ export function Board() {
     }
   };
 
-  if (loading) {
+  if (loading && !board) {
     return (
       <div className="flex h-full w-full flex-col overflow-hidden bg-gray-50/50">
         {/* Header Board Skeleton */}

@@ -64,7 +64,7 @@ export class BoardsRepository {
 	async archiveBoard(boardId: string): Promise<boards> {
 		return this.prismaService.boards.update({
 			where: { id: boardId },
-			data: { deletedAt: new Date(), status: BoardStatusEnum.DELETED },
+			data: { status: BoardStatusEnum.ARCHIVED },
 		});
 	}
 
