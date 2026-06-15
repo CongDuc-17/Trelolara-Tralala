@@ -45,6 +45,11 @@ export class CardsRepository {
 						},
 					},
 				},
+				_count: {
+					select: {
+						comments: true,
+					},
+				},
 			},
 			orderBy: { position: 'asc' },
 		});
