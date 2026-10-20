@@ -1,151 +1,96 @@
-import { Exception } from '@tsed/exceptions';
 import { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import passport from 'passport';
 
 import { UserInformationDto } from '../users/dtos';
 
+import { clearAuthCookies, readCookie, setAuthCookies } from './auth.cookies';
 import { AuthService } from './auth.service';
-import {
-	AccountResponseDto,
-	LoginRequestDto,
-	LoginResponseDto,
-	RegisterRequestDto,
-	SendOtpRequestDto,
-	VerifyRequestDto,
-} from './dtos';
-import { CheckLoginWithGoogleOauthRequestDto, ForgotPasswordRequestDto } from './dtos';
+import { GoogleLoginPrincipal } from './auth.types';
 
 import {
-	HttpResponseDto,
-	InternalServerException,
 	NotFoundException,
 	OptionalException,
-} from '@/common';
-import { appEnv } from '@/configs';
+	UnauthorizedException,
+} from '@/common/exceptions';
 
 export class AuthController {
-	constructor(private readonly authService = new AuthService()) {}
+	constructor(private readonly authService = new AuthService()) { }
 
-	async register(req: Request): Promise<Response> {
-		const registerDto = req.body as RegisterRequestDto;
-		const result = await this.authService.register(registerDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().created<AccountResponseDto>(result);
+	async register(req: Request, res: Response): Promise<Response> {
+		const data = await this.authService.register(req.body);
+		return res.status(StatusCodes.CREATED).json({ success: true, data });
 	}
 
-	async login(req: Request): Promise<Response> {
-		const loginDto = req.body as LoginRequestDto;
-		const result = await this.authService.login(loginDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<LoginResponseDto>(result);
+	async login(req: Request, res: Response): Promise<Response> {
+		const tokens = await this.authService.login(req.body);
+		setAuthCookies(res, tokens);
+		return res.status(StatusCodes.OK).json({ success: true, data: tokens });
 	}
 
-	// Redirect to Google OAuth
-	googleAuth = (req: Request, res: Response, next: NextFunction) => {
+	googleAuth = (req: Request, res: Response, next: NextFunction): void => {
 		passport.authenticate('google', {
-			scope: ['profile', 'email'], // Yêu cầu quyền lấy tên + email
-			accessType: 'offline', // Yêu cầu refresh token
-			prompt: 'consent', // Bắt user chọn tài khoản lần nữa
+			scope: ['profile', 'email'],
+			accessType: 'offline',
+			prompt: 'consent',
 		})(req, res, next);
 	};
 
-	// Handle Google OAuth callback
-	googleCallback = (
-		req: Request,
-		res: Response,
-		next: NextFunction,
-	): Promise<Response | Exception> | void => {
+	googleCallback = (req: Request, res: Response, next: NextFunction): void => {
 		passport.authenticate(
 			'google',
 			{
 				session: false,
 				failureRedirect: '/auth/google/login/failure',
 			},
-			async (
-				err: Error | null,
-				user: CheckLoginWithGoogleOauthRequestDto,
-				_info: unknown,
-			) => {
-				if (err) {
-					throw new InternalServerException();
+			async (error: Error | null, user: GoogleLoginPrincipal) => {
+				try {
+					if (error) return next(error);
+					if (!user) throw new NotFoundException('user for google login');
+					const tokens = await this.authService.loginWithGoogle(
+						user.socialAccountInformation.userId,
+					);
+					setAuthCookies(res, tokens);
+					res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+				} catch (callbackError) {
+					next(callbackError);
 				}
-
-				if (!user) {
-					throw new NotFoundException('user for google login');
-				}
-
-				const result = await this.authService.CheckLoginWithGoogleOauth(user);
-
-				if (result instanceof Exception) {
-					return new HttpResponseDto().exception(result);
-				}
-
-				const cookies = result.cookies ?? {};
-				const isProduction = appEnv.NODE_ENV === 'production';
-				Object.entries(cookies).forEach(([name, value]) => {
-					res.cookie(name, String(value), {
-						httpOnly: true,
-						secure: isProduction,
-						sameSite: isProduction ? 'none' : 'lax',
-						path: '/',
-					});
-				});
-
-				return res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
 			},
 		)(req, res, next);
 	};
 
-	authFailure = (): Exception => {
+	authFailure = (): never => {
 		throw new OptionalException(StatusCodes.UNAUTHORIZED, 'Authentication Failed');
 	};
 
-	async refreshToken(req: Request): Promise<Response> {
-		const myInformation = req.user as UserInformationDto;
-		const result = await this.authService.refreshToken(myInformation);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().created<LoginResponseDto>(result);
+	async refreshToken(req: Request, res: Response): Promise<Response> {
+		const rawRefreshToken = readCookie(req, 'refreshToken');
+		if (!rawRefreshToken) throw new UnauthorizedException('is missing');
+		const tokens = await this.authService.refreshSession(rawRefreshToken);
+		setAuthCookies(res, tokens);
+		return res.status(StatusCodes.CREATED).json({ success: true, data: tokens });
 	}
 
-	async sendOtp(req: Request): Promise<Response> {
-		const email = new SendOtpRequestDto(req.body);
-		const result = await this.authService.sendOtp(email);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async sendOtp(req: Request, res: Response): Promise<Response> {
+		await this.authService.sendOtp(req.body);
+		return res.status(StatusCodes.OK).json({ success: true, data: null });
 	}
 
-	async verify(req: Request): Promise<Response> {
-		const verifyRequestDto = new VerifyRequestDto(req.body);
-		const result = await this.authService.verify(verifyRequestDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<AccountResponseDto>(result);
+	async verify(req: Request, res: Response): Promise<Response> {
+		const data = await this.authService.verify(req.body);
+		return res.status(StatusCodes.OK).json({ success: true, data });
 	}
 
-	async forgotPassword(req: Request): Promise<Response> {
-		const forgotPasswordRequestDto = new ForgotPasswordRequestDto(req.body);
-		const result = await this.authService.forgotPassword(forgotPasswordRequestDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<AccountResponseDto>(result);
+	async forgotPassword(req: Request, res: Response): Promise<Response> {
+		const data = await this.authService.forgotPassword(req.body);
+		clearAuthCookies(res);
+		return res.status(StatusCodes.OK).json({ success: true, data });
 	}
-	async logout(req: Request): Promise<Response> {
-		const myInformation = req.user as UserInformationDto;
-		const result = await this.authService.logout(myInformation);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+
+	async logout(req: Request, res: Response): Promise<Response> {
+		const actor = req.user as UserInformationDto;
+		await this.authService.logout(actor.id);
+		clearAuthCookies(res);
+		return res.status(StatusCodes.OK).json({ success: true, data: null });
 	}
 }

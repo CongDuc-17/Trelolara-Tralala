@@ -89,8 +89,8 @@ projectsRegistry.registerPath({
 router.get(
 	'/:projectId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.GET_PROJECT),
 	validateRequestMiddleware(GetProjectByIdRequestValidationSchema),
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.GET_PROJECT),
 	projectsController.getProjectById,
 );
 
@@ -106,8 +106,9 @@ router.patch(
 	'/:projectId',
 	authMiddleware.verifyAccessToken,
 
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_PROJECT),
 	validateRequestMiddleware(UpdateInformationRequestValidationSchema),
+
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_PROJECT),
 	projectsController.updateProject,
 );
 
@@ -169,8 +170,8 @@ projectsRegistry.registerPath({
 router.get(
 	'/:projectId/members',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.GET_PROJECT),
 	validateRequestMiddleware(GetMembersRequestValidationSchema),
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.GET_PROJECT),
 	projectsController.getProjectMembers,
 );
 
@@ -185,8 +186,8 @@ projectsRegistry.registerPath({
 router.patch(
 	'/:projectId/members',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_MEMBER_ROLE),
 	validateRequestMiddleware(UpdateRoleMemberProjectRequestValidationSchema),
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_MEMBER_ROLE),
 	projectsController.changeRoleMemberProject,
 );
 
@@ -234,8 +235,8 @@ projectsRegistry.registerPath({
 router.get(
 	'/:projectId/boards',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(BoardPermissionEnum.GET_BOARD),
 	validateRequestMiddleware(GetBoardsOfProjectRequestValidationSchema),
+	authMiddleware.verifyProjectPermission(BoardPermissionEnum.GET_BOARD),
 	boardsController.getBoards,
 );
 export const projectsRouter = router;

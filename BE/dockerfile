@@ -28,4 +28,4 @@ COPY --from=builder /app/dist /app/dist
 
 EXPOSE 3000
 
-CMD ["node", "dist/app.js"]
+CMD ["node", "dist/server.js"]

@@ -41,8 +41,9 @@ invitationsRegistry.registerPath({
 router.post(
 	'/projects/:projectId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
 	validateRequestMiddleware(CreateInvitationRequestValidationSchemaProject),
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyInvitationRole('project'),
 	invitationController.inviteUserToProject,
 );
 
@@ -57,8 +58,9 @@ invitationsRegistry.registerPath({
 router.post(
 	'/boards/:boardId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
 	validateRequestMiddleware(CreateInvitationRequestValidationSchemaBoard),
+	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyInvitationRole('board'),
 	invitationController.inviteUserToBoard,
 );
 
@@ -73,8 +75,9 @@ invitationsRegistry.registerPath({
 router.post(
 	'/projects/:projectId/share-link',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
 	validateRequestMiddleware(ShareLinkRequestValidationSchemaProject),
+	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyInvitationRole('project'),
 	invitationController.createShareLinkForProject,
 );
 
@@ -88,8 +91,9 @@ invitationsRegistry.registerPath({
 router.post(
 	'/boards/:boardId/share-link',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
 	validateRequestMiddleware(ShareLinkRequestValidationSchemaBoard),
+	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyInvitationRole('board'),
 	invitationController.createShareLinkForBoard,
 );
 

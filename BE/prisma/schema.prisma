@@ -13,25 +13,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-generator zod {
-  provider                         = "zod-prisma-types"
-  output                           = "../src/models" // default is ./generated/zod
-  useMultipleFiles                 = true // default is false
-  writeBarrelFiles                 = true // default is true
-  createInputTypes                 = true // default is false
-  createModelTypes                 = true // default is false
-  addInputTypeValidation           = true // default is false
-  addIncludeType                   = true // default is false
-  addSelectType                    = true // default is false
-  validateWhereUniqueInput         = true // default is false
-  createOptionalDefaultValuesTypes = true // default is false
-  createRelationValuesTypes        = true // default is false
-  createPartialTypes               = true // default is false
-  useDefaultValidators             = true // default is false
-  coerceDate                       = true // default is false
-  writeNullishInModelTypes         = true // default is false
-  prismaClientPath                 = "./path/to/prisma/client" // default is client output path 
-}
 
 enum UserStatusEnum {
   ACTIVE @map("active")
@@ -175,6 +156,7 @@ model otps {
   userId    String   @unique @map("user_id")
   user      users    @relation(fields: [userId], references: [id])
   otp       String   @db.Char(6)
+  attempts  Int      @default(0)
   expiresAt DateTime @map("expires_at")
 
   @@map("Otps")

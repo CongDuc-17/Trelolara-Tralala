@@ -1,11 +1,11 @@
 import { Prisma, UserStatusEnum } from '@prisma/client';
 
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 
-import { users } from '@/models';
+import { users } from '@prisma/client';
 
 export class UsersRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = database) {}
 
 	async findUsers({
 		name,

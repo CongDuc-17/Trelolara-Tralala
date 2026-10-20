@@ -1,369 +1,260 @@
-import { invitations } from './../../models/modelSchema/invitationsSchema';
-import { UserStatusEnum } from '@prisma/client';
-import { Exception } from '@tsed/exceptions';
-import { genSalt, hash } from 'bcrypt';
+import { compare, genSalt, hash } from 'bcrypt';
 import { StatusCodes } from 'http-status-codes';
 
-import { Prisma } from '../database';
 import { MailsService } from '../mails/mail.service';
 import { OtpsService } from '../otps/otps.service';
-import { UserInformationDto } from '../users/dtos';
-import { UsersRepository } from '../users/users.repository';
 
 import { AuthRepository } from './auth.repository';
-import {
-	AccountResponseDto,
-	CheckLoginWithGoogleOauthRequestDto,
-	ForgotPasswordRequestDto,
-	LoginRequestDto,
-	LoginResponseDto,
-	RegisterRequestDto,
-	SendOtpRequestDto,
-	VerifyRequestDto,
-} from './dtos';
+import { AccountSummary, AuthAccount, AuthUser, SessionTokens } from './auth.types';
 
 import {
 	ConflictException,
-	HttpResponseBodySuccessDto,
 	NotFoundException,
 	OptionalException,
+	UnauthorizedException,
+} from '@/common/exceptions';
+import {
+	getTokenExpiry,
 	signJWT,
-} from '@/common';
-import { cleanupExpiredTokens } from '@/common/utils/tokenCleanup.util';
-import { otpsConfig, usersConfig } from '@/configs';
-
-import { UserRoleEnum } from '@/common/enums/roles/userRole.enum';
-import { RolesRepository } from '../roles/roles.repository';
-import { UserRoleRepository } from '../userRole/userRole.repository';
-import { InvitationsRepository } from '../invitations/invitation.repository';
+	verifyAccessJWT,
+	verifyRefreshJWT,
+} from '@/common/utils/jwt.utils';
+import { otpsConfig } from '@/configs/otps.config';
+import { usersConfig } from '@/configs/users.config';
 
 export class AuthService {
 	constructor(
+		private readonly authRepository = new AuthRepository(),
 		private readonly otpsService = new OtpsService(),
 		private readonly mailsService = new MailsService(),
-		private readonly authRepository = new AuthRepository(),
-		private readonly usersRepository = new UsersRepository(),
-		private readonly userRoleRepository = new UserRoleRepository(),
-		private readonly rolesRepository = new RolesRepository(),
-		private readonly invitationsRepository = new InvitationsRepository(),
-	) {}
+	) { }
 
-	async register(
-		registerDto: RegisterRequestDto,
-	): Promise<HttpResponseBodySuccessDto<AccountResponseDto> | Exception> {
-		const user = await this.usersRepository.findUser({
-			email: registerDto.email,
-		});
-
-		if (user) {
+	async register(input: {
+		email: string;
+		password: string;
+		name: string;
+	}): Promise<AccountSummary> {
+		if (await this.authRepository.findUser({ email: input.email }))
 			throw new ConflictException('email');
-		}
-
 		const salt = await genSalt(10);
-		const hashedPassword = await hash(registerDto.password, salt);
-
-		const account: Prisma.accountsCreateInput = {
-			salt: salt,
-			password: hashedPassword,
-			user: {
-				create: {
-					email: registerDto.email,
-					name: registerDto.name,
-					avatar: usersConfig.defaultAvatarUrl,
-				},
-			},
-		};
-
-		const newAccount = await this.authRepository.createAccount({ accounts: account });
-		const desiredRoleName = registerDto.role ?? UserRoleEnum.USER;
-
-		const role = await this.rolesRepository.findByName(desiredRoleName);
-		if (role && newAccount.user?.id) {
-			await this.userRoleRepository.assignUserRole(newAccount.user.id, role.id);
-			console.log('OK');
+		const password = await hash(input.password, salt);
+		let account: AuthAccount;
+		try {
+			account = await this.authRepository.createRegisteredAccount({
+				email: input.email,
+				name: input.name,
+				avatar: usersConfig.defaultAvatarUrl,
+				password,
+				salt,
+			});
+		} catch (error) {
+			if (
+				error &&
+				typeof error === 'object' &&
+				'code' in error &&
+				error.code === 'P2002'
+			)
+				throw new ConflictException('email');
+			throw error;
 		}
-
-		await this.sendOtp({
-			email: registerDto.email,
-		});
-
-		return {
-			success: true,
-			data: new AccountResponseDto(newAccount),
-		};
+		await this.sendOtp({ email: input.email });
+		return this.summarizeAccount(account);
 	}
 
-	async login(
-		loginRequestDto: LoginRequestDto,
-	): Promise<HttpResponseBodySuccessDto<LoginResponseDto> | Exception> {
-		const account = await this.authRepository.findAccount({
-			email: loginRequestDto.email,
+	async login(input: { email: string; password: string }): Promise<SessionTokens> {
+		const account = await this.authRepository.findAccount({ email: input.email });
+		if (!account) throw new NotFoundException('email');
+		return this.authRepository.inTransaction(async (repository) => {
+			await repository.lockUser(account.userId);
+			const current = await repository.findAccount({ email: input.email });
+			if (!current) throw new NotFoundException('email');
+			this.assertActiveUser(current.user);
+			if (!(await compare(input.password, current.password)))
+				throw new OptionalException(StatusCodes.UNAUTHORIZED, 'Invalid password');
+			return this.issueTokens(repository, current.userId);
 		});
-
-		if (!account) {
-			throw new NotFoundException('email');
-		}
-
-		if (account.user?.status === UserStatusEnum.LOCKED) {
-			throw new OptionalException(
-				StatusCodes.FORBIDDEN,
-				'Your account has been locked',
-			);
-		}
-
-		if (account.user?.verify === false) {
-			throw new OptionalException(
-				StatusCodes.FORBIDDEN,
-				'Your account has not been verified. Please verify your account before logging in.',
-			);
-		}
-		const hashedPassword = await hash(loginRequestDto.password, account.salt);
-		if (hashedPassword !== account.password) {
-			throw new OptionalException(StatusCodes.UNAUTHORIZED, 'Invalid password');
-		}
-
-		const { accessToken, refreshToken } = await signJWT({
-			userId: account.userId,
-		});
-
-		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-		await this.authRepository.createToken({
-			token: {
-				refreshToken: refreshToken,
-				user: {
-					connect: {
-						id: account.userId,
-					},
-				},
-				expiresAt,
-			},
-		});
-
-		return {
-			success: true,
-			data: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-			cookies: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-		};
 	}
 
-	async CheckLoginWithGoogleOauth(
-		googleAuthData: CheckLoginWithGoogleOauthRequestDto,
-	): Promise<HttpResponseBodySuccessDto<LoginResponseDto> | Exception> {
-		const { socialAccountInformation } = googleAuthData;
-
-		const { accessToken, refreshToken } = await signJWT({
-			userId: socialAccountInformation.userId,
-		});
-
-		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-		await this.authRepository.createToken({
-			token: {
-				refreshToken: refreshToken,
-				user: {
-					connect: {
-						id: socialAccountInformation.userId,
-					},
-				},
-				expiresAt,
-			},
-		});
-
-		return {
-			success: true,
-			data: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-			cookies: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-		};
+	loginWithGoogle(userId: string): Promise<SessionTokens> {
+		return this.createSession(userId);
 	}
 
-	async refreshToken(
-		myInformation: UserInformationDto,
-	): Promise<HttpResponseBodySuccessDto<LoginResponseDto> | Exception> {
-		// Cleanup expired tokens (on-demand)
-		await cleanupExpiredTokens();
-
-		const latestToken = await this.authRepository.getLatestToken(myInformation.id);
-
-		if (latestToken) {
-			const timeSinceCreation = Date.now() - latestToken.createdAt.getTime();
-			const fiveMinutesInMs = 5 * 60 * 1000;
-
-			if (timeSinceCreation < fiveMinutesInMs) {
-				throw new OptionalException(
-					StatusCodes.TOO_MANY_REQUESTS,
-					'Refresh token too frequently. Please wait before requesting a new token.',
-				);
-			}
-		}
-		await this.authRepository.deleteToken(myInformation.id);
-		const { accessToken, refreshToken } = await signJWT({
-			userId: myInformation.id,
+	private createSession(userId: string): Promise<SessionTokens> {
+		return this.authRepository.inTransaction(async (repository) => {
+			await repository.lockUser(userId);
+			this.assertActiveUser(await repository.findUser({ userId }));
+			return this.issueTokens(repository, userId);
 		});
-
-		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-		await this.authRepository.createToken({
-			token: {
-				refreshToken: refreshToken,
-				user: {
-					connect: {
-						id: myInformation.id,
-					},
-				},
-				expiresAt,
-			},
-		});
-
-		return {
-			success: true,
-			data: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-			cookies: {
-				accessToken: accessToken,
-				refreshToken: refreshToken,
-			},
-		};
 	}
 
-	async sendOtp(
-		sendOtpRequestDto: SendOtpRequestDto,
-	): Promise<HttpResponseBodySuccessDto<null> | Exception> {
-		const { email } = sendOtpRequestDto;
-		const user = await this.usersRepository.findUser({ email: email });
-		if (!user) {
-			throw new NotFoundException('email');
-		}
+	private async issueTokens(
+		repository: AuthRepository,
+		userId: string,
+	): Promise<SessionTokens> {
+		const tokens = await signJWT({ userId });
+		await repository.createSession(
+			userId,
+			tokens.refreshToken,
+			getTokenExpiry(tokens.refreshToken),
+		);
+		return tokens;
+	}
 
+	async authenticateAccessToken(rawToken: string): Promise<AuthUser> {
+		const payload = verifyAccessJWT(rawToken);
+		const user = await this.authRepository.findUser({ userId: payload.userId });
+		this.assertActiveUser(user);
+		return user;
+	}
+
+	async refreshSession(rawRefreshToken: string): Promise<SessionTokens> {
+		const payload = verifyRefreshJWT(rawRefreshToken);
+		return this.authRepository.inTransaction(async (repository) => {
+			await repository.lockUser(payload.userId);
+			this.assertActiveUser(await repository.findUser({ userId: payload.userId }));
+			const session = await repository.findSession(rawRefreshToken);
+			if (
+				!session ||
+				session.userId !== payload.userId ||
+				session.expiresAt.getTime() <= Date.now()
+			)
+				throw new UnauthorizedException('is invalid or revoked');
+			if (!(await repository.consumeSession(payload.userId, rawRefreshToken)))
+				throw new UnauthorizedException('is invalid or revoked');
+			return this.issueTokens(repository, payload.userId);
+		});
+	}
+
+	async sendOtp({ email }: { email: string }): Promise<void> {
+		const user = await this.authRepository.findUser({ email });
+		if (!user) throw new NotFoundException('email');
 		const otp = await this.otpsService.generateOtp({ userId: user.id });
-
-		await this.mailsService.sendEmail({
-			recipients: user.email,
-			subject: 'Mã xác thực',
-			html: `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`,
-		});
-
-		return {
-			success: true,
-			data: null,
-		};
+		try {
+			await this.mailsService.sendEmail({
+				recipients: user.email,
+				subject: 'Mã xác thực',
+				html: `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`,
+			});
+		} catch (error) {
+			await this.otpsService.invalidateOtp({
+				userId: user.id,
+				otp: otp.otp,
+				expiresAt: otp.expiresAt,
+			});
+			throw error;
+		}
 	}
 
-	async verify(
-		verifyRequestDto: VerifyRequestDto,
-	): Promise<HttpResponseBodySuccessDto<AccountResponseDto> | Exception> {
-		const { email, otp } = verifyRequestDto;
+	async verify(input: { email: string; otp: string }): Promise<AccountSummary> {
 		const account = await this.authRepository.findAccount({
-			email: email,
-			userStatus: UserStatusEnum.ACTIVE,
+			email: input.email,
+			userStatus: 'ACTIVE',
 		});
-		if (!account || !account.user) {
-			throw new NotFoundException('account');
-		}
-
-		if (account.user.verify === true) {
+		if (!account) throw new NotFoundException('account');
+		if (account.user.verify)
 			throw new OptionalException(
 				StatusCodes.CONFLICT,
 				'Account is already verified',
 			);
-		}
-
-		const isValidOtp = await this.otpsService.verifyOtp({
-			userId: account.userId,
-			otp: otp,
-		});
-		if (!isValidOtp) {
-			throw new OptionalException(StatusCodes.BAD_REQUEST, 'Invalid OTP');
-		}
-
-		await this.usersRepository.updateUser({
-			userId: account.userId,
-			user: {
-				verify: true,
+		const result = await this.authRepository.inTransaction(
+			async (repository, client) => {
+				await repository.lockUser(account.userId);
+				const current = await repository.findAccount({
+					email: input.email,
+					userStatus: 'ACTIVE',
+				});
+				if (!current) throw new NotFoundException('account');
+				if (current.user.verify)
+					throw new OptionalException(
+						StatusCodes.CONFLICT,
+						'Account is already verified',
+					);
+				if (
+					!(await this.otpsService.verifyOtp(
+						{ userId: current.userId, otp: input.otp },
+						client,
+					))
+				)
+					return null;
+				const user = await repository.markVerified(current.userId);
+				return this.summarizeAccount({ ...current, user });
 			},
-		});
-
-		const accountResponse = new AccountResponseDto(account);
-		accountResponse.verify = true;
-
-		const pendingInvites = await this.invitationsRepository.findPendingByEmail(
-			accountResponse.email,
 		);
-		if (pendingInvites.length > 0) {
-			await Promise.all(
-				pendingInvites.map((invite) =>
-					this.invitationsRepository.updateStatus(invite.id, 'ACCEPTED'),
-				),
-			);
-		}
-
-		return {
-			success: true,
-			data: accountResponse,
-		};
+		if (!result) throw new OptionalException(StatusCodes.BAD_REQUEST, 'Invalid OTP');
+		return result;
 	}
 
-	async forgotPassword(
-		forgotPasswordRequestDto: ForgotPasswordRequestDto,
-	): Promise<HttpResponseBodySuccessDto<AccountResponseDto> | Exception> {
-		const { email, newPassword, otp } = forgotPasswordRequestDto;
-		const user = await this.usersRepository.findUser({ email: email });
-		if (!user) {
-			throw new NotFoundException('email');
-		}
-
-		const isValidOtp = await this.otpsService.verifyOtp({
-			userId: user.id,
-			otp: otp,
+	async forgotPassword(input: {
+		email: string;
+		newPassword: string;
+		otp: string;
+	}): Promise<AccountSummary> {
+		const account = await this.authRepository.findAccount({
+			email: input.email,
+			userStatus: 'ACTIVE',
 		});
-
-		if (!isValidOtp) {
-			throw new OptionalException(StatusCodes.BAD_REQUEST, 'Invalid OTP');
-		}
-
+		if (!account) throw new NotFoundException('account');
 		const salt = await genSalt(10);
-		const hashedPassword = await hash(newPassword, salt);
-
-		const account: AccountResponseDto = new AccountResponseDto(
-			await this.authRepository.updatePassword({
-				userId: user.id,
-				salt: salt,
-				password: hashedPassword,
-			}),
+		const password = await hash(input.newPassword, salt);
+		const result = await this.authRepository.inTransaction(
+			async (repository, client) => {
+				await repository.lockUser(account.userId);
+				const current = await repository.findAccount({
+					email: input.email,
+					userStatus: 'ACTIVE',
+				});
+				if (!current) throw new NotFoundException('account');
+				if (
+					!(await this.otpsService.verifyOtp(
+						{ userId: current.userId, otp: input.otp },
+						client,
+					))
+				)
+					return null;
+				const updated = await repository.updatePassword({
+					userId: current.userId,
+					salt,
+					password,
+				});
+				await repository.revokeSessions(current.userId);
+				return this.summarizeAccount(updated);
+			},
 		);
-
-		return {
-			success: true,
-			data: account,
-		};
+		if (!result) throw new OptionalException(StatusCodes.BAD_REQUEST, 'Invalid OTP');
+		return result;
 	}
 
-	async logout(
-		myInformation: UserInformationDto,
-	): Promise<HttpResponseBodySuccessDto<null> | Exception> {
-		await this.authRepository.deleteToken(myInformation.id);
+	async logout(userId: string): Promise<void> {
+		await this.authRepository.inTransaction(async (repository) => {
+			await repository.lockUser(userId);
+			await repository.revokeSessions(userId);
+		});
+	}
 
+	private assertActiveUser(user: AuthUser | null): asserts user is AuthUser {
+		if (!user || user.deletedAt)
+			throw new UnauthorizedException('belongs to an unavailable account');
+		if (user.status !== 'ACTIVE')
+			throw new OptionalException(
+				StatusCodes.FORBIDDEN,
+				'Your account has been locked',
+			);
+		if (!user.verify)
+			throw new OptionalException(
+				StatusCodes.FORBIDDEN,
+				'Your account has not been verified. Please verify your account before logging in.',
+			);
+	}
+
+	private summarizeAccount(account: AuthAccount): AccountSummary {
 		return {
-			success: true,
-			data: null,
-			cookies: {
-				accessToken: '',
-				refreshToken: '',
-			},
+			id: account.id,
+			userId: account.userId,
+			email: account.user.email,
+			name: account.user.name,
+			avatar: account.user.avatar ?? '',
+			verify: account.user.verify,
+			status: account.user.status,
 		};
 	}
 }

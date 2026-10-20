@@ -2,7 +2,7 @@ import { CommentsService } from './comments.service';
 import { GetCommentResponseDto } from './dtos/responses';
 import { Request, Response } from 'express';
 import { HttpResponseDto } from '@/common';
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 export class CommentsController {
 	constructor(private commentsService: CommentsService = new CommentsService()) {}
 

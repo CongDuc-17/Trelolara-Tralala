@@ -1,4 +1,4 @@
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 
 import { HttpResponseBodySuccessDto } from '@/common/dtos/httpResponseBodySuccess.dto';
 import { ListsRepository } from './list.repository';

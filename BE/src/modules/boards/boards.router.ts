@@ -244,6 +244,7 @@ router.post(
 	'/:boardId/labels',
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createLabelRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
 	labelsController.createLabel,
 );
 

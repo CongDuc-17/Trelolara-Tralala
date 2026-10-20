@@ -7,17 +7,17 @@ export class RegisterRequestDto {
 	email: string;
 	password: string;
 	name: string;
-	role?: UserRoleEnum;
+	role?: UserRoleEnum.USER;
 }
 
-export const registerRequestValidationSchema: ZodValidationSchema = {
+export const registerRequestValidationSchema = {
 	body: z.object({
 		email: z.email(),
 		password: z.string().min(8),
 		name: z.string().min(2).max(100),
-		role: z.nativeEnum(UserRoleEnum).optional().default(UserRoleEnum.USER),
+		role: z.literal(UserRoleEnum.USER).optional(),
 	}),
-};
+} satisfies ZodValidationSchema;
 
 export const registerRequestSchema = {
 	body: {

@@ -1,4 +1,4 @@
-import { checklistItems } from './../../models/modelSchema/checklistItemsSchema';
+import { checklistItems } from '@prisma/client';
 import { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import express from 'express';
 import { StatusCodes } from 'http-status-codes';
@@ -41,8 +41,8 @@ checklistsRegistry.registerPath({
 router.patch(
 	'/:checklistId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(updateChecklistTitleValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	checklistsController.updateChecklistTitle,
 );
 
@@ -56,8 +56,8 @@ checklistsRegistry.registerPath({
 router.delete(
 	'/:checklistId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.DELETE_CARD),
 	validateRequestMiddleware(checklistByIdValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.DELETE_CARD),
 	checklistsController.deleteChecklist,
 );
 
@@ -75,8 +75,8 @@ checklistsRegistry.registerPath({
 router.post(
 	'/:checklistId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(createChecklistItemValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	checklistItemsController.createChecklistItem,
 );
 

@@ -1,6 +1,6 @@
 import { HttpResponseBodySuccessDto, NotFoundException } from '@/common';
 import { LabelsRepository } from './labels.repository';
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 import { BoardsRepository } from '../boards/boards.repository';
 import { LabelResponseDto } from './dtos/responses';
 

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ProjectsService } from './project.service';
 import { CreateProjectRequestDto } from './dtos/requests/createProject.request';
 import { HttpResponseDto } from '@/common/dtos/httpResponse.dto';
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 import { GetProjectsResponseDTO } from './dtos/responses/getProjects.response';
 import { GetMembersResponseDTO, GetProjectResponseDTO } from './dtos/responses';
 import { PaginationDto } from '@/common/dtos/pagination.dto';

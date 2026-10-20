@@ -1,28 +1,20 @@
-import { UserStatusEnum } from '@prisma/client';
-import { StatusCodes } from 'http-status-codes';
 import passport from 'passport';
-import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
-
-import { UsersRepository } from '@/modules/users/users.repository';
-import { RolesRepository } from '@/modules/roles/roles.repository';
-import { UserRoleRepository } from '@/modules/userRole/userRole.repository';
+import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { StatusCodes } from 'http-status-codes';
 
 import { AuthRepository } from '../auth.repository';
 
-import { InternalServerException, OptionalException } from '@/common';
-import { GoogleOauthConfig } from '@/configs';
-import { UserRoleEnum } from '@/common/enums/roles';
-import { socialAccountsWithPartialRelations } from '@/models';
+import { OptionalException } from '@/common/exceptions';
+import { GoogleOauthConfig } from '@/configs/googleOauth.config';
 
 export class GoogleOauthStrategy {
-	constructor(
-		private readonly authRepository = new AuthRepository(),
-		private readonly usersRepository = new UsersRepository(),
-		private readonly rolesRepository = new RolesRepository(),
-		private readonly userRoleRepository = new UserRoleRepository(),
-	) {
-		this.authRepository = authRepository;
-
+	constructor(private readonly authRepository = new AuthRepository()) {
+		if (
+			!GoogleOauthConfig.clientId ||
+			!GoogleOauthConfig.clientSecret ||
+			!GoogleOauthConfig.redirectUri
+		)
+			return;
 		passport.use(
 			'google',
 			new Strategy(
@@ -37,18 +29,6 @@ export class GoogleOauthStrategy {
 		);
 	}
 
-	private async ensureDefaultSystemRole(userId: string): Promise<void> {
-		const existingRoleId = await this.rolesRepository.findRoleIdByUserId(userId);
-		if (existingRoleId) return;
-
-		const userRole = await this.rolesRepository.findByName(UserRoleEnum.USER);
-		if (!userRole) {
-			throw new InternalServerException();
-		}
-
-		await this.userRoleRepository.assignUserRole(userId, userRole.id);
-	}
-
 	async validate(
 		accessToken: string,
 		refreshToken: string,
@@ -56,93 +36,27 @@ export class GoogleOauthStrategy {
 		done: VerifyCallback,
 	): Promise<void> {
 		try {
-			const email = profile.emails?.[0]?.value;
-			if (!email) {
-				return done(
-					new OptionalException(
-						StatusCodes.BAD_REQUEST,
-						'Google account has no email',
-					),
-					false,
+			const email = profile.emails?.[0];
+			if (!email?.value || !email.verified) {
+				throw new OptionalException(
+					StatusCodes.BAD_REQUEST,
+					'Google account must provide a verified email',
 				);
 			}
-			const user = {
+			const socialAccount = await this.authRepository.connectGoogleAccount({
 				googleId: profile.id,
-				email: profile.emails?.[0]?.value || '',
+				email: email.value,
 				name: profile.displayName,
 				avatar: profile.photos?.[0]?.value,
-				verified: profile.emails?.[0]?.verified || false,
-			};
-
-			let existingUser = await this.usersRepository.findUser({
-				email: user.email,
+				accessToken,
+				refreshToken,
 			});
-
-			let socialAccount: socialAccountsWithPartialRelations | null;
-
-			if (!existingUser) {
-				socialAccount = await this.authRepository.createSocialAccount({
-					socialAccount: {
-						googleId: user.googleId,
-						googleAccessToken: accessToken,
-						googleRefreshToken: refreshToken,
-						user: {
-							create: {
-								email: user.email,
-								name: user.name,
-								avatar: user.avatar,
-								verify: true,
-							},
-						},
-					},
-				});
-
-				await this.ensureDefaultSystemRole(socialAccount.userId);
-			} else {
-				if (existingUser.status === UserStatusEnum.LOCKED) {
-					throw new OptionalException(
-						StatusCodes.FORBIDDEN,
-						'Your account has been locked',
-					);
-				}
-
-				socialAccount = await this.authRepository.findSocialAccount({
-					email: user.email,
-				});
-
-				if (!socialAccount) {
-					socialAccount = await this.authRepository.createSocialAccount({
-						socialAccount: {
-							googleId: user.googleId,
-							googleAccessToken: accessToken,
-							googleRefreshToken: refreshToken,
-							user: {
-								connect: {
-									id: existingUser.id,
-								},
-							},
-						},
-					});
-				} else {
-					socialAccount = await this.authRepository.updateSocialAccount({
-						googleId: user.googleId,
-						googleAccessToken: accessToken,
-						googleRefreshToken:
-							refreshToken ?? socialAccount.googleRefreshToken,
-					});
-				}
-
-				await this.ensureDefaultSystemRole(existingUser.id);
-			}
-
-			if (!socialAccount) {
-				return done(new InternalServerException(), false);
-			}
-
-			return done(null, { socialAccountInformation: socialAccount });
-		} catch (err) {
-			return done(
-				err instanceof Error ? err : new InternalServerException(),
+			done(null, { socialAccountInformation: socialAccount });
+		} catch (error) {
+			done(
+				error instanceof Error
+					? error
+					: new Error('Google authentication failed'),
 				false,
 			);
 		}

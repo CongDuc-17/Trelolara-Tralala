@@ -5,7 +5,9 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     },
     "moduleResolution": "node",
     "resolveJsonModule": true,
@@ -17,8 +19,19 @@
     "noPropertyAccessFromIndexSignature": false,
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
-    "types": ["node", "jest", "jest-extended"]
+    "types": [
+      "node",
+      "jest",
+      "jest-extended"
+    ]
   },
-  "exclude": ["node_modules"],
-  "include": ["src/**/*.ts", "typeorm.config.ts", "src/modules/auth/strategies/googleOauth.strategy.text", "src/modules/auth/auth.service.ts", "test/**/*.ts", "tests/**/*.ts"]
+  "exclude": [
+    "node_modules",
+    "src/models",
+    "dist"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

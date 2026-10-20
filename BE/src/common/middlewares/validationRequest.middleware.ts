@@ -1,38 +1,38 @@
-import { Exception } from '@tsed/exceptions';
-import { NextFunction, Request, Response } from 'express';
-import { StatusCodes } from 'http-status-codes';
-import { ZodError, ZodSchema } from 'zod';
+import type { RequestHandler } from 'express';
+import { ZodError, type ZodType } from 'zod';
 
 import { OptionalException } from '../exceptions';
 
-export class ZodValidationSchema {
-	body?: ZodSchema;
-	params?: ZodSchema;
-	query?: ZodSchema;
-	cookies?: ZodSchema;
-	headers?: ZodSchema | ZodSchema[];
-	[key: string]: ZodSchema | ZodSchema[] | undefined;
-}
+export type ZodValidationSchema = {
+	body?: ZodType;
+	params?: ZodType;
+	query?: ZodType;
+	cookies?: ZodType;
+	headers?: ZodType | ZodType[];
+};
 
-export const validateRequestMiddleware = (schema: ZodValidationSchema) => {
-	return (req: Request, res: Response, next: NextFunction): void | Exception => {
+export const validateRequestMiddleware = (schema: ZodValidationSchema): RequestHandler => {
+	return (req, res, next) => {
 		try {
-			for (const key in schema) {
-				const zodSchema: ZodSchema | ZodSchema[] | undefined =
-					schema[key as keyof ZodValidationSchema];
-				if (zodSchema && !Array.isArray(zodSchema)) {
-					zodSchema.parse(req[key as keyof Request]);
-				} else {
-					(zodSchema as ZodSchema[]).forEach((zodSchema) => {
-						zodSchema.parse(req[key as keyof Request]);
-					});
+			const validated: Record<string, unknown> = {};
+			for (const [key, validators] of Object.entries(schema)) {
+				if (!validators) continue;
+				let value: unknown = req[key as keyof ZodValidationSchema];
+				for (const validator of Array.isArray(validators) ? validators : [validators]) {
+					value = validator.parse(value);
 				}
+				validated[key] = value;
+				// Express 5 query is a getter; expose parsed input to legacy controllers.
+				Object.defineProperty(req, key, { value, writable: true, configurable: true, enumerable: true });
 			}
-
+			res.locals.validated = { ...res.locals.validated, ...validated };
 			next();
-		} catch (err) {
-			const errorMessage = `${(err as ZodError).issues.map((e) => `${e.path.join(', ')} ${e.message}`).join('; ')}`;
-			throw new OptionalException(StatusCodes.UNPROCESSABLE_ENTITY, errorMessage);
+		} catch (error) {
+			if (error instanceof ZodError) {
+				const message = error.issues.map((issue) => `${issue.path.join('.')} ${issue.message}`).join('; ');
+				return next(new OptionalException(422, message));
+			}
+			next(error);
 		}
 	};
 };

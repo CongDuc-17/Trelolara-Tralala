@@ -1,4 +1,4 @@
-import { checklistItems } from './../../../../models/modelSchema/checklistItemsSchema';
+import { checklistItems } from '@prisma/client';
 import z from 'zod';
 export class ChecklistResponseDto {
 	id: string;

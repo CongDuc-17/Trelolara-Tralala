@@ -1,55 +1,82 @@
-import { otps, Prisma } from '@prisma/client';
-
-import { PrismaService } from '../database';
+import type { otps } from '@prisma/client';
+import { prisma, type DatabaseClient } from '../database';
 
 export class OtpsRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly client: DatabaseClient = prisma) {}
 
-	async findOtp({
-		userId,
-		email,
-		otp,
-	}: {
-		userId: string;
-		email?: string;
-		otp?: string;
-	}): Promise<otps | null> {
-		return this.prismaService.otps.findFirst({
+	findOtp(userId: string, client: DatabaseClient = this.client) {
+		return client.otps.findUnique({ where: { userId } });
+	}
+
+	createOtp(
+		userId: string,
+		otp: string,
+		expiresAt: Date,
+		client: DatabaseClient = this.client,
+	) {
+		return client.otps.create({
+			data: { userId, otp, expiresAt, attempts: 0 },
+		});
+	}
+
+	async replaceExpiredOtp(
+		record: otps,
+		otp: string,
+		expiresAt: Date,
+		now: Date,
+		client: DatabaseClient = this.client,
+	): Promise<otps | null> {
+		const result = await client.otps.updateMany({
+			where: { id: record.id, expiresAt: { equals: record.expiresAt, lte: now } },
+			data: { otp, expiresAt, attempts: 0 },
+		});
+		return result.count === 1 ? { ...record, otp, expiresAt, attempts: 0 } : null;
+	}
+
+	async incrementAttempts(
+		record: otps,
+		now: Date,
+		maxAttempts: number,
+		client: DatabaseClient = this.client,
+	): Promise<void> {
+		await client.otps.updateMany({
 			where: {
-				user: {
-					id: userId,
-					email: email,
-				},
-				otp: otp,
+				id: record.id,
+				otp: record.otp,
+				expiresAt: { equals: record.expiresAt, gt: now },
+				attempts: { lt: maxAttempts },
+			},
+			data: { attempts: { increment: 1 } },
+		});
+	}
+
+	async consumeOtp(
+		record: otps,
+		now: Date,
+		maxAttempts: number,
+		client: DatabaseClient = this.client,
+	): Promise<boolean> {
+		const result = await client.otps.deleteMany({
+			where: {
+				id: record.id,
+				otp: record.otp,
+				expiresAt: { equals: record.expiresAt, gt: now },
+				attempts: { lt: maxAttempts },
 			},
 		});
+		return result.count === 1;
 	}
 
-	async createOtp({ otp }: { otp: Prisma.otpsCreateInput }): Promise<otps> {
-		return this.prismaService.otps.create({
-			data: otp,
-		});
-	}
-
-	async updateOtp({
-		otpId,
-		otp,
-	}: {
-		otpId: string;
-		otp: Prisma.otpsUpdateWithoutUserInput;
-	}): Promise<otps> {
-		return this.prismaService.otps.update({
-			where: { id: otpId },
-			data: {
-				otp: otp.otp,
-				expiresAt: otp.expiresAt,
+	async invalidateOtp(
+		input: { userId: string; otp: string; expiresAt?: Date },
+		client: DatabaseClient = this.client,
+	): Promise<void> {
+		await client.otps.deleteMany({
+			where: {
+				userId: input.userId,
+				otp: input.otp,
+				...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
 			},
-		});
-	}
-
-	async deleteOtp({ otpId }: { otpId: string }): Promise<otps> {
-		return this.prismaService.otps.delete({
-			where: { id: otpId },
 		});
 	}
 }

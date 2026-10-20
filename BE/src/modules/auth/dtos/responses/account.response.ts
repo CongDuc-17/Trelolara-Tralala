@@ -1,7 +1,7 @@
 import { UserStatusEnum } from '@prisma/client';
 import z from 'zod';
 
-import { accountsWithPartialRelations } from '@/models';
+import type { AuthAccount } from '../../auth.types';
 
 export class AccountResponseDto {
 	id: string;
@@ -12,7 +12,7 @@ export class AccountResponseDto {
 	verify: boolean;
 	status: UserStatusEnum;
 
-	constructor(account: accountsWithPartialRelations) {
+	constructor(account: AuthAccount) {
 		this.id = account.id;
 		this.userId = account.userId;
 		this.email = account.user?.email || '';

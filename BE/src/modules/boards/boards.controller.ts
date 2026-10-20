@@ -8,9 +8,9 @@ import {
 	UpdateInformationBoardRequestDto,
 	GetBoardMembersResponseDto,
 } from './dtos';
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 import { HttpResponseDto, OptionalException, PaginationDto } from '@/common';
-import { boardMembers } from '@/models/modelSchema/boardMembersSchema';
+import { boardMembers } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import { GetBoardsOfProjectRequestDto } from '../projects/dtos/requests';
 import { GetBoardResponseDto } from './dtos/responses/getBoard.response';

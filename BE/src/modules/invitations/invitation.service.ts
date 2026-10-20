@@ -1,7 +1,7 @@
 import { MailsService } from '../mails/mail.service';
 import { BoardMembersRepository } from '../boardMembers/boardMember.repository';
-import { roles } from './../../models/modelSchema/rolesSchema';
-import { Exception } from '@tsed/exceptions';
+import { roles } from '@prisma/client';
+import { Exception } from '@/common/exceptions/app-error';
 
 import { BoardsRepository } from '../boards/boards.repository';
 import { UsersRepository } from '../users/users.repository';

@@ -1,7 +1,7 @@
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 
 export class CommentsRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = database) {}
 	async createComment({
 		cardId,
 		userId,

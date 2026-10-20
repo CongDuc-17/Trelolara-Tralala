@@ -1,43 +1,25 @@
-// import { Resend } from 'resend';
+import { Resend } from 'resend';
 
-// export const MailConfig = {
-// 	apiKey: String(process.env.RESEND_API_KEY),
+export interface MailSender {
+	address: string;
+	name: string;
+}
 
-// 	senderAddress:
-// 		String(process.env.MAIL_SENDER_ADDRESS) ||
-// 		'onboarding@resend.dev',
+export function getMailSender(): MailSender {
+	const address = process.env.MAIL_SENDER_ADDRESS?.trim();
+	if (!address || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+		throw new Error('Mail sender configuration is invalid');
+	}
+	return {
+		address,
+		name: process.env.MAIL_SENDER_NAME?.trim() || 'No Reply',
+	};
+}
 
-// 	senderName:
-// 		String(process.env.MAIL_SENDER_NAME) ||
-// 		'No Reply',
-// };
-
-// export const ResendConfig = new Resend(
-// 	MailConfig.apiKey
-// );
-
-import * as nodemailer from 'nodemailer';
-
-export const MailConfig = {
-	smtpLogin: String(process.env.BREVO_SMTP_LOGIN),
-	smtpKey: String(process.env.BREVO_SMTP_KEY),
-
-	senderAddress:
-		String(process.env.MAIL_SENDER_ADDRESS) ||
-		'no-reply@localhost.com',
-
-	senderName:
-		String(process.env.MAIL_SENDER_NAME) ||
-		'No Reply',
-};
-
-// Khởi tạo Transporter của Nodemailer với cấu hình Brevo SMTP
-export const TransporterConfig = nodemailer.createTransport({
-	host: 'smtp-relay.brevo.com',
-	port: 587,
-	secure: false, // Port 587 sử dụng TLS
-	auth: {
-		user: MailConfig.smtpLogin,
-		pass: MailConfig.smtpKey,
-	},
-});
+export function createResendClient(): Resend {
+	const apiKey = process.env.RESEND_API_KEY?.trim();
+	if (!apiKey) {
+		throw new Error('Resend configuration is incomplete');
+	}
+	return new Resend(apiKey);
+}

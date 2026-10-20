@@ -84,7 +84,7 @@ authRegistry.registerPath({
 	tags: ['Auth'],
 	responses: createApiResponse(z.null(), 'Success'),
 });
-router.get('/google/login/failure', authController.googleCallback);
+router.get('/google/login/failure', authController.authFailure);
 
 authRegistry.registerPath({
 	method: 'post',
@@ -92,24 +92,7 @@ authRegistry.registerPath({
 	tags: ['Auth'],
 	responses: createApiResponse(loginResponseDtoSchema, 'Success', StatusCodes.CREATED),
 });
-router.post(
-	'/refresh-token',
-	authMiddleware.verifyRefreshToken,
-	authController.refreshToken,
-);
-
-authRegistry.registerPath({
-	method: 'post',
-	path: '/auth/send-otp',
-	tags: ['Auth'],
-	request: sendOtpRequestSchema,
-	responses: createApiResponse(z.null(), 'Success'),
-});
-router.post(
-	'/send-otp',
-	validateRequestMiddleware(sendOtpRequestValidationSchema),
-	authController.sendOtp,
-);
+router.post('/refresh-token', authController.refreshToken);
 
 authRegistry.registerPath({
 	method: 'post',

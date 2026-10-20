@@ -1,16 +1,33 @@
-import { tokens, UserStatusEnum } from '@prisma/client';
+import { Prisma, RoleStatusEnum, UserStatusEnum } from '@prisma/client';
+import { StatusCodes } from 'http-status-codes';
 
-import { Prisma, PrismaService } from '../database';
+import { DatabaseClient, prisma, runInTransaction } from '../database';
 
-import {
-	accountsWithPartialRelations,
-	socialAccountsWithPartialRelations,
-} from '@/models';
+import { AuthAccount, AuthUser, GoogleAccountInput } from './auth.types';
+
+import { InternalServerException, OptionalException } from '@/common/exceptions';
 
 export class AuthRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly client: DatabaseClient = prisma) {}
 
-	async findAccount({
+	inTransaction<T>(
+		work: (repository: AuthRepository, client: DatabaseClient) => Promise<T>,
+	): Promise<T> {
+		return runInTransaction((tx) => work(new AuthRepository(tx), tx), this.client);
+	}
+
+	async lockUser(userId: string): Promise<void> {
+		await this.client
+			.$queryRaw`SELECT "id" FROM "Users" WHERE "id" = ${userId} FOR UPDATE`;
+	}
+
+	findUser(input: { userId?: string; email?: string }): Promise<AuthUser | null> {
+		return this.client.users.findFirst({
+			where: { id: input.userId, email: input.email, deletedAt: null },
+		});
+	}
+
+	findAccount({
 		accountId,
 		userId,
 		email,
@@ -20,76 +37,140 @@ export class AuthRepository {
 		userId?: string;
 		email: string;
 		userStatus?: UserStatusEnum;
-	}): Promise<accountsWithPartialRelations | null> {
-		return this.prismaService.accounts.findFirst({
-			include: {
-				user: true,
-			},
+	}): Promise<AuthAccount | null> {
+		return this.client.accounts.findFirst({
+			include: { user: true },
 			where: {
 				id: accountId,
-				user: {
-					id: userId,
-					email: email,
-					status: userStatus,
-				},
+				user: { id: userId, email, status: userStatus, deletedAt: null },
 			},
 		});
 	}
 
-	async findSocialAccount({
-		userId,
-		email,
-		status,
-	}: {
+	createRegisteredAccount(input: {
 		email: string;
-		userId?: string;
-		status?: UserStatusEnum;
-	}): Promise<socialAccountsWithPartialRelations | null> {
-		return this.prismaService.socialAccounts.findFirst({
-			include: {
-				user: true,
-			},
-			where: {
-				user: {
-					email: email,
-					id: userId,
-					status: status,
+		name: string;
+		avatar: string;
+		password: string;
+		salt: string;
+	}): Promise<AuthAccount> {
+		return this.inTransaction(async (repository) => {
+			const role = await repository.findDefaultRole();
+			return repository.client.accounts.create({
+				include: { user: true },
+				data: {
+					password: input.password,
+					salt: input.salt,
+					user: {
+						create: {
+							email: input.email,
+							name: input.name,
+							avatar: input.avatar,
+							usersRoles: { create: { roleId: role.id } },
+						},
+					},
 				},
-			},
+			});
 		});
 	}
 
-	async createAccount({
+	private async findDefaultRole(): Promise<{ id: string }> {
+		const role = await this.client.roles.findFirst({
+			where: { name: 'USER', status: RoleStatusEnum.ACTIVE, deletedAt: null },
+			select: { id: true },
+		});
+		if (!role) throw new InternalServerException();
+		return role;
+	}
+
+	connectGoogleAccount(input: GoogleAccountInput): Promise<{ userId: string }> {
+		return this.inTransaction(async (repository) => {
+			let user = await repository.findUser({ email: input.email });
+			if (user && user.status !== UserStatusEnum.ACTIVE) {
+				throw new OptionalException(
+					StatusCodes.FORBIDDEN,
+					'Your account has been locked',
+				);
+			}
+			if (!user) {
+				const role = await repository.findDefaultRole();
+				user = await repository.client.users.create({
+					data: {
+						email: input.email,
+						name: input.name,
+						avatar: input.avatar,
+						verify: true,
+						usersRoles: { create: { roleId: role.id } },
+					},
+				});
+			} else {
+				await repository.lockUser(user.id);
+				user = await repository.findUser({ userId: user.id });
+				if (!user || user.status !== UserStatusEnum.ACTIVE) {
+					throw new OptionalException(
+						StatusCodes.FORBIDDEN,
+						'Your account is unavailable',
+					);
+				}
+				const systemRole = await repository.client.usersRoles.findFirst({
+					where: {
+						userId: user.id,
+						role: {
+							name: { in: ['USER', 'ADMIN'] },
+							status: RoleStatusEnum.ACTIVE,
+							deletedAt: null,
+						},
+					},
+					select: { id: true },
+				});
+				if (!systemRole) {
+					const role = await repository.findDefaultRole();
+					await repository.client.usersRoles.upsert({
+						where: { userId_roleId: { userId: user.id, roleId: role.id } },
+						create: { userId: user.id, roleId: role.id },
+						update: {},
+					});
+				}
+				if (!user.verify) await repository.markVerified(user.id);
+			}
+			const existing = await repository.client.socialAccounts.findUnique({
+				where: { userId: user.id },
+			});
+			if (existing && existing.googleId !== input.googleId) {
+				throw new OptionalException(
+					StatusCodes.CONFLICT,
+					'A different Google account is already linked',
+				);
+			}
+			return repository.client.socialAccounts.upsert({
+				where: { userId: user.id },
+				create: {
+					userId: user.id,
+					googleId: input.googleId,
+					googleAccessToken: input.accessToken,
+					googleRefreshToken: input.refreshToken ?? '',
+				},
+				update: {
+					googleAccessToken: input.accessToken,
+					...(input.refreshToken
+						? { googleRefreshToken: input.refreshToken }
+						: {}),
+				},
+				select: { userId: true },
+			});
+		});
+	}
+
+	// shortcut: Users still calls these credential methods, remove after its Auth contract migration.
+	createAccount({
 		accounts,
 	}: {
 		accounts: Prisma.accountsCreateInput;
-	}): Promise<accountsWithPartialRelations> {
-		return this.prismaService.accounts.create({
-			include: {
-				user: true,
-			},
-			data: accounts,
-		});
+	}): Promise<AuthAccount> {
+		return this.client.accounts.create({ include: { user: true }, data: accounts });
 	}
 
-	async createSocialAccount({
-		socialAccount,
-	}: {
-		socialAccount: Prisma.socialAccountsCreateInput;
-	}): Promise<socialAccountsWithPartialRelations> {
-		return this.prismaService.socialAccounts.create({
-			data: socialAccount,
-		});
-	}
-
-	async createToken({ token }: { token: Prisma.tokensCreateInput }): Promise<tokens> {
-		const { id, ...tokenData } = token;
-		return this.prismaService.tokens.create({
-			data: tokenData,
-		});
-	}
-
-	async updatePassword({
+	updatePassword({
 		userId,
 		password,
 		salt,
@@ -97,73 +178,46 @@ export class AuthRepository {
 		userId: string;
 		password: string;
 		salt: string;
-	}): Promise<accountsWithPartialRelations> {
-		return this.prismaService.accounts.update({
-			include: {
-				user: true,
-			},
-			where: {
-				userId: userId,
-			},
-			data: {
-				password: password,
-				salt: salt,
-				user: {
-					update: {
-						verify: true,
-					},
-				},
-			},
-		});
-	}
-
-	async updateSocialAccount({
-		googleId,
-		googleAccessToken,
-		googleRefreshToken,
-	}: {
-		googleId: string;
-		googleAccessToken: string;
-		googleRefreshToken?: string;
-	}): Promise<socialAccountsWithPartialRelations> {
-		return this.prismaService.socialAccounts.update({
+	}): Promise<AuthAccount> {
+		return this.client.accounts.update({
 			include: { user: true },
-			where: { googleId },
-			data: {
-				googleAccessToken,
-				...(googleRefreshToken && { googleRefreshToken }),
-			},
-		});
-	}
-
-	async getLatestToken(userId: string): Promise<tokens | null> {
-		return this.prismaService.tokens.findFirst({
 			where: { userId },
-			orderBy: { createdAt: 'desc' },
+			data: { password, salt, user: { update: { verify: true } } },
 		});
 	}
 
-	async deleteToken(userId: string): Promise<Prisma.BatchPayload> {
-		return this.prismaService.tokens.deleteMany({
-			where: {
-				userId: userId,
-			},
+	markVerified(userId: string): Promise<AuthUser> {
+		return this.client.users.update({
+			where: { id: userId },
+			data: { verify: true },
 		});
 	}
 
-	async findTokenByRefreshToken(refreshToken: string): Promise<tokens | null> {
-		return this.prismaService.tokens.findUnique({
+	async createSession(
+		userId: string,
+		refreshToken: string,
+		expiresAt: Date,
+	): Promise<void> {
+		await this.client.tokens.create({ data: { userId, refreshToken, expiresAt } });
+	}
+
+	findSession(
+		refreshToken: string,
+	): Promise<{ userId: string; expiresAt: Date } | null> {
+		return this.client.tokens.findUnique({
 			where: { refreshToken },
+			select: { userId: true, expiresAt: true },
 		});
 	}
 
-	async deleteExpiredTokens(): Promise<Prisma.BatchPayload> {
-		return this.prismaService.tokens.deleteMany({
-			where: {
-				expiresAt: {
-					lt: new Date(),
-				},
-			},
+	async consumeSession(userId: string, refreshToken: string): Promise<boolean> {
+		const { count } = await this.client.tokens.deleteMany({
+			where: { userId, refreshToken, expiresAt: { gt: new Date() } },
 		});
+		return count === 1;
+	}
+
+	async revokeSessions(userId: string): Promise<void> {
+		await this.client.tokens.deleteMany({ where: { userId } });
 	}
 }

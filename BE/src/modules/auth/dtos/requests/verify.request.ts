@@ -4,12 +4,10 @@ import { ZodValidationSchema } from '@/common';
 
 export class VerifyRequestDto {
 	email: string;
-	newPassword: string;
 	otp: string;
 
 	constructor(data: VerifyRequestDto) {
 		this.email = data.email;
-		this.newPassword = data.newPassword;
 		this.otp = data.otp;
 	}
 }

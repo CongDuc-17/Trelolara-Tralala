@@ -1,4 +1,4 @@
-import { ServerException } from '@tsed/exceptions';
+import { ServerException } from '@/common/exceptions/app-error';
 import { StatusCodes } from 'http-status-codes';
 
 export class InternalServerException extends ServerException {

@@ -12,7 +12,7 @@ import { BoardsRepository } from './boards.repository';
 import { BoardStatusEnum, ProjectStatusEnum, RoleStatusEnum } from '@prisma/client';
 
 import { RolesRepository } from '../roles/roles.repository';
-import { Forbidden } from '@tsed/exceptions';
+import { Forbidden } from '@/common/exceptions/app-error';
 import { BoardMembersRepository } from '../boardMembers/boardMember.repository';
 import {
 	CreateBoardRequestDto,

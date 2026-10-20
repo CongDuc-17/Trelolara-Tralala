@@ -1,4 +1,4 @@
-import { HTTPException } from '@tsed/exceptions';
+import { HTTPException } from '@/common/exceptions/app-error';
 import { Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 

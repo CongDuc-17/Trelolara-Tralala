@@ -1,4 +1,4 @@
-import { labels } from './../models/modelSchema/labelsSchema';
+import { labels } from '@prisma/client';
 import { authRegistry, authRouter } from './auth/auth.router';
 import { healthCheckRegistry, healthCheckRouter } from './healthCheck/healthCheck.router';
 import { projectsRegistry, projectsRouter } from './projects/project.router';

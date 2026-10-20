@@ -5,10 +5,10 @@ export class RoleController {
 	async getAllRoles(req: Request, res: Response, next: NextFunction) {
 		try {
 			const result = await this.rolesService.getAllRoles();
-			res.status(result.code).json({
-				success: result.success,
-				message: result.message,
-				data: result.data,
+			return res.status(200).json({
+				success: true,
+				message: 'Roles retrieved successfully',
+				data: result,
 			});
 		} catch (error) {
 			next(error);

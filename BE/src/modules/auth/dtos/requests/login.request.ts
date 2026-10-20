@@ -7,12 +7,12 @@ export class LoginRequestDto {
 	password: string;
 }
 
-export const loginRequestValidationSchema: ZodValidationSchema = {
+export const loginRequestValidationSchema = {
 	body: z.object({
 		email: z.email(),
 		password: z.string().min(8),
 	}),
-};
+} satisfies ZodValidationSchema;
 
 export const loginRequestSchema = {
 	body: {
