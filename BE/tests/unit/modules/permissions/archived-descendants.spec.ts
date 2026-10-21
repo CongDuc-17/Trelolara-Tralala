@@ -214,48 +214,41 @@ describe('Archive guards on descendant routes', () => {
 });
 
 describe('Invitation acceptance respects parent lifecycle', () => {
-	it.each(['project', 'board'])(
-		'checks an archived %s before creating membership or accepting the invitation',
-		async (target) => {
+	it.each(['project', 'board'] as const)(
+		'checks an archived %s inside the acceptance transaction',
+		async (scope) => {
+			const record = {
+				id,
+				projectId: scope === 'project' ? id : null,
+				boardId: scope === 'board' ? id : null,
+				type: 'EMAIL',
+				expiresAt: new Date(Date.now() + 60000),
+				status: 'PENDING',
+			};
 			const repository = {
-				findByToken: jest.fn().mockResolvedValue({
+				findByToken: jest.fn().mockResolvedValue(record),
+				lockTarget: jest.fn(),
+				lockInvitation: jest.fn(),
+				getTarget: jest.fn().mockResolvedValue({
 					id,
-					projectId: target === 'project' ? id : null,
-					boardId: target === 'board' ? id : null,
-					expiresAt: new Date(Date.now() + 60_000),
-					status: 'PENDING',
+					scope,
+					status: 'ARCHIVED',
+					deletedAt: null,
 				}),
-				updateStatus: jest.fn(),
+				createMember: jest.fn(),
+				inTransaction: jest.fn(),
 			};
-			const projectMembers = {
-				isUserMemberOfProject: jest.fn(),
-				assignUserRoleProject: jest.fn(),
-			};
-			const boardMembers = {
-				isUserMemberOfBoard: jest.fn(),
-				assignUserRoleBoard: jest.fn(),
-			};
-			const conflict = Object.assign(new Error('Read-only'), { status: 409 });
-			const permissions = {
-				assertProjectLifecycle: jest.fn().mockRejectedValue(conflict),
-				assertBoardLifecycle: jest.fn().mockRejectedValue(conflict),
-			};
+			repository.inTransaction.mockImplementation(
+				(work: (repo: typeof repository) => Promise<unknown>) => work(repository),
+			);
 			const service = new InvitationService(
 				repository as unknown as InvitationsRepository,
-				undefined,
-				projectMembers as unknown as ProjectMembersRepository,
-				boardMembers as unknown as BoardMembersRepository,
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				undefined,
-				permissions as unknown as PermissionService,
 			);
-			await expect(service.acceptInvitation('token', id)).rejects.toBe(conflict);
-			expect(projectMembers.assignUserRoleProject).not.toHaveBeenCalled();
-			expect(boardMembers.assignUserRoleBoard).not.toHaveBeenCalled();
-			expect(repository.updateStatus).not.toHaveBeenCalled();
+			await expect(service.acceptInvitation('token', id)).rejects.toMatchObject({
+				status: 409,
+			});
+			expect(repository.lockTarget).toHaveBeenCalledWith(scope, id);
+			expect(repository.createMember).not.toHaveBeenCalled();
 		},
 	);
 });

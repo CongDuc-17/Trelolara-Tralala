@@ -1,202 +1,93 @@
-import { CommentsRepository } from './comments.repository';
-import {
-	ForbiddenException,
-	HttpResponseBodySuccessDto,
-	InternalServerException,
-	NotFoundException,
-	ObjectComparerDto,
-	OptionalException,
-	PaginationDto,
-	PaginationUtils,
-} from '@/common';
-import { GetCommentResponseDto } from './dtos/responses';
-import { CardsRepository } from '../cards/card.repository';
-import { UsersRepository } from '../users/users.repository';
+import { ForbiddenException, NotFoundException } from '@/common/exceptions';
+import { CardsService } from '../cards/card.service';
+import { CardMembersRepository } from '../cardMembers/cardMembers.repository';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ListsRepository } from '../lists/list.repository';
+import { CommentsRepository } from './comments.repository';
+import type { CommentRecord } from './comments.types';
+
 export class CommentsService {
 	constructor(
-		private readonly commentsRepository: CommentsRepository = new CommentsRepository(),
-		private readonly cardsRepository: CardsRepository = new CardsRepository(),
-		private readonly userRepository: UsersRepository = new UsersRepository(),
-		private readonly notificationService: NotificationsService = new NotificationsService(),
-		private readonly listsRepository: ListsRepository = new ListsRepository(),
+		private readonly repository = new CommentsRepository(),
+		private readonly cards = new CardsService(),
+		private readonly notifications = new NotificationsService(),
+		private readonly members = new CardMembersRepository(),
 	) {}
-
-	async createComment({
-		cardId,
-		userId,
-		content,
-	}: {
+	async createComment(input: {
 		cardId: string;
 		userId: string;
 		content: string;
-	}): Promise<HttpResponseBodySuccessDto<GetCommentResponseDto>> {
-		const card = await this.cardsRepository.getCardWithIncludes(cardId, {
-			members: true,
-		});
-
-		if (!card) {
-			throw new NotFoundException('Card not found');
-		}
-		const user = await this.userRepository.findUser({ userId });
-		if (!user) {
-			throw new NotFoundException('User not found');
-		}
-
-		const list = await this.listsRepository.getListById(String(card.listId));
-		const { comment, notifications } = await this.commentsRepository.inTransaction(
-			async (client) => {
-				const comment = await this.commentsRepository.createComment(
-					{ cardId, userId, content },
-					client,
-				);
-				const notifications = list
-					? await Promise.all(
-							(card.cardMembers ?? [])
-								.filter((member) => 'userId' in member)
-								.filter((member) => member.userId !== userId)
-								.map((member) =>
-									this.notificationService.persistCardCommented(
-										{
-											recipientUserId: member.userId,
-											actorId: userId,
-											actorName: user.name,
-											cardId,
-											cardTitle: String(card.title),
-											content,
-											boardId: list.boardId,
-										},
-										client,
-									),
-								),
-						)
-					: [];
-				return { comment, notifications };
-			},
-		);
-		await this.notificationService.deliver(notifications);
-
-		return {
-			success: true,
-			data: new GetCommentResponseDto({
-				commentId: comment.id,
-				cardId: comment.cardId,
-				user: comment.user,
-				content: comment.content,
-				createdAt: comment.createdAt,
-				updatedAt: comment.updatedAt,
-			}),
-		};
+	}): Promise<CommentRecord> {
+		return this.saveComment(input);
 	}
-
-	async updateComment({
-		commentId,
-		content,
-		userId,
-	}: {
+	async updateComment(input: {
 		commentId: string;
 		content: string;
 		userId: string;
-	}): Promise<HttpResponseBodySuccessDto<GetCommentResponseDto>> {
-		const existingComment = await this.commentsRepository.getCommentById({
-			commentId,
-		});
-		if (!existingComment) {
-			throw new NotFoundException('Comment not found');
-		}
-		const card = await this.cardsRepository.getCardWithIncludes(
-			existingComment.cardId,
-			{
-				members: true,
-			},
-		);
-		if (!card) {
-			throw new NotFoundException('Card not found');
-		}
-
-		if (existingComment.userId !== userId) {
-			throw new ForbiddenException();
-		}
-		const list = await this.listsRepository.getListById(String(card.listId));
-		const user = await this.userRepository.findUser({ userId });
-		if (!user) {
-			throw new NotFoundException('User not found');
-		}
-
-		const { comment, notifications } = await this.commentsRepository.inTransaction(
-			async (client) => {
-				const comment = await this.commentsRepository.updateComment(
-					{ commentId, content },
-					client,
-				);
-				const notifications = list
-					? await Promise.all(
-							(card.cardMembers ?? [])
-								.filter((member) => 'userId' in member)
-								.filter((member) => member.userId !== userId)
-								.map((member) =>
-									this.notificationService.persistCardCommented(
-										{
-											recipientUserId: member.userId,
-											actorId: userId,
-											actorName: user.name,
-											cardId: String(card.id),
-											cardTitle: String(card.title),
-											content,
-											boardId: list.boardId,
-										},
-										client,
-									),
-								),
+	}): Promise<CommentRecord> {
+		const initial = await this.repository.getCommentById(input);
+		if (!initial) throw new NotFoundException('Comment not found');
+		return this.saveComment({ ...input, cardId: initial.cardId });
+	}
+	async getCommentsByCardId(input: { cardId: string }): Promise<CommentRecord[]> {
+		await this.cards.getCardById(input.cardId);
+		return this.repository.getCommentsByCardId(input);
+	}
+	private async saveComment(input: {
+		cardId: string;
+		userId: string;
+		content: string;
+		commentId?: string;
+	}): Promise<CommentRecord> {
+		const saved = await this.cards.withLockedCard(
+			input.cardId,
+			async (card, list, client) => {
+				if (input.commentId) {
+					const existing = await this.repository.getCommentById(
+						{ commentId: input.commentId },
+						client,
+					);
+					if (!existing) throw new NotFoundException('Comment not found');
+					if (existing.userId !== input.userId) throw new ForbiddenException();
+				}
+				if (!(await this.repository.canWrite(input.userId, list.boardId, client)))
+					throw new ForbiddenException();
+				const comment = input.commentId
+					? await this.repository.updateComment(
+							{ commentId: input.commentId, content: input.content },
+							client,
 						)
-					: [];
+					: await this.repository.createComment(
+							{
+								cardId: input.cardId,
+								userId: input.userId,
+								content: input.content,
+							},
+							client,
+						);
+				const recipients = await this.members.listUserIds(card.id, client);
+				const notifications = [];
+				for (const recipientUserId of new Set(
+					recipients.filter((id) => id !== input.userId),
+				)) {
+					notifications.push(
+						await this.notifications.persistCardCommented(
+							{
+								recipientUserId,
+								actorId: input.userId,
+								actorName: comment.user.name,
+								cardId: card.id,
+								cardTitle: card.title,
+								content: input.content,
+								boardId: list.boardId,
+							},
+							client,
+						),
+					);
+				}
 				return { comment, notifications };
 			},
 		);
-		await this.notificationService.deliver(notifications);
-
-		return {
-			success: true,
-			data: new GetCommentResponseDto({
-				commentId: comment.id,
-				cardId: comment.cardId,
-				user: comment.user,
-				content: comment.content,
-				createdAt: comment.createdAt,
-				updatedAt: comment.updatedAt,
-			}),
-		};
-	}
-
-	async getCommentsByCardId({
-		cardId,
-	}: {
-		cardId: string;
-	}): Promise<HttpResponseBodySuccessDto<GetCommentResponseDto[]>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) {
-			throw new NotFoundException('Card not found');
-		}
-		const comments = await this.commentsRepository.getCommentsByCardId({ cardId });
-		return {
-			success: true,
-			data: comments.map(
-				(comment) =>
-					new GetCommentResponseDto({
-						commentId: comment.id,
-						cardId: comment.cardId,
-						user: {
-							id: comment.user.id,
-							name: comment.user.name,
-							email: comment.user.email,
-							avatar: comment.user.avatar,
-						},
-						content: comment.content,
-						createdAt: comment.createdAt,
-						updatedAt: comment.updatedAt,
-					}),
-			),
-		};
+		await this.notifications.deliver(saved.notifications);
+		return saved.comment;
 	}
 }

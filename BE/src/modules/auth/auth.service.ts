@@ -128,7 +128,15 @@ export class AuthService {
 	async sendOtp({ email }: { email: string }): Promise<void> {
 		const user = await this.authRepository.findUser({ email });
 		if (!user) throw new NotFoundException('email');
-		const otp = await this.otpsService.generateOtp({ userId: user.id });
+		const otp = await this.authRepository.inTransaction(
+			async (repository, client) => {
+				await repository.lockUser(user.id);
+				const current = await repository.findUser({ userId: user.id });
+				if (!current || current.email !== email)
+					throw new NotFoundException('email');
+				return this.otpsService.generateOtp({ userId: user.id }, client);
+			},
+		);
 		try {
 			const text = `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`;
 			const html = `
@@ -161,10 +169,7 @@ export class AuthService {
 	}
 
 	async verify(input: { email: string; otp: string }): Promise<AccountSummary> {
-		const account = await this.authRepository.findAccount({
-			email: input.email,
-			userStatus: 'ACTIVE',
-		});
+		const account = await this.authRepository.findVerificationAccount(input.email);
 		if (!account) throw new NotFoundException('account');
 		if (account.user.verify)
 			throw new OptionalException(
@@ -174,10 +179,7 @@ export class AuthService {
 		const result = await this.authRepository.inTransaction(
 			async (repository, client) => {
 				await repository.lockUser(account.userId);
-				const current = await repository.findAccount({
-					email: input.email,
-					userStatus: 'ACTIVE',
-				});
+				const current = await repository.findVerificationAccount(input.email);
 				if (!current) throw new NotFoundException('account');
 				if (current.user.verify)
 					throw new OptionalException(
@@ -272,7 +274,9 @@ export class AuthService {
 			);
 	}
 
-	private summarizeAccount(account: AuthAccount): AccountSummary {
+	private summarizeAccount(
+		account: Pick<AuthAccount, 'id' | 'userId' | 'user'>,
+	): AccountSummary {
 		return {
 			id: account.id,
 			userId: account.userId,

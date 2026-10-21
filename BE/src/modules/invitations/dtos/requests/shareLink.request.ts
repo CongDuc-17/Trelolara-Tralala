@@ -1,14 +1,7 @@
 import { z } from 'zod';
 import { ZodValidationSchema } from '@/common';
-export class ShareLinkRequestDto {
-	roleId?: string;
-	constructor(data?: Partial<ShareLinkRequestDto>) {
-		this.roleId = data?.roleId;
-	}
-}
-
 const shareLinkBodyRequestSchema = z.object({
-	roleId: z.string().optional(),
+	roleId: z.uuid().optional(),
 });
 
 export const shareLinkForProjectRequestParams = z

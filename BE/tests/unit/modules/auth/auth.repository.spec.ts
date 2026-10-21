@@ -62,6 +62,34 @@ function setup() {
 }
 
 describe('AuthRepository query and transaction boundaries', () => {
+	it.each([true, false])(
+		'resolves email verification through an existing local or social identity (local=%s)',
+		async (local) => {
+			const identity = {
+				id: 'identity',
+				userId: 'user',
+				user: { email: 'new@example.com', verify: false },
+			};
+			const accounts = {
+				findFirst: jest.fn().mockResolvedValue(local ? identity : null),
+			};
+			const socialAccounts = { findFirst: jest.fn().mockResolvedValue(identity) };
+			const repository = new AuthRepository({
+				accounts,
+				socialAccounts,
+			} as unknown as DatabaseClient);
+			await expect(
+				repository.findVerificationAccount('new@example.com'),
+			).resolves.toEqual(identity);
+			expect(accounts.findFirst).toHaveBeenCalledWith({
+				where: {
+					user: { email: 'new@example.com', status: 'ACTIVE', deletedAt: null },
+				},
+				select: { id: true, userId: true, user: true },
+			});
+			expect(socialAccounts.findFirst).toHaveBeenCalledTimes(local ? 0 : 1);
+		},
+	);
 	const registration = {
 		email: 'new@example.com',
 		name: 'New',

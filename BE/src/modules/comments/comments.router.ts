@@ -1,7 +1,7 @@
 import { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 
 import express from 'express';
-import { autoBindUtil } from '@/common/utils/autoBind.utils';
+import { autoBindUtil, validateRequestMiddleware } from '@/common';
 import authMiddleware from '@/common/middlewares/auth.middleware';
 
 import { StatusCodes } from 'http-status-codes/build/cjs/status-codes';
@@ -12,7 +12,10 @@ import { CardPermissionEnum } from '@/common/enums/permissions';
 
 import { CommentsController } from './comments.controller';
 import { CommentResponseDTOSchema } from './dtos/responses';
-import { UpdateCommentRequestSchema } from './dtos/requests';
+import {
+	UpdateCommentRequestSchema,
+	UpdateCommentRequestValidationSchema,
+} from './dtos/requests';
 
 const commentsController = new CommentsController();
 export const commentsRegistry = new OpenAPIRegistry();
@@ -30,6 +33,7 @@ commentsRegistry.registerPath({
 router.patch(
 	'/:commentId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(UpdateCommentRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	authMiddleware.verifyCardLifecycle(),
 	commentsController.updateComment,

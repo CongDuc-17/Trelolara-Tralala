@@ -1,16 +1,6 @@
 import z from 'zod';
 import { ZodValidationSchema } from '@/common';
 
-export class UpdateCommentRequestDto {
-	commentId: string;
-	content: string;
-
-	constructor(data: { commentId: string; content: string }) {
-		this.commentId = data.commentId;
-		this.content = data.content;
-	}
-}
-
 export const getCommentByIdRequestParams = z
 	.object({
 		commentId: z.string().uuid(),

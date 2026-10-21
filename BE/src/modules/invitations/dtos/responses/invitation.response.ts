@@ -1,28 +1,19 @@
-import z from 'zod';
-
-export class InvitationResponseDto {
-	token: string;
-	email: string;
-	projectId?: string;
-	boardId?: string;
-	roleId: string;
-	inviterId: string;
-
-	constructor(data?: Partial<InvitationResponseDto>) {
-		this.token = data?.token ?? '';
-		this.email = data?.email ?? '';
-		this.projectId = data?.projectId;
-		this.boardId = data?.boardId;
-		this.roleId = data?.roleId ?? '';
-		this.inviterId = data?.inviterId ?? '';
-	}
-}
+import { z } from 'zod';
 
 export const InvitationsResponseDtoSchema = z.object({
+	id: z.uuid(),
 	token: z.string(),
-	email: z.string().email(),
-	projectId: z.string().optional(),
-	boardId: z.string().optional(),
-	roleId: z.string(),
-	inviterId: z.string(),
+	email: z.string(),
+	projectId: z.uuid().optional(),
+	boardId: z.uuid().optional(),
+	roleId: z.uuid(),
+	inviterId: z.uuid(),
+	type: z.enum(['EMAIL', 'LINK']),
+	status: z.enum(['PENDING', 'ACCEPTED', 'EXPIRED', 'CANCELLED']),
+	expiresAt: z.date(),
+	delivery: z.object({
+		email: z.enum(['SENT', 'FAILED', 'NOT_APPLICABLE']),
+		notification: z.enum(['SENT', 'FAILED', 'NOT_APPLICABLE']),
+	}),
+	shareUrl: z.url().optional(),
 });

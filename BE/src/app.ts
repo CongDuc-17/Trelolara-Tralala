@@ -2,13 +2,17 @@ import 'reflect-metadata';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import passport from 'passport';
 
 import { appEnv } from './configs/app.config';
 import { Modules } from './modules';
 import { openAPIRouter } from './swagger';
-import { errorHandlerMiddleware, requestContextMiddleware, setCookieMiddleware } from './common';
+import {
+	errorHandlerMiddleware,
+	requestContextMiddleware,
+	setCookieMiddleware,
+} from './common';
+import { requestLoggerMiddleware } from './common/middlewares/requestLogger.middleware';
 
 export function createApp(): Express {
 	const app = express();
@@ -19,7 +23,7 @@ export function createApp(): Express {
 	app.use(express.json());
 	app.use(setCookieMiddleware);
 	app.use(passport.initialize());
-	app.use(morgan('combined', { skip: () => appEnv.NODE_ENV === 'test' }));
+	app.use(requestLoggerMiddleware);
 	app.use('/health-check', Modules.healthCheckRouter);
 	app.use('/auth', Modules.authRouter);
 	app.use('/users', Modules.usersRouter);
@@ -35,8 +39,9 @@ export function createApp(): Express {
 	app.use('/notifications', Modules.notificationsRouter);
 	app.use('/roles', Modules.rolesRouter);
 	app.use(openAPIRouter);
-	app.use((_req, res) => { res.status(404).json({ success: false, message: 'Route not found' }); });
+	app.use((_req, res) => {
+		res.status(404).json({ success: false, message: 'Route not found' });
+	});
 	app.use(errorHandlerMiddleware);
 	return app;
 }
-

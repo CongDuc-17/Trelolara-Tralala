@@ -1,16 +1,16 @@
-import { checklistItems } from '@prisma/client';
+import type { ChecklistItemRecord } from '../../checklists.types';
 import z from 'zod';
 export class ChecklistResponseDto {
 	id: string;
 	title: string;
 	cardId: string;
-	checklistItems?: checklistItems[];
+	checklistItems?: ChecklistItemRecord[];
 
 	constructor(checklist: {
 		id: string;
 		title: string;
 		cardId: string;
-		checklistItems?: checklistItems[];
+		checklistItems?: ChecklistItemRecord[];
 	}) {
 		this.id = checklist.id;
 		this.title = checklist.title;
@@ -23,5 +23,15 @@ export const checklistResponseDtoSchema = z.object({
 	id: z.string().uuid(),
 	title: z.string(),
 	cardId: z.string().uuid(),
-	checklistItems: z.array(z.any()).optional(),
+	checklistItems: z
+		.array(
+			z.object({
+				id: z.uuid(),
+				checklistId: z.uuid(),
+				title: z.string(),
+				completed: z.boolean(),
+				createdAt: z.date(),
+			}),
+		)
+		.optional(),
 });

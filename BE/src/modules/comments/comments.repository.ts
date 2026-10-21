@@ -1,76 +1,47 @@
-import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
+import { prisma, type DatabaseClient } from '../database';
+import { PermissionService } from '../permissions/permission.service';
+import { PermissionsRepository } from '../permissions/permissions.repository';
+import { CardPermissionEnum } from '@/common/enums/permissions';
+import type { CommentRecord } from './comments.types';
 
+const user = { select: { id: true, name: true, email: true, avatar: true } } as const;
 export class CommentsRepository {
-	constructor(private readonly prismaService: DatabaseClient = database) {}
-
-	inTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
-		return runInTransaction(work, this.prismaService);
+	constructor(private readonly client: DatabaseClient = prisma) {}
+	canWrite(userId: string, boardId: string, client: DatabaseClient): Promise<boolean> {
+		return new PermissionService(
+			new PermissionsRepository(client),
+		).hasBoardPermission(userId, boardId, [CardPermissionEnum.UPDATE_CARD]);
 	}
-
-	async createComment(
-		{
-			cardId,
-			userId,
-			content,
-		}: {
-			cardId: string;
-			userId: string;
-			content: string;
-		},
-		client: DatabaseClient = this.prismaService,
-	) {
-		return client.cardComments.create({
-			data: {
-				content,
-				cardId,
-				userId,
-			},
-			include: {
-				user: true,
-			},
-		});
+	createComment(
+		input: { cardId: string; userId: string; content: string },
+		client: DatabaseClient = this.client,
+	): Promise<CommentRecord> {
+		return client.cardComments.create({ data: input, include: { user } });
 	}
-
-	async updateComment(
-		{ commentId, content }: { commentId: string; content: string },
-		client: DatabaseClient = this.prismaService,
-	) {
+	updateComment(
+		input: { commentId: string; content: string },
+		client: DatabaseClient = this.client,
+	): Promise<CommentRecord> {
 		return client.cardComments.update({
-			where: {
-				id: commentId,
-			},
-			data: {
-				content,
-				updatedAt: new Date(),
-			},
-			include: {
-				user: true,
-			},
+			where: { id: input.commentId },
+			data: { content: input.content },
+			include: { user },
 		});
 	}
-
-	async getCommentsByCardId({ cardId }: { cardId: string }) {
-		return this.prismaService.cardComments.findMany({
-			where: {
-				cardId,
-			},
-			include: {
-				user: true,
-			},
-			orderBy: {
-				createdAt: 'desc',
-			},
+	getCommentsByCardId({ cardId }: { cardId: string }): Promise<CommentRecord[]> {
+		return this.client.cardComments.findMany({
+			where: { cardId },
+			include: { user },
+			orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
 		});
 	}
-
-	async getCommentById({ commentId }: { commentId: string }) {
-		return this.prismaService.cardComments.findUnique({
-			where: {
-				id: commentId,
-			},
-			include: {
-				user: true,
-			},
+	getCommentById(
+		{ commentId }: { commentId: string },
+		client: DatabaseClient = this.client,
+	): Promise<CommentRecord | null> {
+		return client.cardComments.findUnique({
+			where: { id: commentId },
+			include: { user },
 		});
 	}
 }

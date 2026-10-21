@@ -2,10 +2,6 @@ import z from 'zod';
 
 import { ZodValidationSchema } from '@/common';
 
-export class CreateChecklistRequestDto {
-	title: string;
-}
-
 const createChecklistRequestBody = z
 	.object({
 		title: z.string().min(1).max(255).describe('Checklist title'),

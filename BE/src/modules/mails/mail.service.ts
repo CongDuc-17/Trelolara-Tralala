@@ -40,15 +40,10 @@ export class MailsService {
 			return { success: true };
 		} catch (error) {
 			if (error instanceof MailDeliveryError) throw error;
-			const sanitized = error instanceof Error
-				? error.message.replace(/([a-zA-Z0-9_\s-]*pass(word)?\s*[:=]\s*)[^\s,]+/gi, '$1***').replace(/\b\d{6}\b/g, '******')
-				: 'Unknown delivery error';
-			console.error('[MailsService] Email delivery failed:', sanitized);
+			console.error('[MailsService] Email delivery failed');
 			throw new MailDeliveryError();
 		}
 	}
 }
 
 export { MailsService as MailService };
-
-

@@ -1,52 +1,31 @@
-import { Exception } from '@/common/exceptions/app-error';
-import { Request, Response } from 'express';
-import { HttpResponseDto } from '@/common';
-
+import type { Request, Response } from 'express';
 import { ChecklistsService } from './checklists.service';
+import { ChecklistResponseDto } from './dtos/responses';
 
 export class ChecklistsController {
-	constructor(
-		private readonly checklistsService: ChecklistsService = new ChecklistsService(),
-	) {}
-
-	async createChecklist(req: Request): Promise<Response> {
-		const { cardId } = req.params as { cardId: string };
-		const { title } = req.body;
-		const result = await this.checklistsService.createChecklist(cardId, title);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
-	}
-
-	async getChecklistById(req: Request): Promise<Response> {
-		const { checklistId } = req.params as { checklistId: string };
-		const result = await this.checklistsService.getChecklistById(checklistId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
-	}
-
-	async updateChecklistTitle(req: Request): Promise<Response> {
-		const { checklistId } = req.params as { checklistId: string };
-		const { title } = req.body;
-		const result = await this.checklistsService.updateChecklistTitle(
-			checklistId,
-			title,
+	constructor(private readonly service = new ChecklistsService()) {}
+	async createChecklist(req: Request, res: Response): Promise<Response> {
+		const data = await this.service.createChecklist(
+			req.params.cardId as string,
+			req.body.title,
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+		return res.json({ success: true, data: new ChecklistResponseDto(data) });
 	}
-
-	async deleteChecklist(req: Request): Promise<Response> {
-		const { checklistId } = req.params as { checklistId: string };
-		const result = await this.checklistsService.deleteChecklist(checklistId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async getChecklistById(req: Request, res: Response): Promise<Response> {
+		const data = await this.service.getChecklistById(
+			req.params.checklistId as string,
+		);
+		return res.json({ success: true, data: new ChecklistResponseDto(data) });
+	}
+	async updateChecklistTitle(req: Request, res: Response): Promise<Response> {
+		const data = await this.service.updateChecklistTitle(
+			req.params.checklistId as string,
+			req.body.title,
+		);
+		return res.json({ success: true, data: new ChecklistResponseDto(data) });
+	}
+	async deleteChecklist(req: Request, res: Response): Promise<Response> {
+		await this.service.deleteChecklist(req.params.checklistId as string);
+		return res.json({ success: true, data: null });
 	}
 }

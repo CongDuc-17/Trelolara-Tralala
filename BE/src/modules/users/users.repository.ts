@@ -1,4 +1,4 @@
-import { prisma as database, type DatabaseClient } from '../database';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
 
 import { UpdateProfileInput, UserProfile } from './users.types';
 
@@ -62,6 +62,22 @@ export class UsersRepository {
 		userId: string;
 		user: UpdateProfileInput & { avatar?: string };
 	}): Promise<UserProfile> {
+		if (user.email !== undefined) {
+			return runInTransaction(async (client) => {
+				await client.$queryRaw`SELECT id FROM "Users" WHERE id = ${userId} FOR UPDATE`;
+				const current = await client.users.findUnique({
+					where: { id: userId },
+					select: { email: true },
+				});
+				const emailChanged = current?.email !== user.email;
+				// Verification and OTP belong to the address; neither survives an address change.
+				if (emailChanged) await client.otps.deleteMany({ where: { userId } });
+				return client.users.update({
+					where: { id: userId },
+					data: { ...user, ...(emailChanged ? { verify: false } : {}) },
+				});
+			}, this.prismaService);
+		}
 		return this.prismaService.users.update({
 			where: { id: userId },
 			data: user,

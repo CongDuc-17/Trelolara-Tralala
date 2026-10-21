@@ -1,13 +1,6 @@
 import z from 'zod';
 import { ZodValidationSchema } from '@/common';
 
-export class CreateCommentRequestDto {
-	content: string;
-	constructor(data: { content: string }) {
-		this.content = data.content;
-	}
-}
-
 const createCommentRequestParams = z.object({
 	cardId: z.string().uuid('Invalid card ID format'),
 });

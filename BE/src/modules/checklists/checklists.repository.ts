@@ -1,49 +1,38 @@
-import { prisma as database, type DatabaseClient } from '../database';
+import { prisma, type DatabaseClient } from '../database';
+import type { ChecklistRecord } from './checklists.types';
 
 export class ChecklistsRepository {
-	constructor(private readonly prismaService: DatabaseClient = database) {}
-
-	async createChecklist(cardId: string, title: string) {
-		return this.prismaService.checklists.create({
-			data: {
-				title,
-				cardId,
-			},
-		});
+	constructor(private readonly client: DatabaseClient = prisma) {}
+	createChecklist(
+		cardId: string,
+		title: string,
+		client: DatabaseClient = this.client,
+	): Promise<ChecklistRecord> {
+		return client.checklists.create({ data: { cardId, title } });
 	}
-
-	async getChecklistById(checklistId: string) {
-		return this.prismaService.checklists.findUnique({
-			where: {
-				id: checklistId,
-			},
+	getChecklistById(
+		id: string,
+		client: DatabaseClient = this.client,
+	): Promise<ChecklistRecord | null> {
+		return client.checklists.findUnique({
+			where: { id },
 			include: {
-				checklistItems: true,
+				checklistItems: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
 			},
 		});
 	}
-
-	async updateChecklistTitle(checklistId: string, title: string) {
-		return this.prismaService.checklists.update({
-			where: {
-				id: checklistId,
-			},
-			data: {
-				title,
-			},
-		});
+	updateChecklistTitle(
+		id: string,
+		title: string,
+		client: DatabaseClient = this.client,
+	): Promise<ChecklistRecord> {
+		return client.checklists.update({ where: { id }, data: { title } });
 	}
-
-	async deleteChecklist(checklistId: string) {
-		await this.prismaService.checklistItems.deleteMany({
-			where: {
-				checklistId: checklistId,
-			},
-		});
-		return this.prismaService.checklists.delete({
-			where: {
-				id: checklistId,
-			},
-		});
+	async deleteChecklist(
+		id: string,
+		client: DatabaseClient = this.client,
+	): Promise<void> {
+		await client.checklistItems.deleteMany({ where: { checklistId: id } });
+		await client.checklists.delete({ where: { id } });
 	}
 }
