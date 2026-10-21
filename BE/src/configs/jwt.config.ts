@@ -1,4 +1,4 @@
-import type { SignOptions } from 'jsonwebtoken';
+import { decode, sign, type SignOptions } from 'jsonwebtoken';
 
 type JwtExpiresIn = Exclude<SignOptions['expiresIn'], undefined>;
 
@@ -20,7 +20,28 @@ const resolveExpiresIn = (
 	value: string | undefined,
 	fallback: string,
 	errorMessage: string,
-): JwtExpiresIn => resolveRequiredString(value, fallback, errorMessage) as JwtExpiresIn;
+): JwtExpiresIn => {
+	const expiresIn = resolveRequiredString(
+		value,
+		fallback,
+		errorMessage,
+	) as JwtExpiresIn;
+	try {
+		const payload = decode(sign({}, 'configuration-validation', { expiresIn }));
+		if (
+			!payload ||
+			typeof payload === 'string' ||
+			!payload.exp ||
+			!payload.iat ||
+			payload.exp <= payload.iat
+		) {
+			throw new Error('Non-positive token lifetime');
+		}
+	} catch {
+		throw new Error('JWT expiry must be a positive duration such as 15m or 7d');
+	}
+	return expiresIn;
+};
 
 export const jwtConfig = {
 	expiresInAccessToken: resolveExpiresIn(

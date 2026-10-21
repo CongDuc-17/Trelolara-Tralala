@@ -1,4 +1,4 @@
-import { ClientException } from '@tsed/exceptions';
+import { ClientException } from '@/common/exceptions/app-error';
 import { StatusCodes } from 'http-status-codes';
 
 export class ForbiddenException extends ClientException {

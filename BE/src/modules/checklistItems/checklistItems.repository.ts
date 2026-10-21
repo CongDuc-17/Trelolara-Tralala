@@ -1,8 +1,8 @@
-import { checklistItems } from '@/models';
-import { PrismaService } from '../database';
+import { checklistItems } from '@prisma/client';
+import { prisma as database, type DatabaseClient } from '../database';
 
 export class ChecklistItemsRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = database) {}
 
 	async createChecklistItem(
 		checklistId: string,

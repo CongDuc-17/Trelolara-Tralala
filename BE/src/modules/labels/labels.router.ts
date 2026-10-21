@@ -1,6 +1,7 @@
 import { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import express from 'express';
 import { StatusCodes } from 'http-status-codes';
+import { BoardPermissionEnum } from '@/common/enums/permissions';
 
 import { LabelsController } from './labels.controller';
 
@@ -32,6 +33,7 @@ router.patch(
 	'/:labelId',
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(updateLabelRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
 	labelsController.updateLabel,
 );
 
@@ -47,7 +49,8 @@ labelsRegistry.registerPath({
 router.delete(
 	'/:labelId',
 	authMiddleware.verifyAccessToken,
-	//validateRequestMiddleware(updateLabelRequestValidationSchema),
+	validateRequestMiddleware({ params: updateLabelRequestParams }),
+	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
 	labelsController.deleteLabel,
 );
 

@@ -38,8 +38,8 @@ checklistItemsRegistry.registerPath({
 router.patch(
 	'/:checklistItemId',
 	authMiddleware.verifyAccessToken,
-	//authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(updateChecklistItemValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	checklistItemsController.updateChecklistItem,
 );
 
@@ -53,8 +53,8 @@ checklistItemsRegistry.registerPath({
 router.delete(
 	'/:checklistItemId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(checklistItemByIdValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	checklistItemsController.deleteChecklistItem,
 );
 

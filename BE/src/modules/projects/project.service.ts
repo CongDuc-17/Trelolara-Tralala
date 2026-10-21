@@ -13,7 +13,7 @@ import { ProjectMembersRepository } from '../projectMembers/projectMember.reposi
 import { ProjectStatusEnum, RoleStatusEnum } from '@prisma/client';
 import { ProjectRoleEnum } from '@/common/enums/roles';
 import { RolesRepository } from '../roles/roles.repository';
-import { Forbidden } from '@tsed/exceptions';
+import { Forbidden } from '@/common/exceptions/app-error';
 import {
 	GetMembersResponseDTO,
 	GetProjectResponseDTO,

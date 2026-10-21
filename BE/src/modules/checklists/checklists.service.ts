@@ -2,7 +2,7 @@ import { CardsRepository } from '../cards/card.repository';
 import { ChecklistItemsRepository } from '../checklistItems/checklistItems.repository';
 import { ChecklistsRepository } from './checklists.repository';
 
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 
 import { HttpResponseBodySuccessDto } from '@/common/dtos/httpResponseBodySuccess.dto';
 import { NotFoundException } from '@/common/exceptions/notFound.exception';

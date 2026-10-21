@@ -1,27 +1,25 @@
-import { projectMembers } from './../../models/modelSchema/projectMembersSchema';
+import { projectMembers } from '@prisma/client';
 import { Prisma, ProjectStatusEnum, UserStatusEnum } from '@prisma/client';
 
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 
-import { projects } from '@/models';
+import { projects } from '@prisma/client';
 import { BoardsRepository } from '../boards/boards.repository';
 
 export class ProjectsRepository {
 	constructor(
-		private readonly prismaService = new PrismaService(),
+		private readonly prismaService: DatabaseClient = database,
 		private readonly boardsRepository = new BoardsRepository(),
 	) {}
 
 	async createProject(
 		name: string,
 		description?: string,
-		background?: string,
 	): Promise<projects> {
 		return this.prismaService.projects.create({
 			data: {
 				name,
 				description,
-				background,
 			},
 		});
 	}

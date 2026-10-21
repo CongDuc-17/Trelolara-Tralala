@@ -1,11 +1,11 @@
-import { boards } from '@/models';
-import { PrismaService } from '../database';
+import { boards } from '@prisma/client';
+import { prisma as database, type DatabaseClient } from '../database';
 import { BoardStatusEnum } from '@prisma/client';
 import { ListsRepository } from '../lists/list.repository';
 
 export class BoardsRepository {
 	constructor(
-		private readonly prismaService = new PrismaService(),
+		private readonly prismaService: DatabaseClient = database,
 		private readonly listsRepository = new ListsRepository(),
 	) {}
 

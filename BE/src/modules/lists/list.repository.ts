@@ -1,10 +1,10 @@
 import { ListStatusEnum } from '@prisma/client';
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 import { CardsRepository } from '../cards/card.repository';
 
 export class ListsRepository {
 	constructor(
-		private readonly prismaService = new PrismaService(),
+		private readonly prismaService: DatabaseClient = database,
 		private readonly cardsRepository = new CardsRepository(),
 	) {}
 

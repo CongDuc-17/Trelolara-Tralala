@@ -1,5 +1,5 @@
 import { Prisma, users } from '@prisma/client';
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 import { genSalt, hash } from 'bcrypt';
 import { StatusCodes } from 'http-status-codes';
 

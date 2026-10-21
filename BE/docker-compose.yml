@@ -27,7 +27,7 @@ services:
         container_name: be-trelolara
         build:
             context: .
-            dockerfile: Dockerfile
+            dockerfile: dockerfile
         restart: on-failure
         ports:
             - '3001:3000'
@@ -36,4 +36,4 @@ services:
             # - trelolara-redis
         env_file:
             - .env
-        command: ['node', 'dist/app.js']
+        command: ['node', 'dist/server.js']

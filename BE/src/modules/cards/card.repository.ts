@@ -1,9 +1,9 @@
 import { CardStatusEnum } from '@prisma/client';
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 import { ChecklistsRepository } from '../checklists/checklists.repository';
 export class CardsRepository {
 	constructor(
-		private readonly prismaService = new PrismaService(),
+		private readonly prismaService: DatabaseClient = database,
 		private readonly checklistRepository = new ChecklistsRepository(),
 	) {}
 

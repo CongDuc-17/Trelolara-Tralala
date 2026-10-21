@@ -140,8 +140,8 @@ listsRegistry.registerPath({
 router.post(
 	'/:listId/cards',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.CREATE_CARD),
 	validateRequestMiddleware(createCardRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.CREATE_CARD),
 	cardsController.createCard,
 );
 

@@ -1,10 +1,8 @@
-import { Response } from 'express';
-
-import { HttpResponseDto } from '@/common';
+import type { Request, Response } from 'express';
 
 export class HealthCheckController {
-	async start(): Promise<Response> {
-		return new HttpResponseDto().success<string>({
+	start(_req: Request, res: Response): void {
+		res.status(200).json({
 			success: true,
 			data: 'Service is running',
 		});

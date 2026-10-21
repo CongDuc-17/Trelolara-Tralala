@@ -1,77 +1,94 @@
-import { otps } from '@prisma/client';
-import { Exception } from '@tsed/exceptions';
-import { StatusCodes } from 'http-status-codes';
-
-import { UsersRepository } from '../users/users.repository';
-
+import { randomInt } from 'node:crypto';
+import type { otps } from '@prisma/client';
+import type { DatabaseClient } from '../database';
 import { OtpsRepository } from './otps.repository';
+import { otpsConfig } from '@/configs/otps.config';
 
-import { OptionalException } from '@/common';
-import { otpsConfig } from '@/configs';
+export class OtpCooldownError extends Error {
+	readonly status = 409;
+
+	constructor(seconds: number) {
+		super(`OTP sẽ được cấp lại sau ${seconds} giây`);
+		this.name = 'OtpCooldownError';
+	}
+}
 
 export class OtpsService {
 	constructor(
-		private readonly usersRepository = new UsersRepository(),
-		private readonly otpsRepository = new OtpsRepository(),
+		private readonly repository = new OtpsRepository(),
+		private readonly now: () => Date = () => new Date(),
+		private readonly generateCode: () => string = () =>
+			randomInt(100000, 1000000).toString(),
 	) {}
 
-	async generateOtp({ userId }: { userId: string }): Promise<otps | Exception> {
-		const otpExists = await this.otpsRepository.findOtp({ userId });
-		if (otpExists && otpExists.expiresAt > new Date()) {
-			throw new OptionalException(
-				StatusCodes.CONFLICT,
-				`OTP sẽ được cấp lại sau ${Math.ceil((otpExists.expiresAt.getTime() - new Date().getTime()) / 1000)} giây`,
+	async generateOtp({ userId }: { userId: string }): Promise<otps> {
+		const now = this.now();
+		const existing = await this.repository.findOtp(userId);
+		if (existing && existing.expiresAt > now) {
+			throw new OtpCooldownError(
+				Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000),
 			);
 		}
-
-		const otp = Math.floor(100000 + Math.random() * 999999).toString();
-		const otpExpiresAt = new Date(Date.now() + otpsConfig.otpExpiresIn * 60 * 1000);
-
-		if (otpExists) {
-			const otpData = await this.otpsRepository.updateOtp({
-				otpId: otpExists.id,
-				otp: {
-					otp: otp,
-					expiresAt: otpExpiresAt,
-				},
-			});
-			return otpData;
+		const code = this.generateCode();
+		const expiresAt = new Date(now.getTime() + otpsConfig.otpExpiresIn * 60_000);
+		if (existing) {
+			const replacement = await this.repository.replaceExpiredOtp(
+				existing,
+				code,
+				expiresAt,
+				now,
+			);
+			if (!replacement) throw new OtpCooldownError(otpsConfig.otpExpiresIn * 60);
+			return replacement;
 		}
-
-		const otpData = await this.otpsRepository.createOtp({
-			otp: {
-				otp: otp,
-				expiresAt: otpExpiresAt,
-				user: {
-					connect: { id: userId },
-				},
-			},
-		});
-		return otpData;
+		try {
+			return await this.repository.createOtp(userId, code, expiresAt);
+		} catch (error) {
+			if (
+				error &&
+				typeof error === 'object' &&
+				'code' in error &&
+				error.code === 'P2002'
+			) {
+				throw new OtpCooldownError(otpsConfig.otpExpiresIn * 60);
+			}
+			throw error;
+		}
 	}
 
-	async verifyOtp({
-		otp,
-		userId,
-	}: {
-		otp: string;
-		userId: string;
-	}): Promise<boolean | Exception> {
-		const otpRecord = await this.otpsRepository.findOtp({
-			userId: userId,
-			otp: otp,
-		});
-		if (!otpRecord) {
+	async verifyOtp(
+		{ userId, otp }: { userId: string; otp: string },
+		client?: DatabaseClient,
+	): Promise<boolean> {
+		const record = await this.repository.findOtp(userId, client);
+		if (!record) return false;
+		const now = this.now();
+		if (record.expiresAt <= now) {
+			await this.repository.invalidateOtp(
+				{ userId, otp: record.otp, expiresAt: record.expiresAt },
+				client,
+			);
 			return false;
 		}
-
-		if (otpRecord.expiresAt < new Date()) {
-			await this.otpsRepository.deleteOtp({ otpId: otpRecord.id });
-			throw new OptionalException(StatusCodes.UNAUTHORIZED, 'OTP expired');
+		if (record.attempts >= otpsConfig.maxAttempts) return false;
+		if (record.otp !== otp) {
+			await this.repository.incrementAttempts(
+				record,
+				now,
+				otpsConfig.maxAttempts,
+				client,
+			);
+			return false;
 		}
+		return this.repository.consumeOtp(record, now, otpsConfig.maxAttempts, client);
+	}
 
-		await this.otpsRepository.deleteOtp({ otpId: otpRecord.id });
-
-		return true;
+	invalidateOtp(
+		input: { userId: string; otp: string; expiresAt?: Date },
+		client?: DatabaseClient,
+	): Promise<void> {
+		return this.repository.invalidateOtp(input, client);
 	}
 }
+
+export { OtpsService as OtpService };

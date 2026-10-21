@@ -1,10 +1,11 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 
-export class PrismaService extends PrismaClient<
-	Prisma.PrismaClientOptions,
-	'query' | 'beforeExit'
-> {
-	constructor() {
-		super();
-	}
+export type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+export const prisma = new PrismaClient();
+
+export function runInTransaction<T>(
+	work: (transaction: Prisma.TransactionClient) => Promise<T>,
+	client: DatabaseClient = prisma,
+): Promise<T> {
+	return '$transaction' in client ? client.$transaction(work) : work(client);
 }

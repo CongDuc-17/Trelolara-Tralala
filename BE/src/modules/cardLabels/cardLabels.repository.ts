@@ -1,6 +1,6 @@
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 export class CardLabelsRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = database) {}
 
 	async addLabelToCard(cardId: string, labelId: string) {
 		return this.prismaService.cardLabels.create({

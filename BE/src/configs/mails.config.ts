@@ -1,43 +1,48 @@
-// import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
-// export const MailConfig = {
-// 	apiKey: String(process.env.RESEND_API_KEY),
+export interface MailSender {
+	address: string;
+	name: string;
+}
 
-// 	senderAddress:
-// 		String(process.env.MAIL_SENDER_ADDRESS) ||
-// 		'onboarding@resend.dev',
+export function getMailSender(): MailSender {
+	const address = (process.env.MAIL_SENDER_ADDRESS || process.env.GMAIL_USER)?.trim();
+	if (!address || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+		throw new Error('Mail sender configuration is invalid');
+	}
+	return {
+		address,
+		name: process.env.MAIL_SENDER_NAME?.trim() || 'No Reply',
+	};
+}
 
-// 	senderName:
-// 		String(process.env.MAIL_SENDER_NAME) ||
-// 		'No Reply',
-// };
+let cachedTransporter: Transporter<SMTPTransport.SentMessageInfo> | null = null;
 
-// export const ResendConfig = new Resend(
-// 	MailConfig.apiKey
-// );
+export function getMailTransporter(): Transporter<SMTPTransport.SentMessageInfo> {
+	if (cachedTransporter) return cachedTransporter;
 
-import * as nodemailer from 'nodemailer';
+	const user = process.env.GMAIL_USER?.trim();
+	const pass = process.env.GMAIL_APP_PASSWORD?.trim();
 
-export const MailConfig = {
-	smtpLogin: String(process.env.BREVO_SMTP_LOGIN),
-	smtpKey: String(process.env.BREVO_SMTP_KEY),
+	if (!user || !pass) {
+		throw new Error('Gmail SMTP configuration is incomplete');
+	}
 
-	senderAddress:
-		String(process.env.MAIL_SENDER_ADDRESS) ||
-		'no-reply@localhost.com',
+	cachedTransporter = nodemailer.createTransport({
+		host: 'smtp.gmail.com',
+		port: 465,
+		secure: true,
+		auth: {
+			user,
+			pass,
+		},
+	});
 
-	senderName:
-		String(process.env.MAIL_SENDER_NAME) ||
-		'No Reply',
-};
+	return cachedTransporter;
+}
 
-// Khởi tạo Transporter của Nodemailer với cấu hình Brevo SMTP
-export const TransporterConfig = nodemailer.createTransport({
-	host: 'smtp-relay.brevo.com',
-	port: 587,
-	secure: false, // Port 587 sử dụng TLS
-	auth: {
-		user: MailConfig.smtpLogin,
-		pass: MailConfig.smtpKey,
-	},
-});
+export function resetMailTransporter(): void {
+	cachedTransporter = null;
+}
+

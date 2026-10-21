@@ -1,37 +1,54 @@
-import { SendMailOptions } from 'nodemailer';
+import type { SendMailOptions } from 'nodemailer';
 import { SendEmailDto } from './dtos';
-import { MailConfig, TransporterConfig } from '@/configs/mails.config';
+import {
+	getMailSender,
+	getMailTransporter,
+	type MailSender,
+} from '@/configs/mails.config';
+
+export interface MailTransporter {
+	sendMail(options: SendMailOptions): Promise<unknown>;
+}
+
+export class MailDeliveryError extends Error {
+	readonly status = 503;
+
+	constructor() {
+		super('Email could not be delivered. Please try again later.');
+		this.name = 'MailDeliveryError';
+	}
+}
 
 export class MailsService {
-	constructor() {}
+	constructor(
+		private transporter?: MailTransporter,
+		private readonly sender?: MailSender,
+	) {}
 
-	async sendEmail(
-		data: SendEmailDto
-	): Promise<{ success: boolean } | null> {
+	async sendEmail(data: SendEmailDto): Promise<{ success: true }> {
 		try {
-			const { sender, recipients, subject, html, text } = data;
-
-			// Nodemailer bọc tên người gửi trong ngoặc kép "" để hiển thị tốt nhất
-			const fromAddress = sender
-				? `"${sender.name}" <${sender.address}>`
-				: `"${MailConfig.senderName}" <${MailConfig.senderAddress}>`;
-
-			// Ép kiểu sang SendMailOptions của Nodemailer
-			const payload: SendMailOptions = {
-				from: fromAddress,
-				to: recipients, 
-				subject,
-				...(html && { html }), 
-				...(text && { text }), 
-			};
-
-			// Sử dụng transporter thay vì ResendConfig
-			await TransporterConfig.sendMail(payload);
-
+			const sender = data.sender ?? this.sender ?? getMailSender();
+			const from = `${sender.name} <${sender.address}>`;
+			this.transporter ??= getMailTransporter();
+			await this.transporter.sendMail({
+				from,
+				to: data.recipients,
+				subject: data.subject,
+				...(data.html !== undefined ? { html: data.html } : {}),
+				...(data.text !== undefined ? { text: data.text } : {}),
+			});
 			return { success: true };
 		} catch (error) {
-			console.error('[MAIL_SERVICE_ERROR]', error);
-			return null;
+			if (error instanceof MailDeliveryError) throw error;
+			const sanitized = error instanceof Error
+				? error.message.replace(/([a-zA-Z0-9_\s-]*pass(word)?\s*[:=]\s*)[^\s,]+/gi, '$1***').replace(/\b\d{6}\b/g, '******')
+				: 'Unknown delivery error';
+			console.error('[MailsService] Email delivery failed:', sanitized);
+			throw new MailDeliveryError();
 		}
 	}
 }
+
+export { MailsService as MailService };
+
+

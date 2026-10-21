@@ -1,8 +1,8 @@
 import { BoardStatusEnum } from '@prisma/client';
-import { PrismaService } from '../database/prisma.service';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database/prisma.service';
 
 export class BoardMembersRepository {
-	constructor(private readonly prisma = new PrismaService()) {}
+	constructor(private readonly prisma: DatabaseClient = database) {}
 
 	async getBoardsOfUserInProject({
 		projectId,
@@ -194,12 +194,11 @@ export class BoardMembersRepository {
 		});
 	}
 	async removeMember(boardId: string, userId: string) {
-		await this.prisma.cardMembers.deleteMany({
-			where: { userId },
-		});
-
-		return this.prisma.boardMembers.deleteMany({
-			where: { boardId, userId },
-		});
+		return runInTransaction(async (transaction) => {
+			await transaction.cardMembers.deleteMany({
+				where: { userId, card: { list: { boardId } } },
+			});
+			return transaction.boardMembers.deleteMany({ where: { boardId, userId } });
+		}, this.prisma);
 	}
 }

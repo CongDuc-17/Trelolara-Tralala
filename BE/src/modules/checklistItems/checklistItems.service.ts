@@ -1,6 +1,6 @@
 import { NotFoundException } from '@/common/exceptions';
 
-import { Exception } from '@tsed/exceptions';
+import { Exception } from '@/common/exceptions/app-error';
 import { HttpResponseBodySuccessDto } from '@/common/dtos/httpResponseBodySuccess.dto';
 import { ChecklistItemsRepository } from './checklistItems.repository';
 import { ChecklistsRepository } from '../checklists/checklists.repository';

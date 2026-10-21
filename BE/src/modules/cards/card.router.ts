@@ -59,8 +59,8 @@ cardsRegistry.registerPath({
 router.get(
 	'/:cardId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
 	validateRequestMiddleware(getCardRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
 	cardsController.getCardById,
 );
 
@@ -75,8 +75,8 @@ cardsRegistry.registerPath({
 router.patch(
 	'/:cardId/move',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.MOVE_CARD),
 	validateRequestMiddleware(moveCardRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.MOVE_CARD),
 	cardsController.moveCard,
 );
 
@@ -139,8 +139,8 @@ cardsRegistry.registerPath({
 router.post(
 	'/:cardId/labels',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(addLabelRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	cardsController.addLabelToCard,
 );
 
@@ -154,8 +154,8 @@ cardsRegistry.registerPath({
 router.delete(
 	'/:cardId/labels/:labelId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(removeLabelRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	cardsController.removeLabelFromCard,
 );
 
@@ -169,8 +169,8 @@ cardsRegistry.registerPath({
 router.post(
 	'/:cardId/members',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.ASSIGN_MEMBER),
 	validateRequestMiddleware(addMemberRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.ASSIGN_MEMBER),
 	cardsController.addMemberToCard,
 );
 
@@ -184,8 +184,8 @@ cardsRegistry.registerPath({
 router.delete(
 	'/:cardId/members/:memberId',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UNASSIGN_MEMBER),
 	validateRequestMiddleware(removeMemberRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UNASSIGN_MEMBER),
 	cardsController.removeMemberFromCard,
 );
 
@@ -199,8 +199,8 @@ cardsRegistry.registerPath({
 router.post(
 	'/:cardId/checklists',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	validateRequestMiddleware(createChecklistValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	checklistsController.createChecklist,
 );
 

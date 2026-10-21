@@ -1,8 +1,8 @@
 import { ProjectStatusEnum } from '@prisma/client';
-import { PrismaService } from '../database/prisma.service';
+import { prisma as database, type DatabaseClient } from '../database/prisma.service';
 
 export class ProjectMembersRepository {
-	constructor(private readonly prisma = new PrismaService()) {}
+	constructor(private readonly prisma: DatabaseClient = database) {}
 
 	async getProjectsOfUser({
 		userId,

@@ -1,16 +1,19 @@
-import { PrismaService } from '../database';
+import { RoleStatusEnum } from '@prisma/client';
+
+import { DatabaseClient, prisma } from '../database';
 
 export class RolesRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = prisma) {}
 	async findRoleIdByUserId(userId: string) {
 		const userRole = await this.prismaService.usersRoles.findFirst({
-			where: { userId },
+			where: { userId, role: { deletedAt: null, status: RoleStatusEnum.ACTIVE } },
+			select: { roleId: true },
 		});
 		return userRole?.roleId;
 	}
 	async findByName(roleName: string) {
 		return this.prismaService.roles.findFirst({
-			where: { name: roleName, deletedAt: null },
+			where: { name: roleName, deletedAt: null, status: RoleStatusEnum.ACTIVE },
 		});
 	}
 

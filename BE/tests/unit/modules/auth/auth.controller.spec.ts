@@ -1,215 +1,156 @@
-/**
- * AuthController Unit Tests
- * 
- * Mục đích:
- * - Test layer Controller (xử lý HTTP requests/responses)
- * - Mock AuthService để test riêng biệt
- * - Verify request data được truyền đúng vào service
- * - Verify response được format đúng
- * 
- * Cấu trúc test:
- * - Mỗi endpoint có ít nhất 2 test cases:
- *   + Happy path (thành công)
- *   + Error handling (xử lý lỗi)
- */
-
-import { describe, it, expect, beforeEach } from '@jest/globals';
-import { Request } from 'express';
+import { NextFunction, Request, Response } from 'express';
+import passport from 'passport';
 
 import { AuthController } from '@/modules/auth/auth.controller';
-import { HttpResponseDto } from '@/common';
-import { ConflictException } from '@/common';
+import { AuthService } from '@/modules/auth/auth.service';
+import { registerRequestValidationSchema } from '@/modules/auth/dtos';
 
-describe('AuthController - Unit Tests', () => {
-    let authController: AuthController;
-    let mockAuthService: any;
-    let mockRequest: Partial<Request>;
+jest.mock('passport', () => ({ __esModule: true, default: { authenticate: jest.fn() } }));
 
-    beforeEach(() => {
-        // mockAuthService = {
-        //     register: async () => ({
-        //         success: true,
-        //         data: {
-        //             id: 'account-123',
-        //             userId: 'user-123',
-        //             email: 'test@example.com',
-        //             name: 'Test User',
-        //             avatar: 'https://avatar.url',
-        //             verify: false,
-        //             status: UserStatusEnum.ACTIVE,
-        //         },
-        //     }),
-        //     login: async () => ({
-        //         success: true,
-        //         data: {
-        //             accessToken: 'access-token-abc',
-        //             refreshToken: 'refresh-token-xyz',
-        //         },
-        //         cookies: {
-        //             accessToken: 'access-token-abc',
-        //             refreshToken: 'refresh-token-xyz',
-        //         },
-        //     }),
-        //     sendOtp: async () => ({
-        //         success: true,
-        //         data: null,
-        //     }),
-        //     verify: async () => ({
-        //         success: true,
-        //         data: {
-        //             id: 'account-123',
-        //             userId: 'user-123',
-        //             email: 'test@example.com',
-        //             name: 'Test User',
-        //             verify: true,
-        //             status: UserStatusEnum.ACTIVE,
-        //         },
-        //     }),
-        //     forgotPassword: async () => ({
-        //         success: true,
-        //         data: {
-        //             id: 'account-123',
-        //             userId: 'user-123',
-        //             email: 'test@example.com',
-        //         },
-        //     }),
-        //     refreshToken: async () => ({
-        //         success: true,
-        //         data: {
-        //             accessToken: 'new-access-token',
-        //             refreshToken: 'new-refresh-token',
-        //         },
-        //         cookies: {
-        //             accessToken: 'new-access-token',
-        //             refreshToken: 'new-refresh-token',
-        //         },
-        //     }),
-        // };
-        authController = new AuthController();
+function setup() {
+	const tokens = { accessToken: 'access-token', refreshToken: 'refresh-token' };
+	const service = {
+		register: jest.fn(async () => ({
+			id: 'account-1',
+			userId: 'user-1',
+			email: 'user@example.com',
+		})),
+		login: jest.fn(async () => tokens),
+		loginWithGoogle: jest.fn(async () => tokens),
+		refreshSession: jest.fn(async () => tokens),
+		logout: jest.fn(async () => undefined),
+		forgotPassword: jest.fn(async () => ({ id: 'account-1', userId: 'user-1' })),
+	};
+	const response = {
+		status: jest.fn(),
+		json: jest.fn(),
+		cookie: jest.fn(),
+		clearCookie: jest.fn(),
+		redirect: jest.fn(),
+	};
+	response.status.mockReturnValue(response);
+	response.json.mockReturnValue(response);
+	const request = {
+		body: {},
+		headers: {},
+		user: { id: 'user-1' },
+	} as unknown as Request;
+	return {
+		tokens,
+		service,
+		request,
+		response,
+		controller: new AuthController(service as unknown as AuthService),
+	};
+}
 
-        // Setup mock request object
-        mockRequest = {
-            body: {},
-            user: undefined,
-        };
-    });
+describe('Auth HTTP contracts with isolated service', () => {
+	it('rejects a public ADMIN registration while keeping USER registration compatible', () => {
+		const schema = registerRequestValidationSchema.body;
+		const input = {
+			email: 'reader@example.com',
+			password: 'password123',
+			name: 'Reader',
+		};
+		expect(schema.safeParse({ ...input, role: 'ADMIN' }).success).toBe(false);
+		expect(schema.safeParse({ ...input, role: 'USER' }).success).toBe(true);
+		expect(schema.safeParse(input).success).toBe(true);
+	});
 
-    // ==================== REGISTER ENDPOINT ====================
-    describe('POST /auth/register', () => {
+	it('register returns the original 201 success envelope', async () => {
+		const { controller, service, request, response } = setup();
+		request.body = {
+			email: 'reader@example.com',
+			password: 'password123',
+			name: 'Reader',
+		};
+		await controller.register(request, response as unknown as Response);
+		expect(service.register).toHaveBeenCalledWith(request.body);
+		expect(response.status).toHaveBeenCalledWith(201);
+		expect(response.json).toHaveBeenCalledWith({
+			success: true,
+			data: { id: 'account-1', userId: 'user-1', email: 'user@example.com' },
+		});
+	});
 
-        it('✅ should register new user successfully', async () => {
-            const registerData = {
-                email: 'newuser@example.com',
-                password: 'SecurePassword123!',
-                name: 'New User',
-            };
-            mockRequest.body = registerData;
-            mockRequest.params = registerData
+	it('login retains token response fields and sets both HTTP-only cookies', async () => {
+		const { controller, request, response, tokens } = setup();
+		await controller.login(request, response as unknown as Response);
+		expect(response.status).toHaveBeenCalledWith(200);
+		expect(response.json).toHaveBeenCalledWith({ success: true, data: tokens });
+		expect(response.cookie).toHaveBeenCalledWith(
+			'accessToken',
+			tokens.accessToken,
+			expect.objectContaining({ httpOnly: true, path: '/' }),
+		);
+		expect(response.cookie).toHaveBeenCalledWith(
+			'refreshToken',
+			tokens.refreshToken,
+			expect.objectContaining({ httpOnly: true, path: '/' }),
+		);
+	});
 
-            const response = await authController.register(mockRequest as Request);
+	it('refresh needs only the refresh cookie and preserves status 201', async () => {
+		const { controller, request, response, service } = setup();
+		request.headers.cookie = 'unrelated=value;refreshToken=supplied-token';
+		await controller.refreshToken(request, response as unknown as Response);
+		expect(service.refreshSession).toHaveBeenCalledWith('supplied-token');
+		expect(response.status).toHaveBeenCalledWith(201);
+	});
 
-            expect(response).toBeInstanceOf(HttpResponseDto);
-            expect(response).toBeDefined();
-        });
+	it('missing refresh cookie fails before calling the service', async () => {
+		const { controller, request, response, service } = setup();
+		await expect(
+			controller.refreshToken(request, response as unknown as Response),
+		).rejects.toMatchObject({ status: 401 });
+		expect(service.refreshSession).not.toHaveBeenCalled();
+	});
 
-        it('✅ should pass correct data to authService.register', async () => {
-            // Arrange
-            const registerData = {
-                email: 'test@example.com',
-                password: 'Password123!',
-                name: 'Test User',
-            };
-            mockRequest.body = registerData;
+	it('logout clears both cookies with matching options', async () => {
+		const { controller, request, response, service } = setup();
+		await controller.logout(request, response as unknown as Response);
+		expect(service.logout).toHaveBeenCalledWith('user-1');
+		expect(response.clearCookie).toHaveBeenCalledWith(
+			'accessToken',
+			expect.objectContaining({ httpOnly: true, path: '/' }),
+		);
+		expect(response.clearCookie).toHaveBeenCalledWith(
+			'refreshToken',
+			expect.objectContaining({ httpOnly: true, path: '/' }),
+		);
+	});
 
-            // Track service call
-            let serviceCalledWithCorrectData = false;
-            mockAuthService.register = async (data: any) => {
-                // Verify data passed to service
-                expect(data.email).toBe(registerData.email);
-                expect(data.password).toBe(registerData.password);
-                expect(data.name).toBe(registerData.name);
-                serviceCalledWithCorrectData = true;
+	it('forwards OAuth callback and session errors to Express', async () => {
+		const { controller, request, response, service } = setup();
+		(passport.authenticate as jest.Mock).mockReturnValue(jest.fn());
+		const next = jest.fn() as NextFunction;
+		controller.googleCallback(request, response as unknown as Response, next);
+		const callback = (passport.authenticate as jest.Mock).mock.calls[0][2] as (
+			error: Error | null,
+			user?: { socialAccountInformation: { userId: string } },
+		) => Promise<void>;
+		const failure = new Error('Provider failure');
+		await callback(failure);
+		expect(next).toHaveBeenCalledWith(failure);
+		service.loginWithGoogle.mockRejectedValueOnce(new Error('Session write failed'));
+		await callback(null, { socialAccountInformation: { userId: 'user-1' } });
+		expect(next).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'Session write failed' }),
+		);
+	});
 
-                return {
-                    success: true,
-                    data: {
-                        id: 'account-123',
-                        email: data.email,
-                        name: data.name,
-                    },
-                };
-            };
-
-            // Act
-            await authController.register(mockRequest as Request);
-
-            // Assert
-            expect(serviceCalledWithCorrectData).toBe(true);
-        });
-
-        it('❌ should handle registration error (email exists)', async () => {
-            // Arrange
-            mockRequest.body = {
-                email: 'existing@example.com',
-                password: 'Password123!',
-                name: 'User',
-            };
-
-            // Mock service to return error
-            mockAuthService.register = async () => {
-                return new ConflictException('email');
-            };
-
-            // Act
-            const response = await authController.register(mockRequest as Request);
-
-            // Assert - Should return error response
-            expect(response).toBeInstanceOf(HttpResponseDto);
-        });
-    });
-
-
-
-    // ==================== SUMMARY ====================
-    /**
-     * Test Coverage Summary cho AuthController:
-     * 
-     * ✅ Register (3 tests):
-     *    - Happy path: Registration thành công
-     *    - Data validation: Dữ liệu được truyền đúng vào service
-     *    - Error handling: Xử lý lỗi email đã tồn tại
-     * 
-     * ✅ Login (3 tests):
-     *    - Happy path: Login thành công, trả về tokens
-     *    - Data validation: Credentials được truyền đúng
-     *    - Error handling: Xử lý sai thông tin đăng nhập
-     * 
-     * ✅ Send OTP (3 tests):
-     *    - Happy path: Gửi OTP thành công
-     *    - Data validation: Email được truyền đúng
-     *    - Error handling: Xử lý user không tồn tại
-     * 
-     * ✅ Verify (3 tests):
-     *    - Happy path: Verify account thành công
-     *    - Data validation: OTP và email được truyền đúng
-     *    - Error handling: Xử lý OTP không hợp lệ
-     * 
-     * ✅ Forgot Password (3 tests):
-     *    - Happy path: Reset password thành công
-     *    - Data validation: Tất cả data được truyền đúng
-     *    - Error handling: Xử lý user không tồn tại
-     * 
-     * ✅ Refresh Token (2 tests):
-     *    - Happy path: Generate tokens mới thành công
-     *    - Data validation: User info được truyền đúng
-     * 
-     * Tổng: 17 test cases
-     * Độ bao phủ: Tất cả endpoints chính của AuthController
-     * 
-     * Lưu ý:
-     * - Tất cả tests đều mock AuthService
-     * - Không test business logic (đã test ở AuthService)
-     * - Chỉ test việc controller nhận request và gọi service đúng
-     * - Verify response format là HttpResponseDto
-     */
+	it('successful OAuth callback sets cookies and retains the dashboard redirect', async () => {
+		const { controller, request, response } = setup();
+		(passport.authenticate as jest.Mock).mockReturnValue(jest.fn());
+		controller.googleCallback(request, response as unknown as Response, jest.fn());
+		const callback = (passport.authenticate as jest.Mock).mock.calls[0][2] as (
+			error: Error | null,
+			user: { socialAccountInformation: { userId: string } },
+		) => Promise<void>;
+		await callback(null, { socialAccountInformation: { userId: 'user-1' } });
+		expect(response.cookie).toHaveBeenCalledTimes(2);
+		expect(response.redirect).toHaveBeenCalledWith(
+			`${process.env.FRONTEND_URL}/dashboard`,
+		);
+	});
 });

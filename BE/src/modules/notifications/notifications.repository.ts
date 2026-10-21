@@ -1,7 +1,7 @@
-import { PrismaService } from '../database';
+import { prisma as database, type DatabaseClient } from '../database';
 import { Prisma, Notifications } from '@prisma/client';
 export class NotificationsRepository {
-	constructor(private readonly prismaService = new PrismaService()) {}
+	constructor(private readonly prismaService: DatabaseClient = database) {}
 
 	async createOne(data: Prisma.NotificationsCreateInput): Promise<Notifications> {
 		return this.prismaService.notifications.create({

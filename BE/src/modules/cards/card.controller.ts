@@ -1,5 +1,5 @@
-import { boards } from './../../models/modelSchema/boardsSchema';
-import { Exception } from '@tsed/exceptions';
+import { boards } from '@prisma/client';
+import { Exception } from '@/common/exceptions/app-error';
 import { Request, Response } from 'express';
 import { HttpResponseDto } from '@/common';
 import { CardsService } from './card.service';
