@@ -18,8 +18,68 @@ export interface PermissionResource {
 	commentId?: string;
 }
 
+export interface ResourceState {
+	status: string;
+	deletedAt: Date | null;
+}
+
 export class PermissionsRepository {
 	constructor(private readonly client: DatabaseClient = prisma) {}
+
+	findProjectState(projectId: string): Promise<ResourceState | null> {
+		return this.client.projects.findUnique({
+			where: { id: projectId },
+			select: { status: true, deletedAt: true },
+		});
+	}
+
+	async findListState(resource: PermissionResource): Promise<ResourceState | null> {
+		const list = { select: { status: true, deletedAt: true } } as const;
+		if (resource.cardId) {
+			const card = await this.client.cards.findUnique({
+				where: { id: resource.cardId },
+				select: { list },
+			});
+			return card?.list ?? null;
+		}
+		if (resource.checklistItemId) {
+			const item = await this.client.checklistItems.findUnique({
+				where: { id: resource.checklistItemId },
+				select: { checklist: { select: { card: { select: { list } } } } },
+			});
+			return item?.checklist.card.list ?? null;
+		}
+		if (resource.checklistId) {
+			const checklist = await this.client.checklists.findUnique({
+				where: { id: resource.checklistId },
+				select: { card: { select: { list } } },
+			});
+			return checklist?.card.list ?? null;
+		}
+		if (resource.commentId) {
+			const comment = await this.client.cardComments.findUnique({
+				where: { id: resource.commentId },
+				select: { card: { select: { list } } },
+			});
+			return comment?.card.list ?? null;
+		}
+		return resource.listId
+			? this.client.lists.findUnique({ where: { id: resource.listId }, ...list })
+			: null;
+	}
+
+	findBoardState(
+		boardId: string,
+	): Promise<(ResourceState & { project: ResourceState }) | null> {
+		return this.client.boards.findUnique({
+			where: { id: boardId },
+			select: {
+				status: true,
+				deletedAt: true,
+				project: { select: { status: true, deletedAt: true } },
+			},
+		});
+	}
 
 	private async listRoles(where: Prisma.rolesWhereInput): Promise<PermissionRole[]> {
 		const roles = await this.client.roles.findMany({

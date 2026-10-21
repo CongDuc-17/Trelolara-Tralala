@@ -43,6 +43,7 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(updateChecklistTitleValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	checklistsController.updateChecklistTitle,
 );
 
@@ -58,6 +59,7 @@ router.delete(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(checklistByIdValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.DELETE_CARD),
+	authMiddleware.verifyBoardLifecycle('delete'),
 	checklistsController.deleteChecklist,
 );
 
@@ -77,6 +79,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createChecklistItemValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	checklistItemsController.createChecklistItem,
 );
 

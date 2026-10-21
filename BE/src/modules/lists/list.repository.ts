@@ -1,81 +1,100 @@
-import { ListStatusEnum } from '@prisma/client';
-import { prisma as database, type DatabaseClient } from '../database';
-import { CardsRepository } from '../cards/card.repository';
+import { prisma, runInTransaction, type DatabaseClient } from '../database';
+import { deleteListTree } from './list-deletion';
+import type { ListBoardState, ListRecord, ListStatus } from './lists.types';
 
 export class ListsRepository {
-	constructor(
-		private readonly prismaService: DatabaseClient = database,
-		private readonly cardsRepository = new CardsRepository(),
-	) {}
+	constructor(private readonly client: DatabaseClient = prisma) {}
 
-	async getAllListsByBoardId(boardId: string, status?: string) {
-		return this.prismaService.lists.findMany({
-			where: {
-				boardId: boardId,
+	inTransaction<T>(
+		work: (repository: ListsRepository, client: DatabaseClient) => Promise<T>,
+	): Promise<T> {
+		return runInTransaction(
+			(client) => work(new ListsRepository(client), client),
+			this.client,
+		);
+	}
 
-				status: status as ListStatusEnum,
+	async lockBoard(boardId: string): Promise<void> {
+		const board = await this.client.boards.findUnique({
+			where: { id: boardId },
+			select: { projectId: true },
+		});
+		if (board) {
+			await this.client
+				.$queryRaw`SELECT id FROM "Projects" WHERE id = ${board.projectId} FOR UPDATE`;
+		}
+		await this.client
+			.$queryRaw`SELECT id FROM "Boards" WHERE id = ${boardId} FOR UPDATE`;
+	}
+
+	async lockList(listId: string): Promise<void> {
+		const list = await this.client.lists.findUnique({
+			where: { id: listId },
+			select: { boardId: true },
+		});
+		if (list) await this.lockBoard(list.boardId);
+		await this.client
+			.$queryRaw`SELECT id FROM "Lists" WHERE id = ${listId} FOR UPDATE`;
+	}
+
+	getBoardState(boardId: string): Promise<ListBoardState | null> {
+		return this.client.boards.findUnique({
+			where: { id: boardId },
+			select: {
+				id: true,
+				projectId: true,
+				status: true,
+				deletedAt: true,
+				project: { select: { status: true, deletedAt: true } },
 			},
-			orderBy: { position: 'asc' },
 		});
 	}
 
-	async getLastListByBoardId(boardId: string) {
-		return this.prismaService.lists.findFirst({
-			where: { boardId: boardId, deletedAt: null, status: ListStatusEnum.ACTIVE },
-			orderBy: { position: 'desc' },
+	getAllListsByBoardId(boardId: string, status?: ListStatus): Promise<ListRecord[]> {
+		return this.client.lists.findMany({
+			where: { boardId, status },
+			orderBy: [{ position: 'asc' }, { id: 'asc' }],
 		});
 	}
 
-	async createList(nameList: string, boardId: string, position: number) {
-		return this.prismaService.lists.create({
-			data: {
-				name: nameList,
-				boardId: boardId,
-				position: position,
-			},
+	getActiveListsByBoardId(boardId: string): Promise<ListRecord[]> {
+		return this.client.lists.findMany({
+			where: { boardId, status: 'ACTIVE', deletedAt: null },
+			orderBy: [{ position: 'asc' }, { id: 'asc' }],
 		});
 	}
 
-	async updateListName(listId: string, nameList: string) {
-		return this.prismaService.lists.update({
+	getListById(listId: string): Promise<ListRecord | null> {
+		return this.client.lists.findUnique({ where: { id: listId } });
+	}
+
+	createList(name: string, boardId: string, position: number): Promise<ListRecord> {
+		return this.client.lists.create({ data: { name, boardId, position } });
+	}
+
+	updateListName(listId: string, name: string): Promise<ListRecord> {
+		return this.client.lists.update({ where: { id: listId }, data: { name } });
+	}
+
+	updateListPosition(listId: string, position: number): Promise<ListRecord> {
+		return this.client.lists.update({ where: { id: listId }, data: { position } });
+	}
+
+	archiveList(listId: string): Promise<ListRecord> {
+		return this.client.lists.update({
 			where: { id: listId },
-			data: { name: nameList },
+			data: { status: 'ARCHIVED', deletedAt: new Date() },
 		});
 	}
 
-	async getListById(listId: string) {
-		return this.prismaService.lists.findUnique({
+	restoreList(listId: string): Promise<ListRecord> {
+		return this.client.lists.update({
 			where: { id: listId },
+			data: { status: 'ACTIVE', deletedAt: null },
 		});
 	}
 
-	async updateListPosition(listId: string, newPosition: number) {
-		return this.prismaService.lists.update({
-			where: { id: listId },
-			data: { position: newPosition },
-		});
-	}
-
-	async archiveList(listId: string) {
-		return this.prismaService.lists.update({
-			where: { id: listId },
-			data: { deletedAt: new Date(), status: ListStatusEnum.ARCHIVED },
-		});
-	}
-
-	async restoreList(listId: string) {
-		return this.prismaService.lists.update({
-			where: { id: listId },
-			data: { deletedAt: null, status: ListStatusEnum.ACTIVE },
-		});
-	}
-
-	async deleteList(listId: string) {
-		const cards = await this.cardsRepository.getAllCardsByListId(listId);
-		await Promise.all(cards.map((card) => this.cardsRepository.deleteCard(card.id)));
-
-		return this.prismaService.lists.delete({
-			where: { id: listId },
-		});
+	deleteList(listId: string): Promise<void> {
+		return deleteListTree(this.client, listId);
 	}
 }

@@ -45,22 +45,15 @@ export class CardsController {
 	}
 
 	async createCard(req: Request): Promise<Response> {
-		try {
-			const { listId } = req.params as { listId: string };
-			const { title } = req.body;
-			const user = req.user as { id: string };
+		const { listId } = req.params as { listId: string };
+		const { title } = req.body;
+		const user = req.user as { id: string };
 
-			const result = await this.cardsService.createCard(title, listId, user.id);
-			if (result instanceof Exception) {
-				return new HttpResponseDto().exception(result);
-			}
-			return new HttpResponseDto().success<any>(result);
-		} catch (error) {
-			console.error('[CardsController] createCard error:', error);
-			return new HttpResponseDto().exception(
-				new Exception(500, 'Internal Server Error'),
-			);
+		const result = await this.cardsService.createCard(title, listId, user.id);
+		if (result instanceof Exception) {
+			return new HttpResponseDto().exception(result);
 		}
+		return new HttpResponseDto().success<any>(result);
 	}
 
 	async moveCard(req: Request): Promise<Response> {

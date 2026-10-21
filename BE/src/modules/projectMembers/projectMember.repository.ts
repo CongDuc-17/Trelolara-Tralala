@@ -45,11 +45,7 @@ export class ProjectMembersRepository {
 						},
 					},
 				},
-				orderBy: {
-					project: {
-						createdAt: 'desc',
-					},
-				},
+				orderBy: [{ project: { createdAt: 'desc' } }, { id: 'asc' }],
 			}),
 			this.prisma.projectMembers.count({
 				where: { userId, project: { status } },
@@ -57,8 +53,13 @@ export class ProjectMembersRepository {
 		]);
 	}
 
-	async assignUserRoleProject(projectId: string, userId: string, roleId: string) {
-		return this.prisma.projectMembers.create({
+	async assignUserRoleProject(
+		projectId: string,
+		userId: string,
+		roleId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		return client.projectMembers.create({
 			data: {
 				projectId,
 				userId,
@@ -67,8 +68,12 @@ export class ProjectMembersRepository {
 		});
 	}
 
-	async isUserMemberOfProject(projectId: string, userId: string) {
-		const m = await this.prisma.projectMembers.findFirst({
+	async isUserMemberOfProject(
+		projectId: string,
+		userId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		const m = await client.projectMembers.findFirst({
 			where: { projectId, userId },
 			include: {
 				role: {
@@ -118,9 +123,7 @@ export class ProjectMembersRepository {
 						},
 					},
 				},
-				orderBy: {
-					invitedAt: 'desc',
-				},
+				orderBy: [{ invitedAt: 'desc' }, { id: 'asc' }],
 			}),
 			this.prisma.projectMembers.count({
 				where: {
@@ -134,16 +137,54 @@ export class ProjectMembersRepository {
 		projectId: string,
 		userId: string,
 		newRoleId: string,
+		client: DatabaseClient = this.prisma,
 	) {
-		return this.prisma.projectMembers.updateMany({
+		return client.projectMembers.updateMany({
 			where: { projectId, userId },
 			data: { roleId: newRoleId },
 		});
 	}
 
-	async removeMember(projectId: string, userId: string) {
-		return this.prisma.projectMembers.deleteMany({
+	async removeMember(
+		projectId: string,
+		userId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		return client.projectMembers.deleteMany({
 			where: { projectId, userId },
+		});
+	}
+
+	async isActiveAdmin(
+		projectId: string,
+		userId: string,
+		client: DatabaseClient = this.prisma,
+	): Promise<boolean> {
+		const role = { name: 'ADMIN', status: 'ACTIVE' as const, deletedAt: null };
+		if (
+			await client.usersRoles.findFirst({
+				where: { userId, role },
+				select: { id: true },
+			})
+		)
+			return true;
+		return Boolean(
+			await client.projectMembers.findFirst({
+				where: { projectId, userId, role: { ...role, name: 'PROJECT_ADMIN' } },
+				select: { id: true },
+			}),
+		);
+	}
+
+	countAdmins(
+		projectId: string,
+		client: DatabaseClient = this.prisma,
+	): Promise<number> {
+		return client.projectMembers.count({
+			where: {
+				projectId,
+				role: { name: 'PROJECT_ADMIN', status: 'ACTIVE', deletedAt: null },
+			},
 		});
 	}
 }

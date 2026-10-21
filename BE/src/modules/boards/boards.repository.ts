@@ -1,38 +1,101 @@
-import { boards } from '@prisma/client';
-import { prisma as database, type DatabaseClient } from '../database';
-import { BoardStatusEnum } from '@prisma/client';
-import { ListsRepository } from '../lists/list.repository';
+import { BoardStatusEnum, RoleStatusEnum, type boards } from '@prisma/client';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
+import { deleteBoardTree } from './board-deletion';
+import type { BoardRecord } from './boards.types';
+
+const activeRole = { status: RoleStatusEnum.ACTIVE, deletedAt: null };
 
 export class BoardsRepository {
-	constructor(
-		private readonly prismaService: DatabaseClient = database,
-		private readonly listsRepository = new ListsRepository(),
-	) {}
+	constructor(private readonly client: DatabaseClient = database) {}
 
-	async createBoard(
+	inTransaction<T>(
+		work: (repository: BoardsRepository, client: DatabaseClient) => Promise<T>,
+	): Promise<T> {
+		return runInTransaction(
+			(client) => work(new BoardsRepository(client), client),
+			this.client,
+		);
+	}
+
+	async lockProject(projectId: string): Promise<void> {
+		await this.client
+			.$queryRaw`SELECT id FROM "Projects" WHERE id = ${projectId} FOR UPDATE`;
+	}
+
+	async lockBoard(boardId: string): Promise<void> {
+		const board = await this.client.boards.findUnique({
+			where: { id: boardId },
+			select: { projectId: true },
+		});
+		if (board) await this.lockProject(board.projectId);
+		await this.client
+			.$queryRaw`SELECT id FROM "Boards" WHERE id = ${boardId} FOR UPDATE`;
+	}
+
+	getProject(projectId: string) {
+		return this.client.projects.findUnique({
+			where: { id: projectId },
+			select: { id: true, status: true, deletedAt: true },
+		});
+	}
+
+	findRole(input: { id?: string; name?: string }) {
+		return this.client.roles.findFirst({ where: { ...input, deletedAt: null } });
+	}
+
+	async isAdministrator(
+		boardId: string,
 		projectId: string,
-		name: string,
-		description?: string,
-	): Promise<boards> {
-		return this.prismaService.boards.create({
-			data: {
-				projectId,
-				name,
-				description,
-			},
+		userId: string,
+	): Promise<boolean> {
+		const system = await this.client.usersRoles.findFirst({
+			where: { userId, role: { ...activeRole, name: 'ADMIN' } },
+			select: { id: true },
+		});
+		if (system) return true;
+		const project = await this.client.projectMembers.findFirst({
+			where: { projectId, userId, role: { ...activeRole, name: 'PROJECT_ADMIN' } },
+			select: { id: true },
+		});
+		if (project) return true;
+		return !!(await this.client.boardMembers.findFirst({
+			where: { boardId, userId, role: { ...activeRole, name: 'BOARD_ADMIN' } },
+			select: { id: true },
+		}));
+	}
+
+	async getActorRole(boardId: string, projectId: string, userId: string) {
+		const board = await this.client.boardMembers.findFirst({
+			where: { boardId, userId, role: activeRole },
+			select: { role: { select: { id: true, name: true } } },
+		});
+		if (board) return board.role;
+		const project = await this.client.projectMembers.findFirst({
+			where: { projectId, userId, role: activeRole },
+			select: { role: { select: { id: true, name: true } } },
+		});
+		if (project) return project.role;
+		const system = await this.client.usersRoles.findFirst({
+			where: { userId, role: { ...activeRole, name: 'ADMIN' } },
+			select: { role: { select: { id: true, name: true } } },
+		});
+		return system?.role ?? null;
+	}
+
+	createBoard(projectId: string, name: string, description?: string): Promise<boards> {
+		return this.client.boards.create({ data: { projectId, name, description } });
+	}
+
+	getBoardsByProjectId(projectId: string): Promise<boards[]> {
+		return this.client.boards.findMany({
+			where: { projectId, deletedAt: null },
+			include: { _count: { select: { boardMembers: true } } },
+			orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
 		});
 	}
 
-	async getBoardsByProjectId(projectId: string): Promise<boards[]> {
-		return this.prismaService.boards.findMany({
-			where: { projectId, deletedAt: null },
-			include: {
-				_count: { select: { boardMembers: true } },
-			},
-		});
-	}
-	async getBoardById(boardId: string) {
-		return this.prismaService.boards.findUnique({
+	getBoardById(boardId: string): Promise<BoardRecord | null> {
+		return this.client.boards.findUnique({
 			where: { id: boardId },
 			select: {
 				id: true,
@@ -43,42 +106,24 @@ export class BoardsRepository {
 				background: true,
 				createdAt: true,
 				updatedAt: true,
-
-				_count: {
-					select: {
-						lists: true,
-						boardMembers: true,
-					},
-				},
+				deletedAt: true,
+				_count: { select: { lists: true, boardMembers: true } },
 			},
 		});
 	}
 
-	async updateBoard(boardId: string, data: Partial<boards>) {
-		return this.prismaService.boards.update({
-			where: { id: boardId },
-			data,
-		});
+	updateBoard(boardId: string, data: Partial<boards>) {
+		return this.client.boards.update({ where: { id: boardId }, data });
 	}
 
-	async archiveBoard(boardId: string): Promise<boards> {
-		return this.prismaService.boards.update({
-			where: { id: boardId },
-			data: { status: BoardStatusEnum.ARCHIVED },
-		});
+	archiveBoard(boardId: string): Promise<boards> {
+		return this.updateBoard(boardId, { status: BoardStatusEnum.ARCHIVED });
 	}
 
-	async deleteBoard(boardId: string): Promise<boards> {
-		await this.prismaService.boardMembers.deleteMany({
-			where: { boardId: boardId },
-		});
-		await this.prismaService.labels.deleteMany({
-			where: { boardId: boardId },
-		});
-		const lists = await this.listsRepository.getAllListsByBoardId(boardId);
-		await Promise.all(lists.map((list) => this.listsRepository.deleteList(list.id)));
-		return this.prismaService.boards.delete({
-			where: { id: boardId },
+	async deleteBoard(boardId: string): Promise<void> {
+		await this.inTransaction(async (repository, client) => {
+			await repository.lockBoard(boardId);
+			await deleteBoardTree(client, boardId);
 		});
 	}
 }

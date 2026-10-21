@@ -44,31 +44,38 @@ export class CommentsService {
 			throw new NotFoundException('User not found');
 		}
 
-		const comment = await this.commentsRepository.createComment({
-			cardId,
-			userId,
-			content,
-		});
-
 		const list = await this.listsRepository.getListById(String(card.listId));
-
-		// Notify all members of the card except the actor
-		if (card.cardMembers && card.cardMembers.length > 0 && list) {
-			const notifyPromises = card.cardMembers
-				.filter((member: any) => member.userId !== userId)
-				.map((member: any) =>
-					this.notificationService.notifyCardCommented({
-						recipientUserId: member.userId,
-						actorId: userId,
-						actorName: user.name,
-						cardId,
-						cardTitle: String(card.title),
-						content,
-						boardId: String(list.boardId),
-					}),
+		const { comment, notifications } = await this.commentsRepository.inTransaction(
+			async (client) => {
+				const comment = await this.commentsRepository.createComment(
+					{ cardId, userId, content },
+					client,
 				);
-			await Promise.all(notifyPromises);
-		}
+				const notifications = list
+					? await Promise.all(
+							(card.cardMembers ?? [])
+								.filter((member) => 'userId' in member)
+								.filter((member) => member.userId !== userId)
+								.map((member) =>
+									this.notificationService.persistCardCommented(
+										{
+											recipientUserId: member.userId,
+											actorId: userId,
+											actorName: user.name,
+											cardId,
+											cardTitle: String(card.title),
+											content,
+											boardId: list.boardId,
+										},
+										client,
+									),
+								),
+						)
+					: [];
+				return { comment, notifications };
+			},
+		);
+		await this.notificationService.deliver(notifications);
 
 		return {
 			success: true,
@@ -111,33 +118,43 @@ export class CommentsService {
 		if (existingComment.userId !== userId) {
 			throw new ForbiddenException();
 		}
-		const comment = await this.commentsRepository.updateComment({
-			commentId,
-			content,
-		});
-
 		const list = await this.listsRepository.getListById(String(card.listId));
 		const user = await this.userRepository.findUser({ userId });
 		if (!user) {
 			throw new NotFoundException('User not found');
 		}
 
-		if (card.cardMembers && card.cardMembers.length > 0 && list) {
-			const notifyPromises = card.cardMembers
-				.filter((member: any) => member.userId !== userId)
-				.map((member: any) =>
-					this.notificationService.notifyCardCommented({
-						recipientUserId: member.userId,
-						actorId: userId,
-						actorName: user.name,
-						cardId: String(card.id),
-						cardTitle: String(card.title),
-						content,
-						boardId: String(list.boardId),
-					}),
+		const { comment, notifications } = await this.commentsRepository.inTransaction(
+			async (client) => {
+				const comment = await this.commentsRepository.updateComment(
+					{ commentId, content },
+					client,
 				);
-			await Promise.all(notifyPromises);
-		}
+				const notifications = list
+					? await Promise.all(
+							(card.cardMembers ?? [])
+								.filter((member) => 'userId' in member)
+								.filter((member) => member.userId !== userId)
+								.map((member) =>
+									this.notificationService.persistCardCommented(
+										{
+											recipientUserId: member.userId,
+											actorId: userId,
+											actorName: user.name,
+											cardId: String(card.id),
+											cardTitle: String(card.title),
+											content,
+											boardId: list.boardId,
+										},
+										client,
+									),
+								),
+						)
+					: [];
+				return { comment, notifications };
+			},
+		);
+		await this.notificationService.deliver(notifications);
 
 		return {
 			success: true,

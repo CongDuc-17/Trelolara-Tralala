@@ -14,6 +14,8 @@ import {
 	updateListRequestParams,
 	updateListRequestSchema,
 	moveListRequestSchema,
+	moveListRequestValidationSchema,
+	updateListRequestValidationSchema,
 } from './dtos';
 
 import {
@@ -43,7 +45,9 @@ listsRegistry.registerPath({
 router.patch(
 	'/:listId/move',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(moveListRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.MOVE_LIST),
+	authMiddleware.verifyBoardLifecycle(),
 	listsController.moveList,
 );
 
@@ -58,7 +62,9 @@ listsRegistry.registerPath({
 router.patch(
 	'/:listId/update',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(updateListRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.UPDATE_LIST),
+	authMiddleware.verifyBoardLifecycle(),
 	listsController.updateList,
 );
 
@@ -74,7 +80,9 @@ listsRegistry.registerPath({
 router.patch(
 	'/:listId/archive',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: updateListRequestParams }),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.UPDATE_LIST),
+	authMiddleware.verifyBoardLifecycle(),
 	listsController.archiveList,
 );
 
@@ -90,7 +98,9 @@ listsRegistry.registerPath({
 router.patch(
 	'/:listId/restore',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: updateListRequestParams }),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.UPDATE_LIST),
+	authMiddleware.verifyBoardLifecycle('restore'),
 	listsController.restoreList,
 );
 
@@ -99,13 +109,15 @@ listsRegistry.registerPath({
 	path: '/lists/{listId}',
 	tags: ['Lists'],
 	request: { params: updateListRequestParams },
-	responses: createApiResponse(listResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(null, 'Success', StatusCodes.OK),
 });
 
 router.delete(
 	'/:listId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: updateListRequestParams }),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.DELETE_LIST),
+	authMiddleware.verifyBoardLifecycle('delete'),
 	listsController.deleteList,
 );
 
@@ -126,6 +138,10 @@ listsRegistry.registerPath({
 router.get(
 	'/:listId/cards',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({
+		params: createCardRequestSchema.params,
+		query: cardRequestQuery,
+	}),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
 	cardsController.getAllCardsByListId,
 );
@@ -142,6 +158,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createCardRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.CREATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.createCard,
 );
 

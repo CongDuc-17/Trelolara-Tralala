@@ -1,15 +1,6 @@
 import z from 'zod';
-import { ZodValidationSchema } from '@/common';
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
-export class CreateProjectRequestDto {
-	name: string;
-	description?: string;
-
-	constructor(data: { name: string; description?: string }) {
-		this.name = data.name;
-		this.description = data.description;
-	}
-}
 export const CreateProjectRequestValidationSchema: ZodValidationSchema = {
 	body: z.object({
 		name: z

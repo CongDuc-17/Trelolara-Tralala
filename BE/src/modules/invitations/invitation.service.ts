@@ -24,6 +24,7 @@ import { randomBytes } from 'crypto';
 import { InvitationStatusEnum } from '@prisma/client';
 import { startsWith } from 'zod';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PermissionService } from '../permissions/permission.service';
 
 export class InvitationService {
 	constructor(
@@ -36,6 +37,7 @@ export class InvitationService {
 		private readonly boardsRepository = new BoardsRepository(),
 		private readonly mailsService = new MailsService(),
 		private readonly notificationService: NotificationsService = new NotificationsService(),
+		private readonly permissions = new PermissionService(),
 	) {}
 
 	async inviteUserToProject(
@@ -70,30 +72,29 @@ export class InvitationService {
 				throw new ConflictException('User is already a member of the project ');
 			}
 
-			const newMember = await this.projectMembersRepository.assignUserRoleProject(
-				projectId,
-				existingUser.id,
-				roleId,
-			);
-
-			// await this.mailsService.sendEmail({
-			// 	recipients: [
-			// 		{
-			// 			address: email,
-			// 			name: 'User',
-			// 		},
-			// 	],
-			// 	subject: 'You have been added to a project',
-			// 	html: `You have been added to a project ${project.title}. Please log in to your account to access the project.`,
-			// });
-			// notification logic can be added here
-			await this.notificationService.notifyProjectInvited({
-				recipientUserId: existingUser.id,
-				actorId: inviterId,
-				actorName: actor.name,
-				projectId,
-				projectName: project.name,
-			});
+			const { newMember, notification } =
+				await this.invitationRepository.inTransaction(async (client) => {
+					const newMember =
+						await this.projectMembersRepository.assignUserRoleProject(
+							projectId,
+							existingUser.id,
+							roleId,
+							client,
+						);
+					const notification =
+						await this.notificationService.persistProjectInvited(
+							{
+								recipientUserId: existingUser.id,
+								actorId: inviterId,
+								actorName: actor.name,
+								projectId,
+								projectName: project.name,
+							},
+							client,
+						);
+					return { newMember, notification };
+				});
+			await this.notificationService.deliver(notification);
 
 			return {
 				success: true,
@@ -177,19 +178,29 @@ export class InvitationService {
 				throw new ConflictException('User is already a member of the board');
 			}
 
-			const newMember = await this.boardMembersRepository.assignUserRoleBoard(
-				boardId,
-				existingUser.id,
-				roleId,
-			);
-
-			await this.notificationService.notifyBoardInvited({
-				recipientUserId: existingUser.id,
-				actorId: inviterId,
-				actorName: actor.name,
-				boardId,
-				boardName: board.name,
-			});
+			const { newMember, notification } =
+				await this.invitationRepository.inTransaction(async (client) => {
+					const newMember =
+						await this.boardMembersRepository.assignUserRoleBoard(
+							boardId,
+							existingUser.id,
+							roleId,
+							client,
+						);
+					const notification =
+						await this.notificationService.persistBoardInvited(
+							{
+								recipientUserId: existingUser.id,
+								actorId: inviterId,
+								actorName: actor.name,
+								boardId,
+								boardName: board.name,
+							},
+							client,
+						);
+					return { newMember, notification };
+				});
+			await this.notificationService.deliver(notification);
 			return {
 				success: true,
 				data: new InvitationResponseDto({
@@ -339,6 +350,9 @@ export class InvitationService {
 		}
 
 		if (invitation.projectId) {
+			await this.permissions.assertProjectLifecycle({
+				projectId: invitation.projectId,
+			});
 			const checkMember = await this.projectMembersRepository.isUserMemberOfProject(
 				invitation.projectId,
 				userId,
@@ -352,6 +366,7 @@ export class InvitationService {
 				invitation.roleId,
 			);
 		} else if (invitation.boardId) {
+			await this.permissions.assertBoardLifecycle({ boardId: invitation.boardId });
 			const checkMember = await this.boardMembersRepository.isUserMemberOfBoard(
 				invitation.boardId,
 				userId,

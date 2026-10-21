@@ -2,14 +2,10 @@ import z from 'zod';
 
 import { ZodValidationSchema } from '@/common';
 
-export class MoveListRequestDto {
-	beforeListId?: string;
-	afterListId?: string;
-}
 const moveListRequestBody = z
 	.object({
-		beforeListId: z.string().max(100).optional(),
-		afterListId: z.string().max(100).optional(),
+		beforeListId: z.string().uuid().optional(),
+		afterListId: z.string().uuid().optional(),
 	})
 	.strict();
 

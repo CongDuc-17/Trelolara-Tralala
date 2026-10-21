@@ -34,6 +34,7 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(updateLabelRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
+	authMiddleware.verifyBoardLifecycle(),
 	labelsController.updateLabel,
 );
 
@@ -51,6 +52,7 @@ router.delete(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware({ params: updateLabelRequestParams }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
+	authMiddleware.verifyBoardLifecycle('delete'),
 	labelsController.deleteLabel,
 );
 

@@ -1,17 +1,25 @@
-import { prisma as database, type DatabaseClient } from '../database';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
 
 export class CommentsRepository {
 	constructor(private readonly prismaService: DatabaseClient = database) {}
-	async createComment({
-		cardId,
-		userId,
-		content,
-	}: {
-		cardId: string;
-		userId: string;
-		content: string;
-	}) {
-		return this.prismaService.cardComments.create({
+
+	inTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
+		return runInTransaction(work, this.prismaService);
+	}
+
+	async createComment(
+		{
+			cardId,
+			userId,
+			content,
+		}: {
+			cardId: string;
+			userId: string;
+			content: string;
+		},
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cardComments.create({
 			data: {
 				content,
 				cardId,
@@ -23,8 +31,11 @@ export class CommentsRepository {
 		});
 	}
 
-	async updateComment({ commentId, content }: { commentId: string; content: string }) {
-		return this.prismaService.cardComments.update({
+	async updateComment(
+		{ commentId, content }: { commentId: string; content: string },
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cardComments.update({
 			where: {
 				id: commentId,
 			},

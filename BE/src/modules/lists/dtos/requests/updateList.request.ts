@@ -1,12 +1,9 @@
 import z from 'zod';
 import { ZodValidationSchema } from '@/common';
 
-export class UpdateListRequestDto {
-	name?: string;
-}
 const updateListRequestBody = z
 	.object({
-		name: z.string().min(1).max(100).optional(),
+		name: z.string().min(1).max(100),
 	})
 	.strict();
 

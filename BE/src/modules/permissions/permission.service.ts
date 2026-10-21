@@ -10,9 +10,12 @@ import {
 	PermissionResource,
 	PermissionRole,
 	PermissionsRepository,
+	ResourceState,
 } from './permissions.repository';
+import { NotFoundException, OptionalException } from '@/common/exceptions';
 
 export type { PermissionResource } from './permissions.repository';
+export type ResourceAction = 'write' | 'restore' | 'delete';
 
 const viewerPermissions = new Set<string>([
 	ProjectPermissionEnum.GET_PROJECT,
@@ -23,6 +26,43 @@ const viewerPermissions = new Set<string>([
 
 export class PermissionService {
 	constructor(private readonly repository = new PermissionsRepository()) {}
+
+	private assertActive(state: ResourceState, resource: string): void {
+		if (state.status !== 'ACTIVE' || state.deletedAt) {
+			throw new OptionalException(409, `${resource} is read-only`);
+		}
+	}
+
+	async assertProjectLifecycle(
+		resource: PermissionResource,
+		action: ResourceAction = 'write',
+	): Promise<void> {
+		const projectId = await this.resolveProjectId(resource);
+		const state = projectId
+			? await this.repository.findProjectState(projectId)
+			: null;
+		if (!state) throw new NotFoundException('Project not found');
+		if (action === 'write') this.assertActive(state, 'Project');
+	}
+
+	async assertListLifecycle(resource: PermissionResource): Promise<void> {
+		await this.assertBoardLifecycle(resource);
+		const list = await this.repository.findListState(resource);
+		if (!list) throw new NotFoundException('List not found');
+		this.assertActive(list, 'List');
+	}
+
+	async assertBoardLifecycle(
+		resource: PermissionResource,
+		action: ResourceAction = 'write',
+	): Promise<void> {
+		// shortcut: child modules check before writing; move this check under their parent locks in each module refactor.
+		const boardId = await this.resolveBoardId(resource);
+		const state = boardId ? await this.repository.findBoardState(boardId) : null;
+		if (!state) throw new NotFoundException('Board not found');
+		if (action !== 'delete') this.assertActive(state.project, 'Project');
+		if (action === 'write') this.assertActive(state, 'Board');
+	}
 
 	private hasPermission(roles: PermissionRole[], permissions: string[]): boolean {
 		return roles.some((role) => {
@@ -40,6 +80,30 @@ export class PermissionService {
 	private async isSystemAdmin(userId: string): Promise<boolean> {
 		const roles = await this.repository.listSystemRoles(userId);
 		return roles.some((role) => role.name === UserRoleEnum.ADMIN);
+	}
+
+	async hasProjectAdmin(userId: string, projectId: string): Promise<boolean> {
+		if (await this.isSystemAdmin(userId)) return true;
+		return (await this.repository.listProjectRoles(userId, projectId)).some(
+			(role) => role.name === ProjectRoleEnum.PROJECT_ADMIN,
+		);
+	}
+
+	async hasBoardAdmin(userId: string, boardId: string): Promise<boolean> {
+		if (await this.isSystemAdmin(userId)) return true;
+		if (
+			(await this.repository.listBoardRoles(userId, boardId)).some(
+				(role) => role.name === BoardRoleEnum.BOARD_ADMIN,
+			)
+		)
+			return true;
+		const projectId = await this.repository.findBoardProjectId(boardId);
+		return (
+			!!projectId &&
+			(await this.repository.listProjectRoles(userId, projectId)).some(
+				(role) => role.name === ProjectRoleEnum.PROJECT_ADMIN,
+			)
+		);
 	}
 
 	async hasSystemPermission(userId: string, permissions: string[]): Promise<boolean> {

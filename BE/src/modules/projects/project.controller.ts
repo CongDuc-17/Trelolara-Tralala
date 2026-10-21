@@ -1,128 +1,109 @@
 import { Request, Response } from 'express';
-import { ProjectsService } from './project.service';
-import { CreateProjectRequestDto } from './dtos/requests/createProject.request';
-import { HttpResponseDto } from '@/common/dtos/httpResponse.dto';
-import { Exception } from '@/common/exceptions/app-error';
-import { GetProjectsResponseDTO } from './dtos/responses/getProjects.response';
-import { GetMembersResponseDTO, GetProjectResponseDTO } from './dtos/responses';
+
 import { PaginationDto } from '@/common/dtos/pagination.dto';
-import { GetProjectsRequestDto } from './dtos/requests';
+import { ProjectsService } from './project.service';
+import { ProjectStatus } from './projects.types';
+import {
+	GetMembersResponseDTO,
+	GetProjectResponseDTO,
+	GetProjectsResponseDTO,
+} from './dtos/responses';
+
 export class ProjectsController {
-	constructor(
-		private readonly projectService: ProjectsService = new ProjectsService(),
-	) {}
+	constructor(private readonly projectService = new ProjectsService()) {}
 
-	async createProject(req: Request): Promise<Response> {
-		const createProjectDto = new CreateProjectRequestDto(req.body);
-		const userId = (req.user as { id: string }).id;
-		const result = await this.projectService.createProject(createProjectDto, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetProjectResponseDTO>(result);
+	async createProject(req: Request, res: Response): Promise<Response> {
+		const project = await this.projectService.createProject(req.body, req.user!.id!);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetProjectResponseDTO(project) });
 	}
 
-	async getAllProjects(req: Request): Promise<Response> {
-		const userId = (req.user as { id: string }).id;
-		const pagination: PaginationDto = new PaginationDto(req.query);
-		const getProjectsRequest: GetProjectsRequestDto = new GetProjectsRequestDto(
-			req.query,
+	async getAllProjects(req: Request, res: Response): Promise<Response> {
+		const projects = await this.projectService.getAllProjects(
+			req.user!.id!,
+			req.query as { status?: ProjectStatus },
+			new PaginationDto(req.query),
 		);
-		const result = await this.projectService.getAllProjects(
-			userId,
-			getProjectsRequest,
-			pagination,
+		return res.status(200).json({
+			success: true,
+			data: projects.items.map((project) => new GetProjectsResponseDTO(project)),
+			pagination: {
+				totalItems: projects.totalItems,
+				itemsPerPage: projects.limit,
+				currentPage: projects.page,
+				totalPages: Math.ceil(projects.totalItems / projects.limit),
+			},
+		});
+	}
+
+	async getProjectById(req: Request, res: Response): Promise<Response> {
+		const project = await this.projectService.getProjectById(
+			req.params.projectId as string,
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetProjectsResponseDTO[]>(result);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetProjectResponseDTO(project) });
 	}
 
-	async getProjectById(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const userId = (req.user as { id: string }).id;
-
-		const result = await this.projectService.getProjectById(projectId, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetProjectResponseDTO>(result);
-	}
-
-	async updateProject(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const updateData = req.body;
-
-		const result = await this.projectService.updateInformationProject(
-			projectId,
-			updateData,
+	async updateProject(req: Request, res: Response): Promise<Response> {
+		const project = await this.projectService.updateProject(
+			req.params.projectId as string,
+			req.body,
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetProjectResponseDTO>(result);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetProjectResponseDTO(project) });
 	}
 
-	async archiveProject(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const result = await this.projectService.archiveProject(projectId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async archiveProject(req: Request, res: Response): Promise<Response> {
+		await this.projectService.archiveProject(req.params.projectId as string);
+		return res.status(200).json({ success: true, data: null });
 	}
 
-	async restoreProject(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const result = await this.projectService.restoreProject(projectId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async restoreProject(req: Request, res: Response): Promise<Response> {
+		await this.projectService.restoreProject(req.params.projectId as string);
+		return res.status(200).json({ success: true, data: null });
 	}
 
-	async deleteProject(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const result = await this.projectService.softDeleteProject(projectId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async deleteProject(req: Request, res: Response): Promise<Response> {
+		await this.projectService.softDeleteProject(req.params.projectId as string);
+		return res.status(200).json({ success: true, data: null });
 	}
 
-	async getProjectMembers(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const pagination: PaginationDto = new PaginationDto(req.query);
-		const result = await this.projectService.getProjectMembers(projectId, pagination);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetMembersResponseDTO[]>(result);
-	}
-
-	async changeRoleMemberProject(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-
-		const { userId, roleId } = req.body;
-		const result = await this.projectService.changeRoleMemberProject(
-			projectId,
-			userId,
-			roleId,
+	async getProjectMembers(req: Request, res: Response): Promise<Response> {
+		const members = await this.projectService.getProjectMembers(
+			req.params.projectId as string,
+			new PaginationDto(req.query),
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+		return res.status(200).json({
+			success: true,
+			data: members.items.map((member) => new GetMembersResponseDTO(member)),
+			pagination: {
+				totalItems: members.totalItems,
+				itemsPerPage: members.limit,
+				currentPage: members.page,
+				totalPages: Math.ceil(members.totalItems / members.limit),
+			},
+		});
 	}
 
-	async removeMember(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const { userId } = req.body;
-		const result = await this.projectService.removeMember(projectId, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async changeMemberRole(req: Request, res: Response): Promise<Response> {
+		await this.projectService.changeMemberRole(
+			req.params.projectId as string,
+			req.body.userId,
+			req.body.roleId,
+			req.user!.id!,
+		);
+		return res.status(200).json({ success: true, data: null });
+	}
+
+	async removeMember(req: Request, res: Response): Promise<Response> {
+		await this.projectService.removeMember(
+			req.params.projectId as string,
+			req.body.userId,
+			req.user!.id!,
+		);
+		return res.status(200).json({ success: true, data: null });
 	}
 }

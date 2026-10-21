@@ -1,15 +1,8 @@
 import z from 'zod';
 
-import { PaginationSchema, ZodValidationSchema } from '@/common';
+import { PaginationSchema } from '@/common/dtos/pagination.dto';
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 import { ProjectStatusEnum } from '@prisma/client';
-
-export class GetProjectsRequestDto {
-	status?: string;
-
-	constructor(data?: Partial<GetProjectsRequestDto>) {
-		this.status = data?.status;
-	}
-}
 
 const getProjectsRequestQuery = z
 	.object({

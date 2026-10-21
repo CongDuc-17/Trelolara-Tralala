@@ -12,9 +12,18 @@ import {
 	UpdateInformationBoardRequestSchema,
 	getBoardMembersResponseDtoSchema,
 	UserBoardResponseDTOSchema,
+	GetBoardByIdRequestValidationSchema,
+	UpdateInformationBoardRequestValidationSchema,
+	UpdateRoleMemberBoardRequestValidationSchema,
 } from './dtos';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
-import { createListRequestSchema, listResponseDtoSchema } from '../lists/dtos';
+import {
+	createListRequestSchema,
+	createListRequestValidationSchema,
+	listResponseDtoSchema,
+	getListsRequestSchema,
+	getListsRequestValidationSchema,
+} from '../lists/dtos';
 import { ListsController } from '../lists/list.controller';
 import { validateRequestMiddleware } from '@/common/middlewares/validationRequest.middleware';
 import { ListPermissionEnum } from '@/common/enums/permissions';
@@ -30,6 +39,8 @@ import { LabelsController } from '../labels/labels.controller';
 import { UploadBackgroundRequestSchema } from './dtos/requests/uploadBackground.request';
 import { uploadAvatarMiddleware } from '@/common/middlewares/upload.middleware';
 import { getBoardResponseDtoSchema } from './dtos/responses/getBoard.response';
+import { PaginationSchema } from '@/common/dtos/pagination.dto';
+import { BoardStatusEnum } from '@prisma/client';
 
 const boardsController = new BoardsController();
 const listsController = new ListsController();
@@ -51,7 +62,16 @@ boardsRegistry.registerPath({
 		StatusCodes.OK,
 	),
 });
-router.get('/', authMiddleware.verifyAccessToken, boardsController.getMyBoards);
+router.get(
+	'/',
+	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({
+		query: z
+			.object({ status: z.enum(BoardStatusEnum).optional(), ...PaginationSchema })
+			.strict(),
+	}),
+	boardsController.getMyBoards,
+);
 
 boardsRegistry.registerPath({
 	method: 'get',
@@ -63,6 +83,7 @@ boardsRegistry.registerPath({
 router.get(
 	'/:boardId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(GetBoardByIdRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.GET_BOARD),
 	boardsController.getBoardById,
 );
@@ -77,7 +98,9 @@ boardsRegistry.registerPath({
 router.patch(
 	'/:boardId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(UpdateInformationBoardRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
+	authMiddleware.verifyBoardLifecycle(),
 	boardsController.updateBoardInformation,
 );
 
@@ -91,7 +114,9 @@ boardsRegistry.registerPath({
 router.patch(
 	'/:boardId/archive',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.ARCHIVE_BOARD),
+	authMiddleware.verifyBoardLifecycle(),
 	boardsController.archiveBoard,
 );
 
@@ -105,7 +130,9 @@ boardsRegistry.registerPath({
 router.patch(
 	'/:boardId/restore',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UNARCHIVE_BOARD),
+	authMiddleware.verifyBoardLifecycle('restore'),
 	boardsController.restoreBoard,
 );
 
@@ -119,7 +146,9 @@ boardsRegistry.registerPath({
 router.delete(
 	'/:boardId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.DELETE_BOARD),
+	authMiddleware.verifyBoardLifecycle('delete'),
 	boardsController.deleteBoard,
 );
 
@@ -137,6 +166,7 @@ boardsRegistry.registerPath({
 router.get(
 	'/:boardId/members',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.GET_BOARD),
 	boardsController.getBoardMembers,
 );
@@ -152,7 +182,9 @@ boardsRegistry.registerPath({
 router.patch(
 	'/:boardId/members',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(UpdateRoleMemberBoardRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_MEMBER_ROLE),
+	authMiddleware.verifyBoardLifecycle(),
 	boardsController.changeRoleOfMemberBoard,
 );
 
@@ -176,7 +208,12 @@ boardsRegistry.registerPath({
 router.delete(
 	'/:boardId/members',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({
+		params: GetBoardByIdRequestSchema.params,
+		body: z.object({ userId: z.string().uuid() }).strict(),
+	}),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.REMOVE_MEMBER),
+	authMiddleware.verifyBoardLifecycle(),
 	boardsController.removeMember,
 );
 
@@ -184,7 +221,7 @@ boardsRegistry.registerPath({
 	method: 'get',
 	path: '/boards/{boardId}/lists',
 	tags: ['Boards'],
-	request: GetBoardByIdRequestSchema,
+	request: getListsRequestSchema,
 	responses: createApiResponse(
 		listResponseDtoSchema.array(),
 		'Success',
@@ -195,6 +232,7 @@ boardsRegistry.registerPath({
 router.get(
 	'/:boardId/lists',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(getListsRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.GET_LIST),
 	listsController.getAllListsByBoardId,
 );
@@ -210,7 +248,9 @@ boardsRegistry.registerPath({
 router.post(
 	'/:boardId/lists',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(createListRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(ListPermissionEnum.CREATE_LIST),
+	authMiddleware.verifyBoardLifecycle(),
 	listsController.createList,
 );
 
@@ -228,6 +268,7 @@ boardsRegistry.registerPath({
 router.get(
 	'/:boardId/labels',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.GET_BOARD),
 	labelsController.getLabelsByBoardId,
 );
@@ -245,6 +286,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createLabelRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
+	authMiddleware.verifyBoardLifecycle(),
 	labelsController.createLabel,
 );
 
@@ -258,7 +300,9 @@ boardsRegistry.registerPath({
 router.post(
 	'/:boardId/background',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: GetBoardByIdRequestSchema.params }),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.UPDATE_BOARD),
+	authMiddleware.verifyBoardLifecycle(),
 	uploadAvatarMiddleware.single('background'),
 	boardsController.uploadBackground,
 );
