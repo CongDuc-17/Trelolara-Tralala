@@ -11,7 +11,7 @@ import { NotificationsController } from './notifications.controller';
 import { autoBindUtil, validateRequestMiddleware } from '@/common';
 import authMiddleware from '@/common/middlewares/auth.middleware';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
-import { markNotificationRequestParams, markNotificationRequestSchema } from './dtos';
+import { getNotificationsRequestSchema, markNotificationRequestSchema } from './dtos';
 
 const notificationsController = new NotificationsController();
 
@@ -24,8 +24,9 @@ notificationsRegistry.registerPath({
 	method: 'get',
 	path: '/notifications',
 	tags: ['Notifications'],
+	request: getNotificationsRequestSchema,
 	responses: createApiResponse(
-		NotificationResponseDtoSchema,
+		NotificationResponseDtoSchema.array(),
 		'Success',
 		StatusCodes.OK,
 	),
@@ -33,6 +34,7 @@ notificationsRegistry.registerPath({
 router.get(
 	'/',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(getNotificationsRequestSchema),
 	notificationsController.getMyNotifications,
 );
 
@@ -58,6 +60,7 @@ notificationsRegistry.registerPath({
 router.patch(
 	'/:notificationId/read',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(markNotificationRequestSchema),
 	notificationsController.markAsRead,
 );
 

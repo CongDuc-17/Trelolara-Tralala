@@ -1,7 +1,7 @@
 import { UserStatusEnum } from '@prisma/client';
 import z from 'zod';
 
-import { users } from '@prisma/client';
+import { UserProfile } from '../../users.types';
 
 export class GetUserResponseDto {
 	id: string;
@@ -15,7 +15,7 @@ export class GetUserResponseDto {
 	address: string | null | undefined;
 	bio: string | null | undefined;
 
-	constructor(userInformation: users) {
+	constructor(userInformation: UserProfile) {
 		this.id = userInformation.id;
 		this.email = userInformation.email;
 		this.name = userInformation.name;

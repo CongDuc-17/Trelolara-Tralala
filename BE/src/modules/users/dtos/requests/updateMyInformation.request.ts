@@ -1,19 +1,17 @@
-import z, { optional } from 'zod';
+import z from 'zod';
 
-import { ZodValidationSchema } from '@/common';
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 export class UpdateMyInformationRequestDto {
 	name?: string;
 	email?: string;
 	bio?: string;
-	avatar?: string;
 	address?: string;
 
 	constructor(data: Partial<UpdateMyInformationRequestDto> = {}) {
 		this.name = data.name;
 		this.email = data.email;
 		this.bio = data.bio;
-		this.avatar = data.avatar;
 		this.address = data.address;
 	}
 }
@@ -25,13 +23,13 @@ const emptyStringToUndefined = (val: unknown) => {
 	return val;
 };
 
-const updateMyInformationRequestBody = z
+export const updateMyInformationRequestBody = z
 	.object({
 		name: z.preprocess(emptyStringToUndefined, z.string().optional()),
 		email: z.preprocess(emptyStringToUndefined, z.string().email().optional()),
 		bio: z.preprocess(emptyStringToUndefined, z.string().optional()),
 		address: z.preprocess(emptyStringToUndefined, z.string().optional()),
-		avatar: z.any().optional(),
+		avatar: z.string().optional(),
 	})
 	.strict();
 

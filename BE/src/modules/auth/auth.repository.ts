@@ -1,4 +1,4 @@
-import { Prisma, RoleStatusEnum, UserStatusEnum } from '@prisma/client';
+import { RoleStatusEnum, UserStatusEnum } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 
 import { DatabaseClient, prisma, runInTransaction } from '../database';
@@ -161,13 +161,16 @@ export class AuthRepository {
 		});
 	}
 
-	// shortcut: Users still calls these credential methods, remove after its Auth contract migration.
-	createAccount({
-		accounts,
-	}: {
-		accounts: Prisma.accountsCreateInput;
-	}): Promise<AuthAccount> {
-		return this.client.accounts.create({ include: { user: true }, data: accounts });
+	async upsertPassword(input: {
+		userId: string;
+		password: string;
+		salt: string;
+	}): Promise<void> {
+		await this.client.accounts.upsert({
+			where: { userId: input.userId },
+			create: input,
+			update: { password: input.password, salt: input.salt },
+		});
 	}
 
 	updatePassword({

@@ -1,73 +1,50 @@
-import { Exception } from '@/common/exceptions/app-error';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
-import {
-	GetNotificationsRequestDto,
-	NotificationResponseDto,
-	UnreadCountResponseDto,
-} from './dtos';
+import { PaginationUtils } from '@/common/utils/pagination.utils';
+import type { UserInformationDto } from '@/modules/users/dtos';
+
+import { NotificationResponseDto, UnreadCountResponseDto } from './dtos';
 import { NotificationsService } from './notifications.service';
-
-import { HttpResponseDto, PaginationDto } from '@/common';
-import { UserInformationDto } from '@/modules/users/dtos';
+import type { ListNotificationsInput } from './notifications.types';
 
 export class NotificationsController {
-	constructor(
-		private readonly notificationsService: NotificationsService = new NotificationsService(),
-	) {}
+	constructor(private readonly notificationsService = new NotificationsService()) {}
 
-	async getMyNotifications(req: Request): Promise<Response> {
-		const user = req.user as UserInformationDto;
-		const query = new GetNotificationsRequestDto(req.query);
-		const pagination = new PaginationDto(req.query);
-
-		const result = await this.notificationsService.getMyNotifications(
-			user,
+	async getMyNotifications(req: Request, res: Response): Promise<Response> {
+		const actor = req.user as UserInformationDto;
+		const query = res.locals.validated.query as ListNotificationsInput;
+		const { items, total } = await this.notificationsService.getMyNotifications(
+			actor.id,
 			query,
-			pagination,
 		);
-
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-
-		return new HttpResponseDto().success<NotificationResponseDto[]>(result);
+		const pagination = new PaginationUtils().extractSkipTakeFromPagination(query);
+		return res.status(200).json({
+			success: true,
+			data: items.map((item) => new NotificationResponseDto(item)),
+			pagination: pagination.convertPaginationResponseDtoFromTotalRecords(total),
+		});
 	}
 
-	async getMyUnreadCount(req: Request): Promise<Response> {
-		const user = req.user as UserInformationDto;
-
-		const result = await this.notificationsService.getMyUnreadCount(user);
-
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-
-		return new HttpResponseDto().success<UnreadCountResponseDto>(result);
+	async getMyUnreadCount(req: Request, res: Response): Promise<Response> {
+		const actor = req.user as UserInformationDto;
+		const count = await this.notificationsService.getMyUnreadCount(actor.id);
+		return res
+			.status(200)
+			.json({ success: true, data: new UnreadCountResponseDto(count) });
 	}
 
-	async markAsRead(req: Request): Promise<Response> {
-		const user = req.user as UserInformationDto;
-		const { notificationId } = req.params as { notificationId: string };
-
-		const result = await this.notificationsService.markAsRead(notificationId, user);
-
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-
-		return new HttpResponseDto().success<null>(result);
+	async markAsRead(req: Request, res: Response): Promise<Response> {
+		const actor = req.user as UserInformationDto;
+		const { notificationId } = res.locals.validated.params as {
+			notificationId: string;
+		};
+		await this.notificationsService.markAsRead(notificationId, actor.id);
+		return res.status(200).json({ success: true, data: null });
 	}
 
-	async markAllAsRead(req: Request): Promise<Response> {
-		const user = req.user as UserInformationDto;
-
-		const result = await this.notificationsService.markAllAsRead(user);
-
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-
-		return new HttpResponseDto().success<null>(result);
+	async markAllAsRead(req: Request, res: Response): Promise<Response> {
+		const actor = req.user as UserInformationDto;
+		await this.notificationsService.markAllAsRead(actor.id);
+		return res.status(200).json({ success: true, data: null });
 	}
 }

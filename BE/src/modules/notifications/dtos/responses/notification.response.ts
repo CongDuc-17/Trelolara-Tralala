@@ -1,5 +1,5 @@
-import { Notifications } from '@prisma/client';
 import { z } from 'zod';
+import type { NotificationRecord } from '../../notifications.types';
 export class NotificationResponseDto {
 	id: string;
 	type: string;
@@ -12,7 +12,7 @@ export class NotificationResponseDto {
 	readAt?: Date;
 	createdAt: Date;
 
-	constructor(notification: Notifications) {
+	constructor(notification: NotificationRecord) {
 		this.id = notification.id;
 		this.type = notification.type;
 		this.title = notification.title;

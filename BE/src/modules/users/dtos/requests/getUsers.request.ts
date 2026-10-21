@@ -1,7 +1,8 @@
 import { UserStatusEnum } from '@prisma/client';
 import z from 'zod';
 
-import { PaginationSchema, ZodValidationSchema } from '@/common';
+import { PaginationSchema } from '@/common/dtos/pagination.dto';
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 export class GetUsersRequestDto {
 	name?: string;

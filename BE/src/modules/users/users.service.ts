@@ -1,198 +1,129 @@
-import { Prisma, users } from '@prisma/client';
-import { Exception } from '@/common/exceptions/app-error';
-import { genSalt, hash } from 'bcrypt';
-import { StatusCodes } from 'http-status-codes';
+import { AuthService } from '../auth/auth.service';
 
-import { AuthRepository } from '../auth/auth.repository';
-
-import {
-	GetUserByUserIdRequestDto,
-	GetUserResponseDto,
-	GetUsersRequestDto,
-	GetUsersResponseDto,
-	UpdateMyInformationRequestDto,
-	UpdateMyPasswordRequestDto,
-	UserInformationDto,
-} from './dtos';
 import { UsersRepository } from './users.repository';
+import {
+	AvatarStorage,
+	AvatarUpload,
+	UpdateProfileInput,
+	UserProfile,
+	UserSearchInput,
+	UsersPage,
+} from './users.types';
 
 import {
-	HttpResponseBodySuccessDto,
+	ConflictException,
 	NotFoundException,
-	ObjectComparerDto,
 	OptionalException,
-	PaginationDto,
-	PaginationUtils,
-} from '@/common';
+} from '@/common/exceptions';
 import {
 	deleteImageFromCloudinary,
 	extractPublicIdFromUrl,
 	uploadImageFromBuffer,
 } from '@/common/utils/cloudinary.utils';
 
+const avatarStorage: AvatarStorage = {
+	upload: uploadImageFromBuffer,
+	delete: deleteImageFromCloudinary,
+	extractPublicId: (url) => extractPublicIdFromUrl(url, 'TrelloLike_Avatars'),
+};
+
 export class UsersService {
 	constructor(
-		private readonly authRepository: AuthRepository = new AuthRepository(),
-		private readonly usersRepository: UsersRepository = new UsersRepository(),
+		private readonly usersRepository: Pick<
+			UsersRepository,
+			'findUser' | 'findUsers' | 'updateUser'
+		> = new UsersRepository(),
+		private readonly auth: Pick<AuthService, 'changePassword'> = new AuthService(),
+		private readonly storage: AvatarStorage = avatarStorage,
 	) {}
 
 	async getUsers(
-		getUsersRequest: GetUsersRequestDto,
-		pagination: PaginationDto,
-	): Promise<HttpResponseBodySuccessDto<GetUsersResponseDto[]>> {
-		const { name, status } = getUsersRequest;
-		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
-			pagination,
-		);
-		const [users, totalUsers] = await this.usersRepository.findUsers({
-			name: name,
-			status: status,
-			skip: paginationUtils.skip,
-			take: paginationUtils.take,
+		input: UserSearchInput,
+		pagination: { page: number; limit: number },
+	): Promise<UsersPage> {
+		const [items, totalItems] = await this.usersRepository.findUsers({
+			...input,
+			skip: (pagination.page - 1) * pagination.limit,
+			take: pagination.limit,
 		});
-
-		const userResponse = users.map((user) => new GetUsersResponseDto(user));
-		return {
-			success: true,
-			data: userResponse,
-			pagination:
-				paginationUtils.convertPaginationResponseDtoFromTotalRecords(totalUsers),
-		};
+		return { items, totalItems, ...pagination };
 	}
 
-	async getUserByUserId(
-		getUserByUserIdRequestDto: GetUserByUserIdRequestDto,
-	): Promise<HttpResponseBodySuccessDto<GetUserResponseDto>> {
-		const { userId, status } = getUserByUserIdRequestDto;
+	async getUserByUserId(input: {
+		userId: string;
+		status?: UserProfile['status'];
+	}): Promise<UserProfile> {
 		const user = await this.usersRepository.findUser({
-			userId: userId,
-			userStatus: status,
+			userId: input.userId,
+			userStatus: input.status,
 		});
-
-		if (!user) {
-			throw new NotFoundException('userId');
-		}
-
-		return {
-			success: true,
-			data: new GetUserResponseDto(user),
-		};
-	}
-
-	async getMyInformation(
-		myInformationDto: UserInformationDto,
-	): Promise<HttpResponseBodySuccessDto<GetUserResponseDto>> {
-		return {
-			success: true,
-			data: new GetUserResponseDto(myInformationDto),
-		};
+		if (!user) throw new NotFoundException('userId');
+		return user;
 	}
 
 	async updateMyInformation(
-		updateMyInformationRequestDto: UpdateMyInformationRequestDto,
-		myInformationDto: UserInformationDto,
-		file?: Express.Multer.File,
-	): Promise<HttpResponseBodySuccessDto<GetUserResponseDto> | Exception> {
-		let uploadedImage: any = null;
-
-		try {
-			if (file) {
-				uploadedImage = await uploadImageFromBuffer(
-					file.buffer,
-					file.mimetype,
-					'TrelloLike_Avatars',
-				);
-
-				updateMyInformationRequestDto.avatar = uploadedImage.secure_url;
-				console.log('Ảnh đã được upload lên Cloudinary:', uploadedImage);
+		input: UpdateProfileInput,
+		actorId: string,
+		file?: AvatarUpload,
+	): Promise<UserProfile> {
+		const current = await this.getUserByUserId({ userId: actorId });
+		const changes: UpdateProfileInput & { avatar?: string } = {};
+		for (const key of ['name', 'email', 'bio', 'address'] as const) {
+			if (input[key] !== undefined && input[key] !== current[key]) {
+				changes[key] = input[key];
 			}
-
-			const updateUserData = new ObjectComparerDto<users>(
-				myInformationDto,
-			).getUpdatedFields<Prisma.usersUpdateManyMutationInput>(
-				updateMyInformationRequestDto,
-			);
-			if (Object.keys(updateUserData).length === 0) {
-				if (uploadedImage && uploadedImage.public_id) {
-					const check = await deleteImageFromCloudinary(
-						uploadedImage.public_id,
-					);
-					console.log(
-						'Đã xóa ảnh đã upload do không có trường nào được cập nhật:',
-						check,
-					);
-				}
-				console.log('Không có trường nào được cập nhật');
-				return new OptionalException(
-					StatusCodes.UNPROCESSABLE_ENTITY,
-					'No fields to update',
-				);
-			}
-
-			const updatedUser = await this.usersRepository.updateUser({
-				userId: myInformationDto.id,
-				user: updateUserData,
-			});
-			if (file && myInformationDto.avatar) {
-				const oldPublicId = extractPublicIdFromUrl(myInformationDto.avatar);
-				if (oldPublicId) {
-					await deleteImageFromCloudinary(oldPublicId);
-					console.log(`Đã xóa thành công ảnh cũ có public_id: ${oldPublicId}`);
-				}
-			}
-			return {
-				success: true,
-				data: new GetUserResponseDto(updatedUser),
-			};
-		} catch (error) {
-			if (uploadedImage && uploadedImage.public_id) {
-				await deleteImageFromCloudinary(uploadedImage.public_id);
-			}
-			throw new OptionalException(
-				StatusCodes.INTERNAL_SERVER_ERROR,
-				'Lỗi khi cập nhật thông tin người dùng',
-			);
 		}
+		const uploaded = file
+			? await this.storage.upload(file.buffer, file.mimetype, 'TrelloLike_Avatars')
+			: null;
+		if (uploaded) changes.avatar = uploaded.secure_url;
+		if (Object.keys(changes).length === 0) {
+			throw new OptionalException(422, 'No fields to update');
+		}
+
+		let updated: UserProfile;
+		try {
+			updated = await this.usersRepository.updateUser({
+				userId: actorId,
+				user: changes,
+			});
+		} catch (error) {
+			if (uploaded) await this.cleanupAvatar(uploaded.public_id);
+			if (
+				error &&
+				typeof error === 'object' &&
+				'code' in error &&
+				error.code === 'P2002'
+			) {
+				throw new ConflictException('email');
+			}
+			throw error;
+		}
+
+		// The profile already committed; cleanup cannot roll it back or remove its new avatar.
+		if (uploaded && current.avatar) {
+			const oldPublicId = this.storage.extractPublicId(current.avatar);
+			if (oldPublicId && oldPublicId !== uploaded.public_id) {
+				await this.cleanupAvatar(oldPublicId);
+			}
+		}
+		return updated;
 	}
 
 	async updateMyPassword(
-		updateMyPasswordRequestDto: UpdateMyPasswordRequestDto,
-		myInformationDto: UserInformationDto,
-	): Promise<HttpResponseBodySuccessDto<GetUserResponseDto> | Exception> {
-		const { newPassword } = updateMyPasswordRequestDto;
-		const account = await this.authRepository.findAccount({
-			userId: myInformationDto.id,
-			email: myInformationDto.email,
-		});
+		newPassword: string,
+		actor: UserProfile,
+	): Promise<UserProfile> {
+		await this.auth.changePassword(actor.id, newPassword);
+		return actor;
+	}
 
-		const salt = await genSalt(10);
-		const hashedPassword = await hash(newPassword, salt);
-
-		if (!account) {
-			const account: Prisma.accountsCreateInput = {
-				salt: salt,
-				password: hashedPassword,
-				user: {
-					connect: {
-						id: myInformationDto.id,
-					},
-				},
-			};
-
-			await this.authRepository.createAccount({
-				accounts: account,
-			});
+	private async cleanupAvatar(publicId: string): Promise<void> {
+		try {
+			await this.storage.delete(publicId);
+		} catch {
+			// shortcut: cleanup is best effort, add persistent retries if orphan uploads need guaranteed removal.
+			console.error('[Users] Avatar cleanup failed');
 		}
-
-		await this.authRepository.updatePassword({
-			userId: myInformationDto.id,
-			salt: salt,
-			password: hashedPassword,
-		});
-
-		return {
-			success: true,
-			data: new GetUserResponseDto(myInformationDto),
-		};
 	}
 }

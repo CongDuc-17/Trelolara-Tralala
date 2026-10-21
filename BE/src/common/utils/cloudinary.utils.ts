@@ -1,13 +1,10 @@
-// src/common/utils/cloudinary.util.ts
 import cloudinary from '../../configs/upload.config';
 
-// 1. Hàm upload từ Buffer
 export const uploadImageFromBuffer = async (
 	fileBuffer: Buffer,
 	mimetype: string,
 	folderName: string,
 ) => {
-	// Chuyển buffer thành chuỗi Data URI
 	const b64 = fileBuffer.toString('base64');
 	const dataURI = `data:${mimetype};base64,${b64}`;
 
@@ -18,30 +15,57 @@ export const uploadImageFromBuffer = async (
 	return result;
 };
 
-// 2. Hàm xóa ảnh (dùng cho Rollback hoặc xóa ảnh cũ)
-export const deleteImageFromCloudinary = async (publicId: string) => {
+export const deleteImageFromCloudinary = async (publicId: string): Promise<void> => {
 	try {
-		await cloudinary.uploader.destroy(publicId);
-	} catch (error) {
-		console.error(`[Cloudinary] Lỗi khi xóa ảnh có public_id ${publicId}:`, error);
+		const result = await cloudinary.uploader.destroy(publicId);
+		if (result.result !== 'ok' && result.result !== 'not found') {
+			throw new Error('Image deletion failed');
+		}
+	} catch {
+		throw new Error('Image deletion failed');
 	}
 };
 
-export const extractPublicIdFromUrl = (url: string): string | null => {
+export const extractPublicIdFromUrl = (
+	url: string,
+	expectedFolder?: string,
+): string | null => {
 	try {
-		// Ví dụ url: .../upload/v1776250045/TrelloLike_Avatars/hrytidb4njzgugv9733m.jpg
-		const splitUrl = url.split('/');
+		const parsed = new URL(url);
+		if (
+			!['https:', 'http:'].includes(parsed.protocol) ||
+			parsed.hostname !== 'res.cloudinary.com' ||
+			parsed.port ||
+			parsed.username ||
+			parsed.password
+		)
+			return null;
 
-		const filenameWithExt = splitUrl.pop(); // "hrytidb4njzgugv9733m.jpg"
-		const folder = splitUrl.pop(); // "TrelloLike_Avatars"
+		const [cloudName, resourceType, deliveryType, version, ...segments] =
+			parsed.pathname.slice(1).split('/').map(decodeURIComponent);
+		if (
+			!cloudName ||
+			cloudName !== cloudinary.config().cloud_name ||
+			resourceType !== 'image' ||
+			deliveryType !== 'upload' ||
+			!/^v\d+$/.test(version ?? '') ||
+			!segments.length ||
+			segments.some(
+				(segment) =>
+					!segment ||
+					segment === '.' ||
+					segment === '..' ||
+					/[\\/]/.test(segment),
+			)
+		)
+			return null;
 
-		const filename = filenameWithExt?.split('.')[0]; // Lấy "hrytidb4njzgugv9733m" bỏ đuôi ".jpg"
-
-		if (!folder || !filename) return null;
-
-		return `${folder}/${filename}`; // Ghép lại thành: "TrelloLike_Avatars/hrytidb4njzgugv9733m"
-	} catch (error) {
-		console.error('Lỗi khi bóc tách public_id từ URL:', error);
+		// Only delete original uploads owned by this application, never arbitrary profile URLs.
+		const publicId = segments.join('/').replace(/\.[^/.]+$/, '');
+		if (!publicId || (expectedFolder && !publicId.startsWith(`${expectedFolder}/`)))
+			return null;
+		return publicId;
+	} catch {
 		return null;
 	}
 };
