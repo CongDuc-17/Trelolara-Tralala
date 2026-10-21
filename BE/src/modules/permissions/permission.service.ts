@@ -52,6 +52,13 @@ export class PermissionService {
 		this.assertActive(list, 'List');
 	}
 
+	async assertCardLifecycle(resource: PermissionResource): Promise<void> {
+		await this.assertListLifecycle(resource);
+		const card = await this.repository.findCardState(resource);
+		if (!card) throw new NotFoundException('Card not found');
+		this.assertActive(card, 'Card');
+	}
+
 	async assertBoardLifecycle(
 		resource: PermissionResource,
 		action: ResourceAction = 'write',

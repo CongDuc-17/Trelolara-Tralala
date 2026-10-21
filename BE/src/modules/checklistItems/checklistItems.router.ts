@@ -40,7 +40,7 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(updateChecklistItemValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	checklistItemsController.updateChecklistItem,
 );
 

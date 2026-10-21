@@ -68,6 +68,37 @@ export class PermissionsRepository {
 			: null;
 	}
 
+	async findCardState(resource: PermissionResource): Promise<ResourceState | null> {
+		const card = { select: { status: true, deletedAt: true } } as const;
+		if (resource.cardId)
+			return this.client.cards.findUnique({
+				where: { id: resource.cardId },
+				...card,
+			});
+		if (resource.checklistItemId) {
+			const item = await this.client.checklistItems.findUnique({
+				where: { id: resource.checklistItemId },
+				select: { checklist: { select: { card } } },
+			});
+			return item?.checklist.card ?? null;
+		}
+		if (resource.checklistId) {
+			const checklist = await this.client.checklists.findUnique({
+				where: { id: resource.checklistId },
+				select: { card },
+			});
+			return checklist?.card ?? null;
+		}
+		if (resource.commentId) {
+			const comment = await this.client.cardComments.findUnique({
+				where: { id: resource.commentId },
+				select: { card },
+			});
+			return comment?.card ?? null;
+		}
+		return null;
+	}
+
 	findBoardState(
 		boardId: string,
 	): Promise<(ResourceState & { project: ResourceState }) | null> {

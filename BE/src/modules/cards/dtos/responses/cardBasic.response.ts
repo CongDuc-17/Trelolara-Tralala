@@ -1,34 +1,11 @@
 import { z } from 'zod';
-export class CardBasicResponseDto {
-	id: string;
-	title: string;
-	description?: string;
-	dueDate?: Date;
-	position: number;
-	listId: string;
-
-	memberCount: number;
-	labelCount: number;
-	checklistCount: number;
-	commentCount: number;
-
-	_links: {
-		members: string;
-		labels: string;
-		checklists: string;
-		comments: string;
-	};
-
-	createdAt: Date;
-}
-
 export const cardBasicResponseDtoSchema = z.object({
-	id: z.string().uuid(),
+	id: z.uuid(),
 	title: z.string(),
-	description: z.string().optional(),
-	dueDate: z.date().optional(),
+	description: z.string().nullable(),
+	dueDate: z.date().nullable(),
 	position: z.number(),
-	listId: z.string().uuid(),
+	listId: z.uuid(),
 	memberCount: z.number(),
 	labelCount: z.number(),
 	checklistCount: z.number(),

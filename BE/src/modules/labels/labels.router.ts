@@ -45,7 +45,7 @@ labelsRegistry.registerPath({
 	request: {
 		params: updateLabelRequestParams,
 	},
-	responses: createApiResponse(LabelResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(null, 'Success', StatusCodes.OK),
 });
 router.delete(
 	'/:labelId',

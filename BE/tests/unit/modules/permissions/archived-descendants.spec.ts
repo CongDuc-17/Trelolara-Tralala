@@ -34,10 +34,18 @@ function runRoute(
 ): Promise<unknown> {
 	const layers = (
 		router as unknown as {
-			stack: { route: { path: string; methods: Record<string, boolean>; stack: { handle: RequestHandler }[] } }[];
+			stack: {
+				route: {
+					path: string;
+					methods: Record<string, boolean>;
+					stack: { handle: RequestHandler }[];
+				};
+			}[];
 		}
 	).stack;
-	const handlers = layers.find((layer) => layer.route.path === path && layer.route.methods[method])!.route.stack;
+	const handlers = layers.find(
+		(layer) => layer.route.path === path && layer.route.methods[method],
+	)!.route.stack;
 	const request = { params, body, query: {}, user: { id } } as Request;
 	const response = { locals: {} } as Response;
 	let index = 0;
@@ -71,13 +79,84 @@ describe('Archive guards on descendant routes', () => {
 			project: { status: 'ACTIVE', deletedAt: null },
 		});
 	});
+	it.each([
+		[
+			cardsRouter,
+			'/:cardId/checklists',
+			{ cardId: id },
+			{ title: 'New checklist' },
+			'post',
+		],
+		[
+			cardsRouter,
+			'/:cardId/comments',
+			{ cardId: id },
+			{ content: 'New comment' },
+			'post',
+		],
+		[
+			commentsRouter,
+			'/:commentId',
+			{ commentId: id },
+			{ content: 'Updated' },
+			'patch',
+		],
+		[
+			checklistsRouter,
+			'/:checklistId',
+			{ checklistId: id },
+			{ title: 'Updated' },
+			'patch',
+		],
+		[
+			checklistItemsRouter,
+			'/:checklistItemId',
+			{ checklistItemId: id },
+			{ completed: false },
+			'patch',
+		],
+	] as const)(
+		'blocks child writes to an archived card (%s)',
+		async (router, path, params, body, method) => {
+			jest.mocked(PermissionsRepository.prototype.findBoardState).mockResolvedValue(
+				{
+					status: 'ACTIVE',
+					deletedAt: null,
+					project: { status: 'ACTIVE', deletedAt: null },
+				},
+			);
+			jest.spyOn(
+				PermissionsRepository.prototype,
+				'findListState',
+			).mockResolvedValue({ status: 'ACTIVE', deletedAt: null });
+			jest.spyOn(
+				PermissionsRepository.prototype,
+				'findCardState',
+			).mockResolvedValue({ status: 'ARCHIVED', deletedAt: new Date() });
+			await expect(
+				runRoute(router, path, params, body, method),
+			).resolves.toMatchObject({ status: 409 });
+		},
+	);
 
 	it.each([
 		[listsRouter, '/:listId/cards', { listId: id }, { title: 'New card' }, 'post'],
 		[cardsRouter, '/:cardId/move', { cardId: id }, { targetListId: id }, 'patch'],
 		[cardsRouter, '/:cardId/restore', { cardId: id }, {}, 'patch'],
-		[commentsRouter, '/:commentId', { commentId: id }, { content: 'Updated' }, 'patch'],
-		[checklistsRouter, '/:checklistId', { checklistId: id }, { title: 'Updated' }, 'patch'],
+		[
+			commentsRouter,
+			'/:commentId',
+			{ commentId: id },
+			{ content: 'Updated' },
+			'patch',
+		],
+		[
+			checklistsRouter,
+			'/:checklistId',
+			{ checklistId: id },
+			{ title: 'Updated' },
+			'patch',
+		],
 		[
 			checklistItemsRouter,
 			'/:checklistItemId',
@@ -99,7 +178,9 @@ describe('Archive guards on descendant routes', () => {
 				PermissionsRepository.prototype,
 				'findListState',
 			).mockResolvedValue({ status: 'ARCHIVED', deletedAt: new Date() });
-			await expect(runRoute(router, path, params, body, method)).resolves.toMatchObject({
+			await expect(
+				runRoute(router, path, params, body, method),
+			).resolves.toMatchObject({
 				status: 409,
 			});
 		},

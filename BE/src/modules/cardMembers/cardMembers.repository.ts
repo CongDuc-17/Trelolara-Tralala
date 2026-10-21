@@ -15,8 +15,12 @@ export class CardMembersRepository {
 		});
 	}
 
-	async findMemberOnCard(cardId: string, userId: string) {
-		return this.prismaService.cardMembers.findFirst({
+	async findMemberOnCard(
+		cardId: string,
+		userId: string,
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cardMembers.findFirst({
 			where: {
 				cardId: cardId,
 				userId: userId,
@@ -24,8 +28,12 @@ export class CardMembersRepository {
 		});
 	}
 
-	async removeMemberFromCard(cardId: string, userId: string) {
-		return this.prismaService.cardMembers.deleteMany({
+	async removeMemberFromCard(
+		cardId: string,
+		userId: string,
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cardMembers.deleteMany({
 			where: {
 				cardId: cardId,
 				userId: userId,

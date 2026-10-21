@@ -1,477 +1,327 @@
-import { ListsRepository } from './../lists/list.repository';
-import { Exception } from '@/common/exceptions/app-error';
-
-import { HttpResponseBodySuccessDto } from '@/common/dtos/httpResponseBodySuccess.dto';
-import { CardsRepository } from './card.repository';
-
-import { calculateNewPosition } from '@/common/utils/calculateNewPosition';
-import { BoardsRepository } from '../boards/boards.repository';
+import { NotFoundException, OptionalException } from '@/common/exceptions';
+import {
+	calculateNewPosition,
+	isPositionBetween,
+} from '@/common/utils/calculateNewPosition';
+import { ListsRepository } from '../lists/list.repository';
 import { BoardMembersRepository } from '../boardMembers/boardMember.repository';
-import { NotFoundException } from '@/common';
 import { LabelsRepository } from '../labels/labels.repository';
 import { CardMembersRepository } from '../cardMembers/cardMembers.repository';
 import { CardLabelsRepository } from '../cardLabels/cardLabels.repository';
-import { CardBasicResponseDto, CardWithIncludesResponseDto } from './dtos';
 import { UsersRepository } from '../users/users.repository';
 import { NotificationsService } from '../notifications/notifications.service';
-import { BoardRoleEnum } from '@/common/enums/roles';
-import { ListStatusEnum } from '@prisma/client';
+import type { DatabaseClient } from '../database';
+import type { ListRecord } from '../lists/lists.types';
+import { CardsRepository } from './card.repository';
+import { mapCard } from './card.mapper';
+import type {
+	CardAssignment,
+	CardDetails,
+	CardIncludes,
+	CardLabelRelation,
+	CardListEntry,
+	CardRecord,
+	CardStatus,
+} from './cards.types';
 
 export class CardsService {
 	constructor(
-		private readonly cardsRepository: CardsRepository = new CardsRepository(),
-		private readonly listsRepository: ListsRepository = new ListsRepository(),
-		private readonly boardMembersRepository: BoardMembersRepository = new BoardMembersRepository(),
-		private readonly labelsRepository: LabelsRepository = new LabelsRepository(),
-		private readonly cardMembersRepository: CardMembersRepository = new CardMembersRepository(),
-		private readonly cardLabelsRepository: CardLabelsRepository = new CardLabelsRepository(),
-		private readonly usersRepository: UsersRepository = new UsersRepository(),
-		private readonly notificationsService: NotificationsService = new NotificationsService(),
+		private readonly cardsRepository = new CardsRepository(),
+		private readonly listsRepository = new ListsRepository(),
+		private readonly boardMembersRepository = new BoardMembersRepository(),
+		private readonly labelsRepository = new LabelsRepository(),
+		private readonly cardMembersRepository = new CardMembersRepository(),
+		private readonly cardLabelsRepository = new CardLabelsRepository(),
+		private readonly usersRepository = new UsersRepository(),
+		private readonly notificationsService = new NotificationsService(),
 	) {}
 
 	async getAllCardsByListId(
 		listId: string,
-		userId: string,
-		status?: string,
-	): Promise<HttpResponseBodySuccessDto<any[]> | Exception> {
-		const list = await this.listsRepository.getListById(listId);
-		if (!list) {
-			throw new Exception(404, 'List not found');
-		}
-
-		const cards = await this.cardsRepository.getAllCardsByListId(listId, status);
-		return {
-			success: true,
-			data: cards,
-		};
+		_actorId: string,
+		status?: CardStatus,
+	): Promise<CardListEntry[]> {
+		if (!(await this.listsRepository.getListById(listId)))
+			throw new NotFoundException('List not found');
+		return this.cardsRepository.getAllCardsByListId(listId, status);
 	}
-
-	async getCardById(
-		cardId: string,
-		include?: {
-			members?: boolean;
-			labels?: boolean;
-			checklists?: boolean;
-			comments?: boolean;
-		},
-	): Promise<HttpResponseBodySuccessDto<any> | Exception> {
+	async getCardById(cardId: string, include?: CardIncludes): Promise<CardDetails> {
 		const card = include
 			? await this.cardsRepository.getCardWithIncludes(cardId, include)
 			: await this.cardsRepository.getCardWithCounts(cardId);
-
-		if (!card) {
-			throw new Exception(404, 'Card not found');
-		}
-
-		// Transform to DTO
-		const dto = include
-			? this.mapToCardWithIncludes(card, include)
-			: this.mapToCardBasic(card);
-
-		return {
-			success: true,
-			data: dto,
-		};
+		if (!card) throw new NotFoundException('Card not found');
+		return mapCard(card, include);
 	}
 
-	// Helper methods:
-	private mapToCardBasic(card: any): CardBasicResponseDto {
-		return {
-			id: card.id,
-			title: card.title,
-			description: card.description,
-			dueDate: card.dueDate,
-			position: card.position,
-			listId: card.listId,
-			memberCount: card._count?.cardMembers ?? 0,
-			labelCount: card._count?.cardLabels ?? 0,
-			checklistCount: card._count?.checklists ?? 0,
-			commentCount: card._count?.comments ?? 0,
-			_links: {
-				members: `/cards/${card.id}/members`,
-				labels: `/cards/${card.id}/labels`,
-				checklists: `/cards/${card.id}/checklists`,
-				comments: `/cards/${card.id}/comments`,
-			},
-			createdAt: card.createdAt,
-		};
-	}
-
-	private mapToCardWithIncludes(card: any, include: any): CardWithIncludesResponseDto {
-		const basic = this.mapToCardBasic(card);
-
-		return {
-			// Lấy tất cả từ basic
-			id: basic.id,
-			title: basic.title,
-			description: basic.description,
-			dueDate: basic.dueDate,
-			position: basic.position,
-			listId: basic.listId,
-			memberCount: basic.memberCount,
-			labelCount: basic.labelCount,
-			checklistCount: basic.checklistCount,
-			commentCount: basic.commentCount,
-			_links: basic._links,
-			createdAt: basic.createdAt,
-			// Thêm optional fields
-			members: include.members
-				? card.cardMembers?.map((cm: any) => ({
-						id: cm.id,
-						userId: cm.userId,
-						userName: cm.user.name,
-						userAvatar: cm.user.avatar,
-					}))
-				: undefined,
-			labels: include.labels
-				? card.cardLabels?.map((cl: any) => ({
-						id: cl.label.id,
-						name: cl.label.name,
-						color: cl.label.color,
-					}))
-				: undefined,
-			checklists: include.checklists
-				? card.checklists?.map((c: any) => ({
-						id: c.id,
-						title: c.title,
-						checklistItems: c.checklistItems,
-						itemCount: c.checklistItems.length,
-						completedCount: c.checklistItems.filter((ci: any) => ci.completed)
-							.length,
-					}))
-				: undefined,
-
-			comments: include.comments
-				? card.comments?.map((cm: any) => ({
-						id: cm.id,
-						content: cm.content,
-						createdAt: cm.createdAt,
-						updatedAt: cm.updatedAt,
-						userId: cm.user.id,
-						userName: cm.user.name,
-						userAvatar: cm.user.avatar,
-					}))
-				: undefined,
-		} as CardWithIncludesResponseDto;
-	}
-
-	async createCard(
-		title: string,
-		listId: string,
-		userId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const newCard = await this.listsRepository.inTransaction(
-			async (repository, client) => {
-				await repository.lockList(listId);
-				const list = await repository.getListById(listId);
-				if (!list) throw new Exception(404, 'List not found');
-				const board = await repository.getBoardState(list.boardId);
-				if (!board) throw new Exception(404, 'Board not found');
-				if (
-					list.status !== ListStatusEnum.ACTIVE ||
-					list.deletedAt ||
-					board.status !== 'ACTIVE' ||
-					board.deletedAt ||
-					board.project.status !== 'ACTIVE' ||
-					board.project.deletedAt
-				) {
-					throw new Exception(409, 'Cannot create a card in an inactive list');
-				}
-				const lastCard = await this.cardsRepository.getLastCardByListId(
-					listId,
-					client,
-				);
-				const position = lastCard ? lastCard.position + 1 : 1;
-				return this.cardsRepository.createCard(title, listId, position, client);
-			},
-		);
-		return {
-			success: true,
-			data: newCard,
-		};
+	createCard(title: string, listId: string, _actorId: string): Promise<CardRecord> {
+		return this.listsRepository.inTransaction(async (repository, client) => {
+			await repository.lockList(listId);
+			const list = await repository.getListById(listId);
+			if (!list) throw new NotFoundException('List not found');
+			await this.requireActiveList(repository, list);
+			const siblings = await this.cardsRepository.getActiveCardsByListId(
+				listId,
+				client,
+			);
+			const position = await this.allocatePosition(
+				siblings,
+				siblings.length,
+				listId,
+				client,
+			);
+			return this.cardsRepository.createCard(title, listId, position, client);
+		});
 	}
 
 	async moveCard(
 		cardId: string,
 		targetListId: string,
-		userId: string,
+		_actorId: string,
 		beforeCardId?: string,
 		afterCardId?: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		try {
-			const card = await this.cardsRepository.getCardById(cardId);
-			if (!card) throw new Exception(404, 'Card not found');
-
-			const sourceList = await this.listsRepository.getListById(card.listId);
-			if (!sourceList) throw new Exception(404, 'Source list not found');
-
-			const targetList = await this.listsRepository.getListById(targetListId);
-			if (!targetList) throw new Exception(404, 'Target list not found');
-
-			if (sourceList.boardId !== targetList.boardId) {
-				throw new Exception(
+	): Promise<CardRecord> {
+		if (
+			beforeCardId === cardId ||
+			afterCardId === cardId ||
+			(beforeCardId && beforeCardId === afterCardId)
+		)
+			throw new OptionalException(
+				422,
+				'Neighbors must be distinct from each other and the moved card',
+			);
+		return this.withLockedCard(cardId, async (card, source, client) => {
+			const lists = new ListsRepository(client);
+			const target = await lists.getListById(targetListId);
+			if (!target) throw new NotFoundException('Target list not found');
+			// Reject before locking a second project; opposite cross-board moves must not deadlock.
+			if (target.boardId !== source.boardId)
+				throw new OptionalException(
 					400,
 					'Cannot move card to a list in a different board',
 				);
-			}
+			await lists.lockList(targetListId);
+			await this.requireActiveList(lists, target);
+			const siblings = (
+				await this.cardsRepository.getActiveCardsByListId(targetListId, client)
+			).filter((item) => item.id !== cardId);
+			const before =
+				beforeCardId === undefined
+					? -1
+					: siblings.findIndex((item) => item.id === beforeCardId);
+			const after =
+				afterCardId === undefined
+					? -1
+					: siblings.findIndex((item) => item.id === afterCardId);
 			if (
-				sourceList.status !== ListStatusEnum.ACTIVE ||
-				sourceList.deletedAt ||
-				targetList.status !== ListStatusEnum.ACTIVE ||
-				targetList.deletedAt
-			) {
-				throw new Exception(409, 'Cannot move a card from or to an inactive list');
-			}
-
-			const before = beforeCardId
-				? await this.cardsRepository.getCardInList(beforeCardId, targetListId)
-				: null;
-			const after = afterCardId
-				? await this.cardsRepository.getCardInList(afterCardId, targetListId)
-				: null;
-
-			const newPosition = calculateNewPosition(before?.position, after?.position);
-			console.log('New Position:', newPosition);
-			const updatedCard = await this.cardsRepository.updateCardPosition(
+				(beforeCardId !== undefined && before < 0) ||
+				(afterCardId !== undefined && after < 0)
+			)
+				throw new OptionalException(
+					422,
+					'Neighbors must be active cards in the destination list',
+				);
+			if (before >= 0 && after >= 0 && before + 1 !== after)
+				throw new OptionalException(
+					422,
+					'Neighbors must be adjacent and ordered',
+				);
+			const index = after >= 0 ? after : before >= 0 ? before + 1 : siblings.length;
+			const position = await this.allocatePosition(
+				siblings,
+				index,
 				targetListId,
-				cardId,
-				newPosition,
+				client,
 			);
-			console.log('Updated Card:', updatedCard);
-			return {
-				success: true,
-				data: updatedCard,
-			};
-		} catch (error) {
-			console.error('[CardsService] moveCard error:', error);
-			throw error;
-		}
-	}
-
-	async archiveCard(
-		cardId: string,
-		userId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		try {
-			const card = await this.cardsRepository.getCardById(cardId);
-			if (!card) throw new Exception(404, 'Card not found');
-
-			const list = await this.listsRepository.getListById(card.listId);
-			if (!list) {
-				throw new Exception(404, 'List not found');
-			}
-
-			const archivedCard = await this.cardsRepository.archiveCard(cardId);
-			return {
-				success: true,
-				data: archivedCard,
-			};
-		} catch (error) {
-			throw error;
-		}
-	}
-
-	async restoreCard(
-		cardId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) {
-			throw new Exception(404, 'Card not found');
-		}
-		const list = await this.listsRepository.getListById(card.listId);
-		if (!list) {
-			throw new Exception(404, 'List not found');
-		}
-		if (list.status === ListStatusEnum.ARCHIVED) {
-			throw new Exception(
-				400,
-				'Cannot restore card in an archived list, Please restore the list' +
-					`"${list.name}"` +
-					'first',
+			return this.cardsRepository.updateCardPosition(
+				targetListId,
+				card.id,
+				position,
+				client,
 			);
-		}
-		const restoredCard = await this.cardsRepository.restoreCard(cardId);
-		return {
-			success: true,
-			data: restoredCard,
-		};
+		});
 	}
-
-	async deleteCard(
-		cardId: string,
-		userId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		try {
-			const card = await this.cardsRepository.getCardById(cardId);
-			if (!card) throw new Exception(404, 'Card not found');
-
-			const deletedCard = await this.cardsRepository.deleteCard(cardId);
-			return {
-				success: true,
-				data: deletedCard,
-			};
-		} catch (error) {
-			throw error;
-		}
-	}
-
-	async addLabelToCard(
-		cardId: string,
-		labelId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) throw new NotFoundException('Card not found');
-		const label = await this.labelsRepository.getLabelById(labelId);
-		if (!label) throw new NotFoundException('Label not found');
-		const duplicateAdd = await this.cardLabelsRepository.findLabelOnCard(
-			cardId,
-			labelId,
+	archiveCard(cardId: string, _actorId: string): Promise<CardRecord> {
+		return this.withLockedCard(cardId, (_card, _list, client) =>
+			this.cardsRepository.archiveCard(cardId, client),
 		);
-		if (duplicateAdd) {
-			throw new Exception(400, 'Label already exists on the card');
-		}
-
-		const addedLabel = await this.cardLabelsRepository.addLabelToCard(
+	}
+	restoreCard(cardId: string): Promise<CardRecord> {
+		return this.withLockedCard(
 			cardId,
-			labelId,
+			async (card, list, client) => {
+				await this.requireActiveList(new ListsRepository(client), list);
+				if (card.status !== 'ARCHIVED')
+					throw new OptionalException(
+						400,
+						'Only archived cards can be restored',
+					);
+				return this.cardsRepository.restoreCard(cardId, client);
+			},
+			false,
 		);
-		return {
-			success: true,
-			data: addedLabel,
-		};
+	}
+	deleteCard(cardId: string, _actorId: string): Promise<CardRecord> {
+		return this.withLockedCard(
+			cardId,
+			async (card, _list, client) => {
+				await this.cardsRepository.deleteCard(cardId, client);
+				return card;
+			},
+			false,
+		);
 	}
 
-	async removeLabelFromCard(
-		cardId: string,
-		labelId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) throw new NotFoundException('Card not found');
-		const label = await this.labelsRepository.getLabelById(labelId);
-		if (!label) throw new NotFoundException('Label not found');
-		await this.cardLabelsRepository.removeLabelFromCard(cardId, labelId);
-		return {
-			success: true,
-			data: null,
-		};
+	addLabelToCard(cardId: string, labelId: string): Promise<CardLabelRelation> {
+		return this.withLockedCard(cardId, async (_card, list, client) => {
+			const label = await this.labelsRepository.getLabelById(labelId, client);
+			if (!label) throw new NotFoundException('Label not found');
+			if (label.boardId !== list.boardId)
+				throw new OptionalException(422, 'Label must belong to the card board');
+			if (await this.cardLabelsRepository.findLabelOnCard(cardId, labelId, client))
+				throw new OptionalException(400, 'Label already exists on the card');
+			return this.cardLabelsRepository.addLabelToCard(cardId, labelId, client);
+		});
+	}
+	async removeLabelFromCard(cardId: string, labelId: string): Promise<void> {
+		await this.withLockedCard(cardId, async (_card, _list, client) => {
+			if (!(await this.labelsRepository.getLabelById(labelId, client)))
+				throw new NotFoundException('Label not found');
+			await this.cardLabelsRepository.removeLabelFromCard(cardId, labelId, client);
+		});
 	}
 
 	async addMemberToCard(
 		cardId: string,
 		userId: string,
-		currentUserId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) throw new NotFoundException('Card not found');
-		const list = await this.listsRepository.getListById(card.listId);
-		if (!list) throw new NotFoundException('List not found');
-		const isMember = await this.boardMembersRepository.isUserMemberOfBoard(
-			list.boardId,
-			userId,
-		);
-		if (!isMember) {
-			throw new NotFoundException('User is not a member of the board');
-		}
-
-		if (isMember.role.name === BoardRoleEnum.BOARD_VIEWER) {
-			throw new Exception(
-				403,
-				'User does not have permission to be assigned to card',
-			);
-		}
-
-		const duplicateAdd = await this.cardMembersRepository.findMemberOnCard(
+		actorId: string,
+	): Promise<CardAssignment> {
+		const { member, notification } = await this.withLockedCard(
 			cardId,
-			userId,
-		);
-		if (duplicateAdd) {
-			throw new Exception(400, 'User already exists on the card');
-		}
-
-		const actor = await this.usersRepository.findUser({
-			userId: currentUserId,
-		});
-		if (!actor) {
-			throw new NotFoundException('Actor not found');
-		}
-
-		const { addedMember, notification } = await this.cardsRepository.inTransaction(
-			async (client) => {
-				const addedMember = await this.cardMembersRepository.addMemberToCard(
+			async (card, list, client) => {
+				const membership = await this.boardMembersRepository.isUserMemberOfBoard(
+					list.boardId,
+					userId,
+					client,
+				);
+				if (!membership)
+					throw new NotFoundException('User is not a member of the board');
+				if (
+					membership.role.status !== 'ACTIVE' ||
+					membership.role.deletedAt ||
+					!membership.role.name.startsWith('BOARD_') ||
+					membership.role.name === 'BOARD_VIEWER'
+				)
+					throw new OptionalException(
+						403,
+						'User does not have permission to be assigned to card',
+					);
+				if (
+					await this.cardMembersRepository.findMemberOnCard(
+						cardId,
+						userId,
+						client,
+					)
+				)
+					throw new OptionalException(400, 'User already exists on the card');
+				const actor = await this.usersRepository.findUser(
+					{ userId: actorId },
+					client,
+				);
+				if (!actor) throw new NotFoundException('Actor not found');
+				const member = await this.cardMembersRepository.addMemberToCard(
 					cardId,
 					userId,
 					client,
 				);
 				const notification =
-					userId !== currentUserId
-						? await this.notificationsService.persistCardAssigned(
+					userId === actorId
+						? null
+						: await this.notificationsService.persistCardAssigned(
 								{
 									recipientUserId: userId,
-									actorId: currentUserId,
+									actorId,
 									actorName: actor.name,
-									cardId: card.id,
+									cardId,
 									cardTitle: card.title,
 									boardId: list.boardId,
-									listId: card.listId,
+									listId: list.id,
 								},
 								client,
-							)
-						: null;
-				return { addedMember, notification };
+							);
+				return { member, notification };
 			},
 		);
 		if (notification) await this.notificationsService.deliver(notification);
-		return {
-			success: true,
-			data: addedMember,
-		};
+		return member;
 	}
-
-	async removeMemberFromCard(
-		cardId: string,
-		userId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		try {
-			const card = await this.cardsRepository.getCardById(cardId);
-			if (!card) throw new NotFoundException('Card not found');
-			const list = await this.listsRepository.getListById(card.listId);
-			if (!list) throw new NotFoundException('List not found');
-			const isMember = await this.boardMembersRepository.isUserMemberOfBoard(
-				list.boardId,
-				userId,
-			);
-			if (!isMember) {
-				throw new NotFoundException('User is not a member of the board');
-			}
-
-			// Check if member actually exists on card
-			const memberOnCard = await this.cardMembersRepository.findMemberOnCard(
-				cardId,
-				userId,
-			);
-			if (!memberOnCard) {
-				console.warn(
-					`[CardsService] Member ${userId} not found on card ${cardId}`,
-				);
-				throw new NotFoundException('Member is not assigned to this card');
-			}
-
+	async removeMemberFromCard(cardId: string, userId: string): Promise<void> {
+		await this.withLockedCard(cardId, async (_card, _list, client) => {
 			const result = await this.cardMembersRepository.removeMemberFromCard(
 				cardId,
 				userId,
+				client,
 			);
+			if (!result.count)
+				throw new NotFoundException('Member is not assigned to this card');
+		});
+	}
 
-			if (result.count === 0) {
-				throw new Exception(500, 'Failed to remove member from card');
+	private withLockedCard<T>(
+		cardId: string,
+		work: (card: CardRecord, list: ListRecord, client: DatabaseClient) => Promise<T>,
+		active = true,
+	): Promise<T> {
+		return this.cardsRepository.inTransaction(async (client) => {
+			await this.cardsRepository.lockCard(cardId, client);
+			const card = await this.cardsRepository.getCardById(cardId, client);
+			if (!card) throw new NotFoundException('Card not found');
+			const lists = new ListsRepository(client);
+			const list = await lists.getListById(card.listId);
+			if (!list) throw new NotFoundException('List not found');
+			if (active) {
+				await this.requireActiveList(lists, list);
+				if (card.status !== 'ACTIVE' || card.deletedAt)
+					throw new OptionalException(409, 'Card is read-only');
 			}
-
-			return {
-				success: true,
-				data: null,
-			};
-		} catch (error) {
-			console.error('[CardsService] removeMemberFromCard error:', error);
-			throw error;
-		}
+			return work(card, list, client);
+		});
+	}
+	private async requireActiveList(
+		repository: ListsRepository,
+		list: ListRecord,
+	): Promise<void> {
+		const board = await repository.getBoardState(list.boardId);
+		if (!board) throw new NotFoundException('Board not found');
+		if (
+			list.status !== 'ACTIVE' ||
+			list.deletedAt ||
+			board.status !== 'ACTIVE' ||
+			board.deletedAt ||
+			board.project.status !== 'ACTIVE' ||
+			board.project.deletedAt
+		)
+			throw new OptionalException(409, 'List or its parent is read-only');
+	}
+	private async allocatePosition(
+		siblings: CardRecord[],
+		index: number,
+		listId: string,
+		client: DatabaseClient,
+	): Promise<number> {
+		const before = siblings[index - 1]?.position;
+		const after = siblings[index]?.position;
+		const position = calculateNewPosition(before, after);
+		if (isPositionBetween(position, before, after)) return position;
+		for (let i = 0; i < siblings.length; i++)
+			await this.cardsRepository.updateCardPosition(
+				listId,
+				siblings[i].id,
+				i + 1,
+				client,
+			);
+		return calculateNewPosition(
+			index > 0 ? index : undefined,
+			index < siblings.length ? index + 1 : undefined,
+		);
 	}
 }

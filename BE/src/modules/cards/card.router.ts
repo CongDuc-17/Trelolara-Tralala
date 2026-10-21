@@ -11,13 +11,14 @@ import {
 	addMemberRequestSchema,
 	addMemberRequestValidationSchema,
 	cardResponseDtoSchema,
+	cardAssignmentResponseDtoSchema,
+	cardLabelRelationResponseDtoSchema,
+	cardWithIncludesResponseDtoSchema,
 	getCardRequestSchema,
 	getCardRequestValidationSchema,
 	moveCardRequestParams,
 	moveCardRequestSchema,
 	moveCardRequestValidationSchema,
-	updateInformationCardRequestSchema,
-	updateInformationCardRequestValidationSchema,
 	removeMemberRequestValidationSchema,
 	removeMemberRequestSchema,
 	addLabelRequestSchema,
@@ -37,7 +38,10 @@ import {
 import { checklistResponseDtoSchema } from '../checklists/dtos/responses';
 import { CommentsController } from '../comments/comments.controller';
 import { CommentResponseDTOSchema } from '../comments/dtos/responses';
-import { CreateCommentRequestSchema } from '../comments/dtos/requests';
+import {
+	CreateCommentRequestSchema,
+	CreateCommentRequestValidationSchema,
+} from '../comments/dtos/requests';
 
 const cardsController = new CardsController();
 const checklistsController = new ChecklistsController();
@@ -54,7 +58,11 @@ cardsRegistry.registerPath({
 	path: '/cards/{cardId}',
 	tags: ['Cards'],
 	request: getCardRequestSchema,
-	responses: createApiResponse(cardResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(
+		cardWithIncludesResponseDtoSchema,
+		'Success',
+		StatusCodes.OK,
+	),
 });
 router.get(
 	'/:cardId',
@@ -93,6 +101,7 @@ cardsRegistry.registerPath({
 router.patch(
 	'/:cardId/archive',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: moveCardRequestParams }),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	authMiddleware.verifyListLifecycle(),
 	cardsController.archiveCard,
@@ -110,6 +119,7 @@ cardsRegistry.registerPath({
 router.patch(
 	'/:cardId/restore',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: moveCardRequestParams }),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
 	authMiddleware.verifyListLifecycle(),
 	cardsController.restoreCard,
@@ -128,6 +138,7 @@ cardsRegistry.registerPath({
 router.delete(
 	'/:cardId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ params: moveCardRequestParams }),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.DELETE_CARD),
 	authMiddleware.verifyBoardLifecycle('delete'),
 	cardsController.deleteCard,
@@ -138,7 +149,11 @@ cardsRegistry.registerPath({
 	path: '/cards/{cardId}/labels',
 	tags: ['Cards'],
 	request: addLabelRequestSchema,
-	responses: createApiResponse(cardResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(
+		cardLabelRelationResponseDtoSchema,
+		'Success',
+		StatusCodes.OK,
+	),
 });
 router.post(
 	'/:cardId/labels',
@@ -170,7 +185,11 @@ cardsRegistry.registerPath({
 	path: '/cards/{cardId}/members',
 	tags: ['Cards'],
 	request: addMemberRequestSchema,
-	responses: createApiResponse(cardResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(
+		cardAssignmentResponseDtoSchema,
+		'Success',
+		StatusCodes.OK,
+	),
 });
 router.post(
 	'/:cardId/members',
@@ -209,7 +228,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createChecklistValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	checklistsController.createChecklist,
 );
 
@@ -228,6 +247,7 @@ cardsRegistry.registerPath({
 router.get(
 	'/:cardId/comments',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(getCardRequestParamsSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
 	commentsController.getCommentsByCardId,
 );
@@ -243,8 +263,9 @@ cardsRegistry.registerPath({
 router.post(
 	'/:cardId/comments',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(CreateCommentRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	commentsController.createComment,
 );
 
