@@ -322,6 +322,8 @@ model cards {
   isComplete  Boolean @default(false) @map("is_complete")
   background  String?
   dueDate     DateTime?         @map("due_date")
+  reminderMinutesBefore Int? @map("reminder_minutes_before")
+  reminder cardReminders?
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
   deletedAt   DateTime?         @map("deleted_at")
@@ -343,7 +345,26 @@ model cardMembers {
   user   users  @relation(fields: [userId], references: [id])
 
   @@unique([cardId, userId])
+  @@index([userId, cardId])
   @@map("Card_Members")
+}
+
+model cardReminders {
+  cardId String @id @map("card_id")
+  card cards @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  revision String
+  scheduledAt DateTime? @map("scheduled_at")
+
+  @@index([scheduledAt, cardId])
+  @@map("Card_Reminders")
+}
+
+// No FK: a deleted board retains its last revision so subscribers can invalidate it.
+model boardChanges {
+  boardId String @id @map("board_id")
+  revision BigInt @default(1)
+
+  @@map("Board_Changes")
 }
 
 model labels {
@@ -414,9 +435,32 @@ model cardAttachments {
   fileName  String   @map("file_name")
   fileUrl   String   @map("file_url")
   fileSize  Int      @map("file_size")
+  mimeType String? @map("mime_type")
+  storagePublicId String? @map("storage_public_id")
+  storageResourceType String? @map("storage_resource_type")
+  storageDeliveryType String? @map("storage_delivery_type")
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([cardId, createdAt, id])
+  @@index([storagePublicId, storageResourceType, storageDeliveryType], map: "Card_Attachments_storage_key_idx")
   @@map("Card_Attachments")
+}
+
+// Independent of the card FK so cleanup survives hard deletion and interrupted uploads.
+model attachmentCleanupJobs {
+  id String @id
+  publicId String? @map("public_id")
+  resourceType String? @map("resource_type")
+  deliveryType String? @map("delivery_type")
+  legacyFileUrl String? @map("legacy_file_url")
+  availableAt DateTime? @default(now()) @map("available_at")
+  leaseId String? @map("lease_id")
+  leaseUntil DateTime? @map("lease_until")
+  attempts Int @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([availableAt, leaseUntil])
+  @@map("Attachment_Cleanup_Jobs")
 }
 
 model cardActivity {
@@ -427,8 +471,10 @@ model cardActivity {
   user      users    @relation(fields: [userId], references: [id])
   action    String // "created", "updated", "moved", "labeled"
   details   String? // JSON details về thay đổi
+  metadata  Json?
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([cardId, createdAt, id])
   @@map("Card_Activity")
 }
 

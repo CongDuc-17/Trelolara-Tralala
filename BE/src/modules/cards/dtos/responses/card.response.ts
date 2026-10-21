@@ -19,9 +19,14 @@ export const cardResponseDtoSchema = z.object({
 	listId: z.uuid(),
 	status: z.enum(['ACTIVE', 'ARCHIVED']),
 	isComplete: z.boolean(),
+	reminderMinutesBefore: z.number().nullable(),
 	background: z.string().nullable(),
 	dueDate: z.date().nullable(),
 	createdAt: z.date(),
 	updatedAt: z.date(),
 	deletedAt: z.date().nullable(),
+});
+
+export const cardListSummaryResponseDtoSchema = cardResponseDtoSchema.extend({
+	isOverdue: z.boolean(),
 });

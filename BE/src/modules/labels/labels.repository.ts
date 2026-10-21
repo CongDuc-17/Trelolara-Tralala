@@ -53,6 +53,14 @@ export class LabelsRepository {
 			data,
 		});
 	}
+	async listCardIds(labelId: string, client: DatabaseClient): Promise<string[]> {
+		return (
+			await client.cardLabels.findMany({
+				where: { labelId },
+				select: { cardId: true },
+			})
+		).map((row) => row.cardId);
+	}
 
 	async deleteLabel(labelId: string, client: DatabaseClient = this.prismaService) {
 		await client.cardLabels.deleteMany({

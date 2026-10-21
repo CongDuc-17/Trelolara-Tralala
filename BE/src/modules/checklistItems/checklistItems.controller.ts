@@ -17,19 +17,24 @@ export class ChecklistItemsController {
 		const item = await this.service.createChecklistItem(
 			req.params.checklistId as string,
 			req.body.title,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: mapItem(item) });
 	}
 	async updateChecklistItem(req: Request, res: Response): Promise<Response> {
 		const item = await this.service.updateChecklistItem(
 			req.params.checklistItemId as string,
+			req.user!.id!,
 			req.body.title,
 			req.body.completed,
 		);
 		return res.json({ success: true, data: mapItem(item) });
 	}
 	async deleteChecklistItem(req: Request, res: Response): Promise<Response> {
-		await this.service.deleteChecklistItem(req.params.checklistItemId as string);
+		await this.service.deleteChecklistItem(
+			req.params.checklistItemId as string,
+			req.user!.id!,
+		);
 		return res.json({ success: true, data: null });
 	}
 }

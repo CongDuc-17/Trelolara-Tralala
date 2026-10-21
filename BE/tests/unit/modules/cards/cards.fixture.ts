@@ -17,6 +17,9 @@ import type {
 } from '@/modules/cards/cards.types';
 import type { ListRecord } from '@/modules/lists/lists.types';
 import type { NotificationRecord } from '@/modules/notifications/notifications.types';
+import type { AttachmentRecord } from '@/modules/attachments/attachments.types';
+import type { CleanupJob } from '@/modules/attachments/attachment-cleanup.repository';
+import type { CardActivityRecord } from '@/modules/cardActivities/cardActivities.types';
 
 export const now = new Date('2026-10-21T00:00:00Z');
 export const makeCard = (id: string, position = 1, listId = 'list'): CardRecord => ({
@@ -29,6 +32,7 @@ export const makeCard = (id: string, position = 1, listId = 'list'): CardRecord 
 	background: null,
 	status: 'ACTIVE',
 	isComplete: false,
+	reminderMinutesBefore: null,
 	createdAt: now,
 	updatedAt: now,
 	deletedAt: null,
@@ -52,19 +56,27 @@ const tables = [
 ];
 
 type State = {
+	reminders: { cardId: string; revision: string; scheduledAt: Date | null }[];
+	attachments: AttachmentRecord[];
+	cleanupJobs: (CleanupJob & { legacyFileUrl?: string | null })[];
 	cards: CardRecord[];
 	lists: ListRecord[];
 	assignments: CardAssignment[];
 	relations: CardLabelRelation[];
 	notifications: NotificationRecord[];
+	activities: Omit<CardActivityRecord, 'user'>[];
 	children: Record<string, string[]>;
 };
 const clone = (value: State): State => ({
+	reminders: value.reminders.map((row) => ({ ...row })),
+	attachments: value.attachments.map((row) => ({ ...row })),
+	cleanupJobs: value.cleanupJobs.map((row) => ({ ...row })),
 	cards: value.cards.map((row) => ({ ...row })),
 	lists: value.lists.map((row) => ({ ...row })),
 	assignments: value.assignments.map((row) => ({ ...row })),
 	relations: value.relations.map((row) => ({ ...row })),
 	notifications: [...value.notifications],
+	activities: value.activities.map((row) => ({ ...row })),
 	children: Object.fromEntries(
 		Object.entries(value.children).map(([table, rows]) => [table, [...rows]]),
 	),
@@ -73,11 +85,15 @@ const clone = (value: State): State => ({
 // The transaction double commits drafts only after the callback and models the explicit Project lock.
 export function cardFixture(cards = [makeCard('card')]) {
 	let state: State = {
+		reminders: [],
+		attachments: [],
+		cleanupJobs: [],
 		cards: cards.map((row) => ({ ...row })),
 		lists: [makeList('list'), makeList('target'), makeList('foreign', 'other-board')],
 		assignments: [],
 		relations: [],
 		notifications: [],
+		activities: [],
 		children: Object.fromEntries(tables.map((table) => [table, ['card', 'other']])),
 	};
 	let queue = Promise.resolve();
@@ -88,6 +104,10 @@ export function cardFixture(cards = [makeCard('card')]) {
 		deleteTable: '',
 		updateCard: '',
 		commit: false,
+		activity: false,
+		attachment: false,
+		cleanupJob: false,
+		expedite: false,
 	};
 	const board = {
 		id: 'board',
@@ -107,23 +127,181 @@ export function cardFixture(cards = [makeCard('card')]) {
 	];
 	const membership = { exists: true };
 	const actor = { exists: true };
+	const access = {
+		allowed: true,
+		role: 'BOARD_MEMBER',
+		systemAdmin: false,
+		projectAllowed: false,
+	};
 
 	function models(current: () => State, writable: () => State, txId: number) {
+		const jobs = () => (txId === 0 ? state.cleanupJobs : writable().cleanupJobs);
+		const matchesAttachment = (
+			row: AttachmentRecord,
+			where: { id?: string; cardId?: string },
+		) =>
+			(!where.id || where.id === row.id) &&
+			(!where.cardId || where.cardId === row.cardId);
 		return {
+			cardReminders: {
+				findUnique: jest.fn(
+					async ({ where }: { where: { cardId: string } }) =>
+						current().reminders.find((row) => row.cardId === where.cardId) ??
+						null,
+				),
+				findMany: jest.fn(
+					async ({ where }: { where: { scheduledAt: { lte: Date } } }) =>
+						current().reminders.filter(
+							(row) =>
+								row.scheduledAt &&
+								row.scheduledAt <= where.scheduledAt.lte,
+						),
+				),
+				update: jest.fn(
+					async ({
+						where,
+						data,
+					}: {
+						where: { cardId: string };
+						data: { scheduledAt: Date | null };
+					}) => {
+						const row = writable().reminders.find(
+							(item) => item.cardId === where.cardId,
+						)!;
+						Object.assign(row, data);
+						return row;
+					},
+				),
+				deleteMany: jest.fn(async ({ where }: { where: { cardId: string } }) => {
+					writable().reminders = writable().reminders.filter(
+						(row) => row.cardId !== where.cardId,
+					);
+					return { count: 1 };
+				}),
+				upsert: jest.fn(
+					async ({
+						where,
+						create,
+						update,
+					}: {
+						where: { cardId: string };
+						create: State['reminders'][number];
+						update: Partial<State['reminders'][number]>;
+					}) => {
+						const existing = writable().reminders.find(
+							(row) => row.cardId === where.cardId,
+						);
+						if (existing) Object.assign(existing, update);
+						else writable().reminders.push({ ...create });
+						return existing ?? create;
+					},
+				),
+			},
+			attachmentCleanupJobs: {
+				create: jest.fn(
+					async ({ data }: { data: Partial<CleanupJob> & { id: string } }) => {
+						const row = {
+							publicId: null,
+							resourceType: null,
+							deliveryType: null,
+							leaseId: null,
+							leaseUntil: null,
+							attempts: 0,
+							availableAt: new Date(),
+							...data,
+						};
+						jobs().push(row);
+						return row;
+					},
+				),
+				createMany: jest.fn(
+					async ({
+						data,
+					}: {
+						data: (Partial<CleanupJob> & { id: string })[];
+					}) => {
+						if (failures.cleanupJob)
+							throw new Error('Cleanup job write failed');
+						for (const row of data)
+							if (!jobs().some((job) => job.id === row.id))
+								jobs().push({
+									publicId: null,
+									resourceType: null,
+									deliveryType: null,
+									leaseId: null,
+									leaseUntil: null,
+									attempts: 0,
+									availableAt: new Date(),
+									...row,
+								});
+						return { count: data.length };
+					},
+				),
+				deleteMany: jest.fn(
+					async ({
+						where,
+					}: {
+						where: {
+							id: string;
+							leaseId?: string | null;
+							availableAt?: { gt: Date };
+						};
+					}) => {
+						const rows = jobs();
+						const index = rows.findIndex(
+							(job) =>
+								job.id === where.id &&
+								(where.leaseId === undefined ||
+									job.leaseId === where.leaseId) &&
+								(!where.availableAt ||
+									(job.availableAt &&
+										job.availableAt > where.availableAt.gt)),
+						);
+						if (index < 0) return { count: 0 };
+						rows.splice(index, 1);
+						return { count: 1 };
+					},
+				),
+				updateMany: jest.fn(
+					async ({
+						where,
+						data,
+					}: {
+						where: { id: string };
+						data: Partial<CleanupJob>;
+					}) => {
+						if (failures.expedite) throw new Error('Expedite failed');
+						const job = jobs().find((row) => row.id === where.id);
+						if (!job) return { count: 0 };
+						Object.assign(job, data);
+						return { count: 1 };
+					},
+				),
+			},
 			cards: {
 				findUnique: jest.fn(
 					async ({
 						where,
 						select,
+						include,
 					}: {
 						where: { id: string };
 						select?: { list?: unknown };
+						include?: unknown;
 					}) => {
 						const row = current().cards.find((item) => item.id === where.id);
 						if (!row) return null;
 						const list = current().lists.find(
 							(item) => item.id === row.listId,
 						)!;
+						if (include)
+							return {
+								...row,
+								cardMembers: current().assignments.filter(
+									(member) => member.cardId === row.id,
+								),
+								list: { ...list, board },
+							};
 						return select?.list
 							? {
 									...row,
@@ -182,7 +360,9 @@ export function cardFixture(cards = [makeCard('card')]) {
 						const row = writable().cards.find(
 							(item) => item.id === where.id,
 						)!;
-						Object.assign(row, data);
+						Object.assign(row, data, {
+							updatedAt: new Date(now.getTime() + txId),
+						});
 						events.push(`${txId}:card-write:${row.id}`);
 						return { ...row };
 					},
@@ -191,6 +371,9 @@ export function cardFixture(cards = [makeCard('card')]) {
 					const draft = writable();
 					const row = draft.cards.find((item) => item.id === where.id)!;
 					draft.cards = draft.cards.filter((item) => item.id !== where.id);
+					draft.reminders = draft.reminders.filter(
+						(item) => item.cardId !== where.id,
+					);
 					events.push(`${txId}:delete:cards`);
 					return row;
 				}),
@@ -202,6 +385,39 @@ export function cardFixture(cards = [makeCard('card')]) {
 				),
 			},
 			boards: { findUnique: jest.fn(async () => board) },
+			roles: {
+				findMany: jest.fn(
+					async ({
+						where,
+					}: {
+						where: {
+							usersRoles?: unknown;
+							boardMembers?: unknown;
+							projectMembers?: unknown;
+						};
+					}) => {
+						if (where.usersRoles && access.systemAdmin)
+							return [{ name: 'ADMIN', rolesPermissions: [] }];
+						if (
+							(where.boardMembers && access.allowed) ||
+							(where.projectMembers && access.projectAllowed)
+						)
+							return [
+								{
+									name: where.projectMembers
+										? 'PROJECT_MEMBER'
+										: access.role,
+									rolesPermissions: [
+										'GET_CARD',
+										'UPDATE_CARD',
+										'DELETE_CARD',
+									].map((name) => ({ permission: { name } })),
+								},
+							];
+						return [];
+					},
+				),
+			},
 			labels: {
 				findUnique: jest.fn(
 					async ({ where }: { where: { id: string } }) =>
@@ -214,6 +430,7 @@ export function cardFixture(cards = [makeCard('card')]) {
 				),
 			},
 			users: {
+				findUnique: jest.fn(async () => ({ status: 'ACTIVE' })),
 				findFirst: jest.fn(async () =>
 					actor.exists ? { id: 'actor', name: 'Author' } : null,
 				),
@@ -321,6 +538,7 @@ export function cardFixture(cards = [makeCard('card')]) {
 							}: {
 								where: {
 									cardId?: string;
+									id?: string;
 									checklist?: { cardId: string };
 								};
 							}) => {
@@ -328,6 +546,14 @@ export function cardFixture(cards = [makeCard('card')]) {
 									throw new Error('Child deletion failed');
 								const cardId = where.cardId ?? where.checklist!.cardId;
 								const draft = writable();
+								if (table === 'cardAttachments')
+									draft.attachments = draft.attachments.filter(
+										(row) => !matchesAttachment(row, where),
+									);
+								if (table === 'cardActivity')
+									draft.activities = draft.activities.filter(
+										(row) => row.cardId !== cardId,
+									);
 								draft.children[table] = draft.children[table].filter(
 									(id) => id !== cardId,
 								);
@@ -335,6 +561,73 @@ export function cardFixture(cards = [makeCard('card')]) {
 								return { count: 1 };
 							},
 						),
+						...(table === 'cardAttachments'
+							? {
+									findMany: jest.fn(
+										async ({
+											where,
+										}: {
+											where: { id?: string; cardId?: string };
+										}) =>
+											current().attachments.filter((row) =>
+												matchesAttachment(row, where),
+											),
+									),
+									findFirst: jest.fn(
+										async ({
+											where,
+										}: {
+											where: { id?: string; cardId?: string };
+										}) =>
+											current().attachments.find((row) =>
+												matchesAttachment(row, where),
+											) ?? null,
+									),
+									create: jest.fn(
+										async ({
+											data,
+										}: {
+											data: Omit<AttachmentRecord, 'createdAt'>;
+										}) => {
+											if (failures.attachment)
+												throw new Error(
+													'Attachment write failed',
+												);
+											const row = { ...data, createdAt: now };
+											writable().attachments.push(row);
+											return row;
+										},
+									),
+								}
+							: {}),
+						...(table === 'cardActivity'
+							? {
+									create: jest.fn(
+										async ({
+											data,
+										}: {
+											data: {
+												cardId: string;
+												userId: string;
+												action: string;
+												metadata: CardActivityRecord['metadata'];
+											};
+										}) => {
+											if (failures.activity)
+												throw new Error('Activity write failed');
+											const row = {
+												id: `activity-${txId}-${writable().activities.length}`,
+												details: null,
+												createdAt: now,
+												...data,
+											};
+											writable().activities.push(row);
+											events.push(`${txId}:activity`);
+											return row;
+										},
+									),
+								}
+							: {}),
 					},
 				]),
 			),
@@ -418,6 +711,7 @@ export function cardFixture(cards = [makeCard('card')]) {
 		failures,
 		role,
 		actor,
+		access,
 		membership,
 		board,
 		labels,

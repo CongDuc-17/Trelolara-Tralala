@@ -281,7 +281,7 @@ export class BoardsService {
 					throw new Forbidden('Only an administrator can remove an admin');
 				await this.protectLastAdministrator(boardId, client);
 			}
-			await this.members.removeMember(boardId, userId, client);
+			await this.members.removeMember(boardId, userId, actorId, client);
 		});
 	}
 

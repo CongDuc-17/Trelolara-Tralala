@@ -4,6 +4,7 @@ import {
 	OptionalException,
 } from '@/common/exceptions';
 import { LabelsRepository } from './labels.repository';
+import { recordCardActivity } from '../cardActivities/card-activity';
 import type { DatabaseClient } from '../database';
 import type { LabelRecord, LabelUpdate } from './labels.types';
 
@@ -22,15 +23,37 @@ export class LabelsService {
 			}
 		});
 	}
-	updateLabel(labelId: string, input: LabelUpdate): Promise<LabelRecord> {
+	updateLabel(
+		labelId: string,
+		input: LabelUpdate,
+		actorId: string,
+	): Promise<LabelRecord> {
 		return this.withLabel(labelId, async (label, client) => {
-			const changes: LabelUpdate = {};
-			if (input.name !== undefined) changes.name = input.name;
-			if (input.color !== undefined) changes.color = input.color;
-			if (Object.keys(changes).length === 0)
+			if (input.name === undefined && input.color === undefined)
 				throw new OptionalException(422, 'No fields to update');
+			const changes: LabelUpdate = {};
+			if (input.name !== undefined && input.name !== label.name)
+				changes.name = input.name;
+			if (input.color !== undefined && input.color !== label.color)
+				changes.color = input.color;
+			if (Object.keys(changes).length === 0) return label;
 			try {
-				return await this.repository.updateLabel(labelId, changes, client);
+				const updated = await this.repository.updateLabel(
+					labelId,
+					changes,
+					client,
+				);
+				const changedFields: ('name' | 'color')[] = [];
+				if (changes.name !== undefined) changedFields.push('name');
+				if (changes.color !== undefined) changedFields.push('color');
+				for (const cardId of await this.repository.listCardIds(labelId, client))
+					await recordCardActivity(client, {
+						cardId,
+						userId: actorId,
+						action: 'label_updated',
+						metadata: { labelId, changedFields },
+					});
+				return updated;
 			} catch (error) {
 				this.rethrowConflict(error);
 			}
@@ -41,10 +64,20 @@ export class LabelsService {
 			throw new NotFoundException('Board not found');
 		return this.repository.getLabelsByBoardId(boardId);
 	}
-	async deleteLabel(labelId: string): Promise<void> {
+	async deleteLabel(labelId: string, actorId: string): Promise<void> {
 		await this.withLabel(
 			labelId,
-			(_label, client) => this.repository.deleteLabel(labelId, client),
+			async (_label, client) => {
+				const cardIds = await this.repository.listCardIds(labelId, client);
+				await this.repository.deleteLabel(labelId, client);
+				for (const cardId of cardIds)
+					await recordCardActivity(client, {
+						cardId,
+						userId: actorId,
+						action: 'label_removed',
+						metadata: { labelId, reason: 'label_deleted' },
+					});
+			},
 			false,
 		);
 	}

@@ -1,6 +1,6 @@
 export * from './createCard.request';
 export * from './moveCard.request';
-export * from './updateInfomationCard.request';
+export * from './updateCard.request';
 export * from './removeLabel.request';
 export * from './addMember.request';
 export * from './getCard.request';

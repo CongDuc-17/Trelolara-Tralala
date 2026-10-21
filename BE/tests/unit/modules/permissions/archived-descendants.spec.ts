@@ -80,6 +80,7 @@ describe('Archive guards on descendant routes', () => {
 		});
 	});
 	it.each([
+		[cardsRouter, '/:cardId', { cardId: id }, { isComplete: true }, 'patch'],
 		[
 			cardsRouter,
 			'/:cardId/checklists',
@@ -140,6 +141,7 @@ describe('Archive guards on descendant routes', () => {
 	);
 
 	it.each([
+		[cardsRouter, '/:cardId', { cardId: id }, { description: null }, 'patch'],
 		[listsRouter, '/:listId/cards', { listId: id }, { title: 'New card' }, 'post'],
 		[cardsRouter, '/:cardId/move', { cardId: id }, { targetListId: id }, 'patch'],
 		[cardsRouter, '/:cardId/restore', { cardId: id }, {}, 'patch'],
@@ -187,6 +189,7 @@ describe('Archive guards on descendant routes', () => {
 	);
 
 	it.each([
+		[cardsRouter, '/:cardId', { cardId: id }, { dueDate: null }],
 		[listsRouter, '/:listId/move', { listId: id }, {}],
 		[cardsRouter, '/:cardId/move', { cardId: id }, { targetListId: id }],
 		[

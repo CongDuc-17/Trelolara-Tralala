@@ -26,6 +26,28 @@ export interface ResourceState {
 export class PermissionsRepository {
 	constructor(private readonly client: DatabaseClient = prisma) {}
 
+	// SQL scope for discovery queries; legacy accepted=false memberships retain their grants.
+	async boardReadScope(
+		userId: string,
+		permission: 'GET_CARD' | 'GET_BOARD',
+	): Promise<Prisma.boardsWhereInput> {
+		if ((await this.listSystemRoles(userId)).some((role) => role.name === 'ADMIN'))
+			return {};
+		const role: Prisma.rolesWhereInput = {
+			status: 'ACTIVE',
+			deletedAt: null,
+			rolesPermissions: {
+				some: { permission: { name: permission, deletedAt: null } },
+			},
+		};
+		return {
+			OR: [
+				{ boardMembers: { some: { userId, role } } },
+				{ project: { members: { some: { userId, role } } } },
+			],
+		};
+	}
+
 	findProjectState(projectId: string): Promise<ResourceState | null> {
 		return this.client.projects.findUnique({
 			where: { id: projectId },

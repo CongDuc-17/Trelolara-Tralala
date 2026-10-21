@@ -1,4 +1,18 @@
 export type CardStatus = 'ACTIVE' | 'ARCHIVED';
+export interface CardUpdateInput {
+	title?: string;
+	description?: string | null;
+	dueDate?: Date | null;
+	isComplete?: boolean;
+	reminderMinutesBefore?: 60 | 1440 | null;
+}
+export interface CardUpdateActivityDetails {
+	changedFields: (keyof CardUpdateInput)[];
+	title?: { from: string; to: string };
+	dueDate?: { from: Date | null; to: Date | null };
+	isComplete?: { from: boolean; to: boolean };
+	reminderMinutesBefore?: { from: number | null; to: number | null };
+}
 export interface CardAssignment {
 	id: string;
 	cardId: string;
@@ -17,6 +31,7 @@ export interface CardRecord {
 	position: number;
 	status: CardStatus;
 	isComplete: boolean;
+	reminderMinutesBefore: number | null;
 	background: string | null;
 	dueDate: Date | null;
 	createdAt: Date;
@@ -53,7 +68,15 @@ export interface CommentView {
 export interface CardQuery
 	extends Pick<
 		CardRecord,
-		'id' | 'title' | 'description' | 'dueDate' | 'position' | 'listId' | 'createdAt'
+		| 'id'
+		| 'title'
+		| 'description'
+		| 'dueDate'
+		| 'isComplete'
+		| 'reminderMinutesBefore'
+		| 'position'
+		| 'listId'
+		| 'createdAt'
 	> {
 	_count?: {
 		cardMembers: number;
@@ -72,11 +95,17 @@ export interface CardListEntry extends CardRecord {
 	checklists: ChecklistView[];
 	_count: { comments: number };
 }
+export interface CardListSummary extends CardListEntry {
+	isOverdue: boolean;
+}
 export interface CardDetails {
 	id: string;
 	title: string;
 	description: string | null;
 	dueDate: Date | null;
+	isComplete: boolean;
+	reminderMinutesBefore: number | null;
+	isOverdue: boolean;
 	position: number;
 	listId: string;
 	memberCount: number;

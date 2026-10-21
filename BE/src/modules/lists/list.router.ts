@@ -21,6 +21,7 @@ import {
 import {
 	cardRequestQuery,
 	cardResponseDtoSchema,
+	cardListSummaryResponseDtoSchema,
 	createCardRequestSchema,
 	createCardRequestValidationSchema,
 } from '../cards/dtos';
@@ -130,7 +131,7 @@ listsRegistry.registerPath({
 		query: cardRequestQuery,
 	},
 	responses: createApiResponse(
-		cardResponseDtoSchema.array(),
+		cardListSummaryResponseDtoSchema.array(),
 		'Success',
 		StatusCodes.OK,
 	),

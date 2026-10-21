@@ -192,7 +192,12 @@ describe('BoardsService business rules', () => {
 		members.countAdministrators.mockResolvedValue(2);
 		await service.removeMember('board', 'admin', 'actor');
 		expect(members.countAdministrators).toHaveBeenCalledWith('board', client);
-		expect(members.removeMember).toHaveBeenCalledWith('board', 'admin', client);
+		expect(members.removeMember).toHaveBeenCalledWith(
+			'board',
+			'admin',
+			'actor',
+			client,
+		);
 		expect(members.countAdministrators.mock.invocationCallOrder[0]).toBeGreaterThan(
 			repository.lockBoard.mock.invocationCallOrder[0],
 		);

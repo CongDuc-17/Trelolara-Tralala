@@ -23,13 +23,17 @@ describe('deleteBoardTree', () => {
 			children.map((name) => [
 				name,
 				{
+					findMany: jest.fn().mockResolvedValue([]),
 					deleteMany: jest.fn().mockImplementation(async () => {
 						calls.push(name);
 						return { count: 1 };
 					}),
 				},
 			]),
-		) as Record<(typeof children)[number], { deleteMany: jest.Mock }>;
+		) as Record<
+			(typeof children)[number],
+			{ deleteMany: jest.Mock; findMany: jest.Mock }
+		>;
 		const transaction = {
 			...repositories,
 			boards: {

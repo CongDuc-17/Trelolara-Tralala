@@ -1,4 +1,8 @@
-import { NotFoundException, OptionalException } from '@/common/exceptions';
+import {
+	ForbiddenException,
+	NotFoundException,
+	OptionalException,
+} from '@/common/exceptions';
 import {
 	calculateNewPosition,
 	isPositionBetween,
@@ -13,15 +17,19 @@ import { NotificationsService } from '../notifications/notifications.service';
 import type { DatabaseClient } from '../database';
 import type { ListRecord } from '../lists/lists.types';
 import { CardsRepository } from './card.repository';
-import { mapCard } from './card.mapper';
+import { recordCardActivity } from '../cardActivities/card-activity';
+import { isCardOverdue, mapCard } from './card.mapper';
+import { rescheduleCardReminder } from '../cardReminders/card-reminder.schedule';
 import type {
 	CardAssignment,
 	CardDetails,
 	CardIncludes,
 	CardLabelRelation,
-	CardListEntry,
+	CardListSummary,
 	CardRecord,
 	CardStatus,
+	CardUpdateInput,
+	CardUpdateActivityDetails,
 } from './cards.types';
 
 export class CardsService {
@@ -40,10 +48,12 @@ export class CardsService {
 		listId: string,
 		_actorId: string,
 		status?: CardStatus,
-	): Promise<CardListEntry[]> {
+	): Promise<CardListSummary[]> {
 		if (!(await this.listsRepository.getListById(listId)))
 			throw new NotFoundException('List not found');
-		return this.cardsRepository.getAllCardsByListId(listId, status);
+		const cards = await this.cardsRepository.getAllCardsByListId(listId, status);
+		const now = Date.now();
+		return cards.map((card) => ({ ...card, isOverdue: isCardOverdue(card, now) }));
 	}
 	async getCardById(cardId: string, include?: CardIncludes): Promise<CardDetails> {
 		const card = include
@@ -53,7 +63,85 @@ export class CardsService {
 		return mapCard(card, include);
 	}
 
-	createCard(title: string, listId: string, _actorId: string): Promise<CardRecord> {
+	async updateCard(
+		cardId: string,
+		input: CardUpdateInput,
+		actorId: string,
+	): Promise<CardRecord> {
+		if (Object.values(input).every((value) => value === undefined))
+			throw new OptionalException(422, 'Provide at least one card field');
+		return this.withLockedCard(cardId, async (card, list, client) => {
+			if (!(await this.cardsRepository.canUpdate(actorId, list.boardId, client)))
+				throw new ForbiddenException();
+			const changes: CardUpdateInput = {};
+			if (
+				input.reminderMinutesBefore != null &&
+				!(input.dueDate === undefined ? card.dueDate : input.dueDate)
+			)
+				throw new OptionalException(
+					422,
+					'A deadline is required to enable a reminder',
+				);
+			const details: CardUpdateActivityDetails = { changedFields: [] };
+			if (input.title !== undefined && input.title !== card.title) {
+				changes.title = input.title;
+				details.changedFields.push('title');
+				details.title = { from: card.title, to: input.title };
+			}
+			if (
+				input.description !== undefined &&
+				input.description !== card.description
+			) {
+				changes.description = input.description;
+				// Record the change without duplicating potentially long card content.
+				details.changedFields.push('description');
+			}
+			if (
+				input.dueDate !== undefined &&
+				input.dueDate?.getTime() !== card.dueDate?.getTime()
+			) {
+				changes.dueDate = input.dueDate;
+				details.changedFields.push('dueDate');
+				details.dueDate = { from: card.dueDate, to: input.dueDate };
+			}
+			if (input.isComplete !== undefined && input.isComplete !== card.isComplete) {
+				changes.isComplete = input.isComplete;
+				details.changedFields.push('isComplete');
+				details.isComplete = { from: card.isComplete, to: input.isComplete };
+			}
+			if (
+				input.reminderMinutesBefore !== undefined &&
+				input.reminderMinutesBefore !== card.reminderMinutesBefore
+			) {
+				changes.reminderMinutesBefore = input.reminderMinutesBefore;
+				details.changedFields.push('reminderMinutesBefore');
+				details.reminderMinutesBefore = {
+					from: card.reminderMinutesBefore,
+					to: input.reminderMinutesBefore,
+				};
+			}
+			if (!details.changedFields.length) return card;
+			const updated = await this.cardsRepository.updateCard(
+				cardId,
+				changes,
+				client,
+			);
+			if (
+				changes.dueDate !== undefined ||
+				changes.reminderMinutesBefore !== undefined
+			)
+				await rescheduleCardReminder(client, updated);
+			await recordCardActivity(client, {
+				cardId,
+				userId: actorId,
+				action: 'updated',
+				metadata: details,
+			});
+			return updated;
+		});
+	}
+
+	createCard(title: string, listId: string, actorId: string): Promise<CardRecord> {
 		return this.listsRepository.inTransaction(async (repository, client) => {
 			await repository.lockList(listId);
 			const list = await repository.getListById(listId);
@@ -69,14 +157,26 @@ export class CardsService {
 				listId,
 				client,
 			);
-			return this.cardsRepository.createCard(title, listId, position, client);
+			const card = await this.cardsRepository.createCard(
+				title,
+				listId,
+				position,
+				client,
+			);
+			await recordCardActivity(client, {
+				cardId: card.id,
+				userId: actorId,
+				action: 'created',
+				metadata: { listId, position },
+			});
+			return card;
 		});
 	}
 
 	async moveCard(
 		cardId: string,
 		targetListId: string,
-		_actorId: string,
+		actorId: string,
 		beforeCardId?: string,
 		afterCardId?: string,
 	): Promise<CardRecord> {
@@ -101,9 +201,11 @@ export class CardsService {
 				);
 			await lists.lockList(targetListId);
 			await this.requireActiveList(lists, target);
-			const siblings = (
-				await this.cardsRepository.getActiveCardsByListId(targetListId, client)
-			).filter((item) => item.id !== cardId);
+			const allSiblings = await this.cardsRepository.getActiveCardsByListId(
+				targetListId,
+				client,
+			);
+			const siblings = allSiblings.filter((item) => item.id !== cardId);
 			const before =
 				beforeCardId === undefined
 					? -1
@@ -126,26 +228,48 @@ export class CardsService {
 					'Neighbors must be adjacent and ordered',
 				);
 			const index = after >= 0 ? after : before >= 0 ? before + 1 : siblings.length;
+			if (
+				card.listId === targetListId &&
+				allSiblings.findIndex((item) => item.id === cardId) === index
+			)
+				return card;
 			const position = await this.allocatePosition(
 				siblings,
 				index,
 				targetListId,
 				client,
 			);
-			return this.cardsRepository.updateCardPosition(
+			const moved = await this.cardsRepository.updateCardPosition(
 				targetListId,
 				card.id,
 				position,
 				client,
 			);
+			await recordCardActivity(client, {
+				cardId,
+				userId: actorId,
+				action: 'moved',
+				metadata: {
+					from: { listId: card.listId, position: card.position },
+					to: { listId: moved.listId, position: moved.position },
+				},
+			});
+			return moved;
 		});
 	}
-	archiveCard(cardId: string, _actorId: string): Promise<CardRecord> {
-		return this.withLockedCard(cardId, (_card, _list, client) =>
-			this.cardsRepository.archiveCard(cardId, client),
-		);
+	archiveCard(cardId: string, actorId: string): Promise<CardRecord> {
+		return this.withLockedCard(cardId, async (card, _list, client) => {
+			const archived = await this.cardsRepository.archiveCard(cardId, client);
+			await recordCardActivity(client, {
+				cardId,
+				userId: actorId,
+				action: 'archived',
+				metadata: { listId: card.listId },
+			});
+			return archived;
+		});
 	}
-	restoreCard(cardId: string): Promise<CardRecord> {
+	restoreCard(cardId: string, actorId: string): Promise<CardRecord> {
 		return this.withLockedCard(
 			cardId,
 			async (card, list, client) => {
@@ -155,7 +279,14 @@ export class CardsService {
 						400,
 						'Only archived cards can be restored',
 					);
-				return this.cardsRepository.restoreCard(cardId, client);
+				const restored = await this.cardsRepository.restoreCard(cardId, client);
+				await recordCardActivity(client, {
+					cardId,
+					userId: actorId,
+					action: 'restored',
+					metadata: { listId: card.listId },
+				});
+				return restored;
 			},
 			false,
 		);
@@ -171,7 +302,11 @@ export class CardsService {
 		);
 	}
 
-	addLabelToCard(cardId: string, labelId: string): Promise<CardLabelRelation> {
+	addLabelToCard(
+		cardId: string,
+		labelId: string,
+		actorId: string,
+	): Promise<CardLabelRelation> {
 		return this.withLockedCard(cardId, async (_card, list, client) => {
 			const label = await this.labelsRepository.getLabelById(labelId, client);
 			if (!label) throw new NotFoundException('Label not found');
@@ -179,14 +314,40 @@ export class CardsService {
 				throw new OptionalException(422, 'Label must belong to the card board');
 			if (await this.cardLabelsRepository.findLabelOnCard(cardId, labelId, client))
 				throw new OptionalException(400, 'Label already exists on the card');
-			return this.cardLabelsRepository.addLabelToCard(cardId, labelId, client);
+			const relation = await this.cardLabelsRepository.addLabelToCard(
+				cardId,
+				labelId,
+				client,
+			);
+			await recordCardActivity(client, {
+				cardId,
+				userId: actorId,
+				action: 'label_added',
+				metadata: { labelId },
+			});
+			return relation;
 		});
 	}
-	async removeLabelFromCard(cardId: string, labelId: string): Promise<void> {
+	async removeLabelFromCard(
+		cardId: string,
+		labelId: string,
+		actorId: string,
+	): Promise<void> {
 		await this.withLockedCard(cardId, async (_card, _list, client) => {
 			if (!(await this.labelsRepository.getLabelById(labelId, client)))
 				throw new NotFoundException('Label not found');
-			await this.cardLabelsRepository.removeLabelFromCard(cardId, labelId, client);
+			const result = await this.cardLabelsRepository.removeLabelFromCard(
+				cardId,
+				labelId,
+				client,
+			);
+			if (result.count)
+				await recordCardActivity(client, {
+					cardId,
+					userId: actorId,
+					action: 'label_removed',
+					metadata: { labelId },
+				});
 		});
 	}
 
@@ -233,6 +394,12 @@ export class CardsService {
 					userId,
 					client,
 				);
+				await recordCardActivity(client, {
+					cardId,
+					userId: actorId,
+					action: 'member_added',
+					metadata: { userId },
+				});
 				const notification =
 					userId === actorId
 						? null
@@ -254,7 +421,11 @@ export class CardsService {
 		if (notification) await this.notificationsService.deliver(notification);
 		return member;
 	}
-	async removeMemberFromCard(cardId: string, userId: string): Promise<void> {
+	async removeMemberFromCard(
+		cardId: string,
+		userId: string,
+		actorId: string,
+	): Promise<void> {
 		await this.withLockedCard(cardId, async (_card, _list, client) => {
 			const result = await this.cardMembersRepository.removeMemberFromCard(
 				cardId,
@@ -263,6 +434,12 @@ export class CardsService {
 			);
 			if (!result.count)
 				throw new NotFoundException('Member is not assigned to this card');
+			await recordCardActivity(client, {
+				cardId,
+				userId: actorId,
+				action: 'member_removed',
+				metadata: { userId },
+			});
 		});
 	}
 

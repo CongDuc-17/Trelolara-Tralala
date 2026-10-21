@@ -12,6 +12,8 @@ const row: CardQuery = {
 	title: 'Card',
 	description: null,
 	dueDate: null,
+	isComplete: false,
+	reminderMinutesBefore: null,
 	listId: id,
 	position: 1,
 	createdAt: date,
@@ -48,6 +50,9 @@ describe('Card query projections and FE shape', () => {
 				'title',
 				'description',
 				'dueDate',
+				'isComplete',
+				'reminderMinutesBefore',
+				'isOverdue',
 				'listId',
 				'position',
 				'createdAt',
@@ -61,6 +66,8 @@ describe('Card query projections and FE shape', () => {
 		expect(data).toMatchObject({
 			description: null,
 			dueDate: null,
+			isComplete: false,
+			isOverdue: false,
 			memberCount: 1,
 			commentCount: 1,
 			_links: { comments: `/cards/${id}/comments` },
@@ -119,9 +126,11 @@ describe('Card query projections and FE shape', () => {
 			avatar: true,
 		});
 		expect(query.select.cardLabels).toBe(false);
+		expect(query.select.isComplete).toBe(true);
 		expect(query.select.checklists).toBe(false);
 		await repository.getCardWithCounts(id);
 		expect(findUnique.mock.calls[1][0].select).not.toHaveProperty('cardMembers');
+		expect(findUnique.mock.calls[1][0].select.isComplete).toBe(true);
 	});
 	it('returns plain data and a controlled missing-card error', async () => {
 		const repository = {
@@ -141,12 +150,10 @@ describe('Card query projections and FE shape', () => {
 		});
 	});
 	it('locks captured ancestry even if the old list disappears after a concurrent move', async () => {
-		const findUnique = jest
-			.fn()
-			.mockResolvedValue({
-				listId: 'old-list',
-				list: { boardId: 'board', board: { projectId: 'project' } },
-			});
+		const findUnique = jest.fn().mockResolvedValue({
+			listId: 'old-list',
+			list: { boardId: 'board', board: { projectId: 'project' } },
+		});
 		const queryRaw = jest.fn().mockResolvedValue([]);
 		const repository = new CardsRepository({
 			cards: { findUnique },

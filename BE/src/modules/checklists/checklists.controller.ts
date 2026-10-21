@@ -8,6 +8,7 @@ export class ChecklistsController {
 		const data = await this.service.createChecklist(
 			req.params.cardId as string,
 			req.body.title,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: new ChecklistResponseDto(data) });
 	}
@@ -21,11 +22,15 @@ export class ChecklistsController {
 		const data = await this.service.updateChecklistTitle(
 			req.params.checklistId as string,
 			req.body.title,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: new ChecklistResponseDto(data) });
 	}
 	async deleteChecklist(req: Request, res: Response): Promise<Response> {
-		await this.service.deleteChecklist(req.params.checklistId as string);
+		await this.service.deleteChecklist(
+			req.params.checklistId as string,
+			req.user!.id!,
+		);
 		return res.json({ success: true, data: null });
 	}
 }
