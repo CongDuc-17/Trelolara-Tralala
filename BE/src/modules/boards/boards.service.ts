@@ -1,453 +1,360 @@
 import {
-	HttpResponseBodySuccessDto,
+	AppError,
+	Forbidden,
 	InternalServerException,
 	NotFoundException,
-	ObjectComparerDto,
 	OptionalException,
-	PaginationDto,
-	PaginationUtils,
-} from '@/common';
-import { BoardsRepository } from './boards.repository';
-
-import { BoardStatusEnum, ProjectStatusEnum, RoleStatusEnum } from '@prisma/client';
-
-import { RolesRepository } from '../roles/roles.repository';
-import { Forbidden } from '@/common/exceptions/app-error';
-import { BoardMembersRepository } from '../boardMembers/boardMember.repository';
-import {
-	CreateBoardRequestDto,
-	UpdateInformationBoardRequestDto,
-	BoardsResponseDto,
-	UserBoardResponseDto,
-	UpdateBoardResponseDto,
-	GetBoardMembersResponseDto,
-} from './dtos';
-import { BoardRoleEnum } from '@/common/enums/roles';
-import { ProjectsRepository } from '../projects/project.repository';
-import { ProjectMembersRepository } from '../projectMembers/projectMember.repository';
+} from '@/common/exceptions';
 import {
 	deleteImageFromCloudinary,
 	extractPublicIdFromUrl,
 	uploadImageFromBuffer,
 } from '@/common/utils/cloudinary.utils';
-import { UploadApiResponse } from 'cloudinary';
-import { GetBoardsOfProjectRequestDto } from '../projects/dtos/requests';
-import { GetBoardResponseDto } from './dtos/responses/getBoard.response';
+import { BoardMembersRepository } from '../boardMembers/boardMember.repository';
+import type { DatabaseClient } from '../database';
+import { BoardsRepository } from './boards.repository';
+import type {
+	BackgroundStorage,
+	BoardDetails,
+	BoardInput,
+	BoardMember,
+	BoardRecord,
+	BoardsPage,
+	BoardStatus,
+	BoardSummary,
+	BoardUpdate,
+	UserBoard,
+} from './boards.types';
+
+const backgroundStorage: BackgroundStorage = {
+	upload: uploadImageFromBuffer,
+	delete: deleteImageFromCloudinary,
+	extractPublicId: (url) => extractPublicIdFromUrl(url, 'TrelloLike_BoardBackgrounds'),
+};
 
 export class BoardsService {
 	constructor(
-		private readonly projectsRepository: ProjectsRepository = new ProjectsRepository(),
-		private readonly projectMembersRepository: ProjectMembersRepository = new ProjectMembersRepository(),
-		private readonly boardsRepository: BoardsRepository = new BoardsRepository(),
-		private readonly boardMembersRepository: BoardMembersRepository = new BoardMembersRepository(),
-		private readonly rolesRepository: RolesRepository = new RolesRepository(),
+		private readonly boardsRepository = new BoardsRepository(),
+		private readonly members = new BoardMembersRepository(),
+		private readonly storage: BackgroundStorage = backgroundStorage,
 	) {}
 
 	async createBoard(
 		projectId: string,
-		createBoard: CreateBoardRequestDto,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<GetBoardResponseDto>> {
-		const boardAdminRole = await this.rolesRepository.findByName(
-			BoardRoleEnum.BOARD_ADMIN,
-		);
-		if (!boardAdminRole) {
-			throw new NotFoundException('Board admin role not found');
-		}
-
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-
-		const isMemberProject = await this.projectMembersRepository.isUserMemberOfProject(
-			projectId,
-			userId,
-		);
-		if (!isMemberProject) {
-			throw new Forbidden('You are not a member of this project');
-		}
-
-		const board = await this.boardsRepository.createBoard(
-			projectId,
-			createBoard.name,
-			createBoard.description,
-		);
-
-		await this.boardMembersRepository.assignUserRoleBoard(
-			board.id,
-			userId,
-			boardAdminRole.id,
-		);
-		const boardWithMembers = await this.boardsRepository.getBoardById(board.id);
-		if (!boardWithMembers) {
-			throw new NotFoundException('Board not found');
-		}
-		return {
-			success: true,
-			data: new GetBoardResponseDto({
-				id: board.id,
-				name: board.name,
-				description: board.description ?? undefined,
-				projectId: board.projectId,
+		input: BoardInput,
+		actorId: string,
+	): Promise<BoardDetails> {
+		return this.boardsRepository.inTransaction(async (repository, client) => {
+			await repository.lockProject(projectId);
+			await this.requireActiveProject(repository, projectId);
+			const role = await repository.findRole({ name: 'BOARD_ADMIN' });
+			if (!role || role.status !== 'ACTIVE')
+				throw new NotFoundException('Board admin role not found');
+			const board = await repository.createBoard(
+				projectId,
+				input.name,
+				input.description,
+			);
+			await this.members.assignUserRoleBoard(board.id, actorId, role.id, client);
+			return {
+				...this.mapUpdate(board),
 				status: board.status,
-				background: board.background ?? undefined,
-				roleId: boardAdminRole.id,
-				roleName: boardAdminRole.name,
-				memberCount: boardWithMembers._count.boardMembers ?? 1,
-				listCount: boardWithMembers._count.lists ?? 0,
+				roleId: role.id,
+				roleName: role.name,
+				memberCount: 1,
+				listCount: 0,
 				createdAt: board.createdAt,
 				updatedAt: board.updatedAt,
-			}),
-		};
+			};
+		});
 	}
 
 	async getBoardsOfUserInProject(
 		projectId: string,
 		userId: string,
-		getBoardsOfProjectRequestDto: GetBoardsOfProjectRequestDto,
-		pagination: PaginationDto,
-	): Promise<HttpResponseBodySuccessDto<BoardsResponseDto[]>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
+		input: { status?: BoardStatus },
+		pagination: { page: number; limit: number },
+	): Promise<BoardsPage<BoardSummary>> {
+		if (!(await this.boardsRepository.getProject(projectId)))
 			throw new NotFoundException('Project not found');
-		}
-		const { status } = getBoardsOfProjectRequestDto;
-		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
-			pagination,
-		);
-
-		const [boards, totalBoards] =
-			await this.boardMembersRepository.getBoardsOfUserInProject({
-				projectId,
-				userId,
-				status: status as BoardStatusEnum,
-				skip: paginationUtils.skip,
-				take: paginationUtils.take,
-			});
-
-		const boardDtos = boards.map(
-			(board) =>
-				new BoardsResponseDto({
-					projectId: projectId,
-					id: board.boardId,
-					name: board.board.name,
-					description: board.board.description ?? undefined,
-					background: board.board.background ?? undefined,
-					status: board.board.status,
-					_count: {
-						lists: board.board._count.lists,
-						members: board.board._count.boardMembers,
-					},
-				}),
-		);
-
+		const [rows, totalItems] = await this.members.getBoardsOfUserInProject({
+			projectId,
+			userId,
+			status: input.status,
+			skip: (pagination.page - 1) * pagination.limit,
+			take: pagination.limit,
+		});
 		return {
-			success: true,
-			data: boardDtos,
-			pagination:
-				paginationUtils.convertPaginationResponseDtoFromTotalRecords(totalBoards),
+			items: rows.map(({ board }) => ({
+				...this.mapUpdate({ ...board, projectId }),
+				status: board.status,
+				membersCount: board._count.boardMembers,
+				listsCount: board._count.lists,
+			})),
+			totalItems,
+			...pagination,
 		};
 	}
 
 	async getBoardsOfUser(
 		userId: string,
-		getBoardsOfProjectRequestDto: GetBoardsOfProjectRequestDto,
-		pagination: PaginationDto,
-	): Promise<HttpResponseBodySuccessDto<UserBoardResponseDto[]>> {
-		const { status } = getBoardsOfProjectRequestDto;
-		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
-			pagination,
-		);
-
-		const [boards, totalBoards] = await this.boardMembersRepository.getBoardsOfUser({
+		input: { status?: BoardStatus },
+		pagination: { page: number; limit: number },
+	): Promise<BoardsPage<UserBoard>> {
+		const [rows, totalItems] = await this.members.getBoardsOfUser({
 			userId,
-			status: status as BoardStatusEnum,
-			skip: paginationUtils.skip,
-			take: paginationUtils.take,
+			status: input.status,
+			skip: (pagination.page - 1) * pagination.limit,
+			take: pagination.limit,
 		});
-
-		const boardDtos = boards.map(
-			(board) =>
-				new UserBoardResponseDto({
-					projectId: board.board.projectId,
-					projectName: board.board.project.name,
-					projectStatus: board.board.project.status,
-					id: board.boardId,
-					name: board.board.name,
-					description: board.board.description ?? undefined,
-					background: board.board.background ?? undefined,
-					status:
-						board.board.project.status === ProjectStatusEnum.ARCHIVED
-							? BoardStatusEnum.ARCHIVED
-							: board.board.status,
-					roleId: board.role.id,
-					roleName: board.role.name,
-					_count: {
-						lists: board.board._count.lists,
-						members: board.board._count.boardMembers,
-					},
-				}),
-		);
-
 		return {
-			success: true,
-			data: boardDtos,
-			pagination:
-				paginationUtils.convertPaginationResponseDtoFromTotalRecords(totalBoards),
+			items: rows.map(({ board, role }) => ({
+				...this.mapUpdate(board),
+				status: board.project.status === 'ARCHIVED' ? 'ARCHIVED' : board.status,
+				projectName: board.project.name,
+				projectStatus: board.project.status,
+				roleId: role.id,
+				roleName: role.name,
+				membersCount: board._count.boardMembers,
+				listsCount: board._count.lists,
+			})),
+			totalItems,
+			...pagination,
 		};
 	}
 
-	async getBoardById(
-		boardId: string,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<GetBoardResponseDto>> {
-		const isMember = await this.boardMembersRepository.isUserMemberOfBoard(
+	async getBoardById(boardId: string, actorId: string): Promise<BoardDetails> {
+		const board = await this.requireBoard(this.boardsRepository, boardId);
+		const role = await this.boardsRepository.getActorRole(
 			boardId,
-			userId,
+			board.projectId,
+			actorId,
 		);
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this board');
-		}
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-		const project = await this.projectsRepository.getProjectById(board.projectId);
-		if (project && project.status === ProjectStatusEnum.ARCHIVED) {
-			throw new Forbidden(
-				'Cannot access this board because its parent project is archived',
-			);
-		}
-
+		if (!role) throw new Forbidden('You do not have access to this board');
 		return {
-			success: true,
-			data: new GetBoardResponseDto({
-				id: board.id,
-				name: board.name,
-				description: board.description ?? undefined,
-				projectId: board.projectId,
-				status: board.status,
-				background: board.background ?? undefined,
-				roleId: isMember.roleId,
-				roleName: isMember.role.name,
-				memberCount: board._count.boardMembers,
-				listCount: board._count.lists,
-				createdAt: board.createdAt,
-				updatedAt: board.updatedAt,
-			}),
+			...this.mapUpdate(board),
+			status: board.status,
+			roleId: role.id,
+			roleName: role.name,
+			memberCount: board._count.boardMembers,
+			listCount: board._count.lists,
+			createdAt: board.createdAt,
+			updatedAt: board.updatedAt,
 		};
 	}
 
-	async updateBoard(
-		boardId: string,
-		data: UpdateInformationBoardRequestDto,
-	): Promise<HttpResponseBodySuccessDto<UpdateBoardResponseDto>> {
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-		const updatedBoard = await this.boardsRepository.updateBoard(boardId, {
-			name: data.name ?? board.name,
-			description: data.description ?? board.description,
+	async updateBoard(boardId: string, input: Partial<BoardInput>): Promise<BoardUpdate> {
+		return this.withLockedBoard(boardId, async (repository) => {
+			const changes: Partial<BoardInput> = {};
+			if (input.name !== undefined) changes.name = input.name;
+			if (input.description !== undefined) changes.description = input.description;
+			return this.mapUpdate(await repository.updateBoard(boardId, changes));
 		});
-
-		return {
-			success: true,
-			data: new UpdateBoardResponseDto({
-				id: updatedBoard.id,
-				name: updatedBoard.name,
-				description: updatedBoard.description ?? undefined,
-				projectId: updatedBoard.projectId,
-			}),
-		};
 	}
 
 	async uploadBackground(
 		boardId: string,
-		file: Express.Multer.File,
-	): Promise<HttpResponseBodySuccessDto<UpdateBoardResponseDto>> {
-		let uploaded: UploadApiResponse | null = null;
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-
+		file: { buffer: Buffer; mimetype: string },
+	): Promise<BoardUpdate> {
+		let uploaded: Awaited<ReturnType<BackgroundStorage['upload']>> | undefined;
+		let previous: string | null = null;
+		let updated: BoardUpdate;
 		try {
-			uploaded = await uploadImageFromBuffer(
+			// Check lifecycle before uploading; recheck under the lock before committing the new URL.
+			await this.withLockedBoard(boardId, async () => undefined);
+			uploaded = await this.storage.upload(
 				file.buffer,
 				file.mimetype,
 				'TrelloLike_BoardBackgrounds',
 			);
-			const oldPublicId = board.background
-				? extractPublicIdFromUrl(board.background)
-				: null;
-			board.background = uploaded.secure_url;
-			await this.boardsRepository.updateBoard(boardId, {
-				background: board.background,
-			});
-			if (oldPublicId) {
-				await deleteImageFromCloudinary(oldPublicId);
-			}
-
-			return {
-				success: true,
-				data: new UpdateBoardResponseDto({
-					...board,
-					description: board.description ?? undefined,
-					background: board.background ?? undefined,
-				}),
-			};
+			const image = uploaded;
+			updated = await this.withLockedBoard(
+				boardId,
+				async (repository, _client, board) => {
+					previous = board.background;
+					return this.mapUpdate(
+						await repository.updateBoard(boardId, {
+							background: image.secure_url,
+						}),
+					);
+				},
+			);
 		} catch (error) {
-			console.error('Error occurred while uploading background:', error);
-			if (uploaded?.public_id) {
-				await deleteImageFromCloudinary(uploaded.public_id);
-			}
+			if (uploaded) await this.cleanupBackground(uploaded.public_id);
+			if (error instanceof AppError) throw error;
 			throw new InternalServerException();
 		}
+		const oldId = previous ? this.storage.extractPublicId(previous) : null;
+		if (oldId && oldId !== uploaded.public_id) await this.cleanupBackground(oldId);
+		return updated;
 	}
 
-	async archiveBoard(boardId: string): Promise<HttpResponseBodySuccessDto<null>> {
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-
-		await this.boardsRepository.archiveBoard(boardId);
-		return {
-			success: true,
-			data: null,
-		};
-	}
-
-	async restoreBoard(boardId: string): Promise<HttpResponseBodySuccessDto<null>> {
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-		if (board.status !== BoardStatusEnum.ARCHIVED) {
-			throw new OptionalException(400, 'Only archived boards can be restored');
-		}
-		await this.boardsRepository.updateBoard(boardId, {
-			status: BoardStatusEnum.ACTIVE,
-			deletedAt: null,
+	async archiveBoard(boardId: string): Promise<void> {
+		await this.withLockedBoard(boardId, async (repository) => {
+			await repository.archiveBoard(boardId);
 		});
-		return {
-			success: true,
-			data: null,
-		};
 	}
 
-	async deleteBoard(boardId: string): Promise<HttpResponseBodySuccessDto<null>> {
-		try {
-			const board = await this.boardsRepository.getBoardById(boardId);
-			if (!board) {
-				throw new NotFoundException('Board not found');
-			}
-			await this.boardsRepository.deleteBoard(boardId);
-			return {
-				success: true,
-				data: null,
-			};
-		} catch (error) {
-			console.error('Error occurred while deleting board:', error);
-			if (error instanceof NotFoundException) {
-				throw error;
-			}
-			throw new InternalServerException();
-		}
-	}
-
-	async getBoardMembers(
-		boardId: string,
-	): Promise<HttpResponseBodySuccessDto<GetBoardMembersResponseDto[]>> {
-		const board = await this.boardsRepository.getBoardById(boardId);
-		if (!board) {
-			throw new NotFoundException('Board not found');
-		}
-		const members = await this.boardMembersRepository.getBoardMembers(boardId);
-		const memberDtos = members.map(
-			(m) =>
-				new GetBoardMembersResponseDto({
-					boardId: m.boardId,
-					userId: m.userId,
-					name: m.user.name,
-					email: m.user.email,
-					avatar: m.user.avatar ?? '',
-					roleId: m.roleId,
-					roleName: m.role.name,
-				}),
+	async restoreBoard(boardId: string): Promise<void> {
+		await this.withLockedBoard(
+			boardId,
+			async (repository, _client, board) => {
+				await this.requireActiveProject(repository, board.projectId);
+				if (board.status !== 'ARCHIVED')
+					throw new OptionalException(
+						400,
+						'Only archived boards can be restored',
+					);
+				await repository.updateBoard(boardId, {
+					status: 'ACTIVE',
+					deletedAt: null,
+				});
+			},
+			false,
 		);
-		return {
-			success: true,
-			data: memberDtos,
-		};
+	}
+
+	async deleteBoard(boardId: string): Promise<void> {
+		await this.withLockedBoard(
+			boardId,
+			async (repository) => {
+				await repository.deleteBoard(boardId);
+			},
+			false,
+		);
+	}
+
+	async getBoardMembers(boardId: string): Promise<BoardMember[]> {
+		await this.requireBoard(this.boardsRepository, boardId);
+		return (await this.members.getBoardMembers(boardId)).map((member) => ({
+			boardId: member.boardId,
+			userId: member.userId,
+			name: member.user.name,
+			email: member.user.email,
+			avatar: member.user.avatar ?? '',
+			roleId: member.roleId,
+			roleName: member.role.name,
+		}));
 	}
 
 	async changeRoleOfMemberBoard(
 		boardId: string,
 		userId: string,
-		newRoleId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		const existingBoard = await this.boardsRepository.getBoardById(boardId);
-		if (!existingBoard) {
-			throw new NotFoundException('Board not found');
-		}
+		roleId: string,
+		actorId: string,
+	): Promise<void> {
+		await this.withLockedBoard(boardId, async (repository, client, board) => {
+			const role = await repository.findRole({ id: roleId });
+			if (!role) throw new NotFoundException('Role not found');
+			if (role.status !== 'ACTIVE' || !role.name.startsWith('BOARD_'))
+				throw new OptionalException(422, 'Role must be an active board role');
+			const member = await this.members.isUserMemberOfBoard(
+				boardId,
+				userId,
+				client,
+			);
+			if (!member) throw new NotFoundException('Board member not found');
+			if (role.name === 'BOARD_ADMIN' || member.role.name === 'BOARD_ADMIN') {
+				if (
+					!(await repository.isAdministrator(boardId, board.projectId, actorId))
+				)
+					throw new Forbidden('Only an administrator can change an admin role');
+			}
+			if (member.role.name === 'BOARD_ADMIN' && role.name !== 'BOARD_ADMIN')
+				await this.protectLastAdministrator(boardId, client);
+			await this.members.changeRoleOfMemberBoard(boardId, userId, roleId, client);
+		});
+	}
 
-		const role = await new RolesRepository().findById(newRoleId);
+	async removeMember(boardId: string, userId: string, actorId: string): Promise<void> {
+		await this.withLockedBoard(boardId, async (repository, client, board) => {
+			const member = await this.members.isUserMemberOfBoard(
+				boardId,
+				userId,
+				client,
+			);
+			if (!member) throw new NotFoundException('Board member not found');
+			if (member.role.name === 'BOARD_ADMIN') {
+				if (
+					!(await repository.isAdministrator(boardId, board.projectId, actorId))
+				)
+					throw new Forbidden('Only an administrator can remove an admin');
+				await this.protectLastAdministrator(boardId, client);
+			}
+			await this.members.removeMember(boardId, userId, client);
+		});
+	}
 
-		if (!role) {
-			throw new NotFoundException('Role not found');
-		}
-		if (role.status === RoleStatusEnum.INACTIVE) {
-			throw new OptionalException(400, 'Role is inactive');
-		}
-		// Check xem role có phù hợp với phạm vi Board không (bắt đầu với BOARD_)
-		if (!role.name.startsWith('BOARD_')) {
-			throw new OptionalException(400, 'Role must be a board role (BOARD_*)');
-		}
-		if (role.name === BoardRoleEnum.BOARD_ADMIN) {
-			throw new OptionalException(400, 'Cannot assign board admin role');
-		}
+	private async protectLastAdministrator(
+		boardId: string,
+		client: DatabaseClient,
+	): Promise<void> {
+		if ((await this.members.countAdministrators(boardId, client)) <= 1)
+			throw new OptionalException(
+				409,
+				'Board must retain at least one administrator',
+			);
+	}
 
-		const isMember = await this.boardMembersRepository.isUserMemberOfBoard(
-			boardId,
-			userId,
-		);
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this board');
-		}
+	private async requireActiveProject(
+		repository: BoardsRepository,
+		projectId: string,
+	): Promise<void> {
+		const project = await repository.getProject(projectId);
+		if (!project) throw new NotFoundException('Project not found');
+		if (project.status !== 'ACTIVE' || project.deletedAt)
+			throw new OptionalException(409, 'Parent project is read only');
+	}
 
-		await this.boardMembersRepository.changeRoleOfMemberBoard(
-			boardId,
-			userId,
-			newRoleId,
-		);
+	private async requireBoard(repository: BoardsRepository, boardId: string) {
+		const board = await repository.getBoardById(boardId);
+		if (!board) throw new NotFoundException('Board not found');
+		return board;
+	}
+
+	private withLockedBoard<T>(
+		boardId: string,
+		work: (
+			repository: BoardsRepository,
+			client: DatabaseClient,
+			board: BoardRecord,
+		) => Promise<T>,
+		active = true,
+	): Promise<T> {
+		return this.boardsRepository.inTransaction(async (repository, client) => {
+			await repository.lockBoard(boardId);
+			const board = await this.requireBoard(repository, boardId);
+			if (active) {
+				await this.requireActiveProject(repository, board.projectId);
+				if (board.status !== 'ACTIVE' || board.deletedAt)
+					throw new OptionalException(409, 'Board is read only');
+			}
+			return work(repository, client, board);
+		});
+	}
+
+	private mapUpdate(board: {
+		id: string;
+		projectId: string;
+		name: string;
+		description: string | null;
+		background?: string | null;
+	}): BoardUpdate {
 		return {
-			success: true,
-			data: null,
+			id: board.id,
+			projectId: board.projectId,
+			name: board.name,
+			description: board.description ?? undefined,
+			background: board.background ?? undefined,
 		};
 	}
 
-	async removeMember(
-		boardId: string,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		const existingBoard = await this.boardsRepository.getBoardById(boardId);
-		if (!existingBoard) {
-			throw new NotFoundException('Board not found');
+	private async cleanupBackground(publicId: string): Promise<void> {
+		try {
+			await this.storage.delete(publicId);
+		} catch {
+			// shortcut: cleanup is best effort, add persistent retries if orphan uploads need guaranteed removal.
+			console.error('[Boards] Background cleanup failed');
 		}
-		const isMember = await this.boardMembersRepository.isUserMemberOfBoard(
-			boardId,
-			userId,
-		);
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this board');
-		}
-		await this.boardMembersRepository.removeMember(boardId, userId);
-		return {
-			success: true,
-			data: null,
-		};
 	}
 }

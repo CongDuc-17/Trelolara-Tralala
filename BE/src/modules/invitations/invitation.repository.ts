@@ -6,7 +6,7 @@ import {
 	users,
 } from '@prisma/client';
 
-import { prisma as database, type DatabaseClient } from '../database';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
 
 export type InvitationWithOwner = invitations & {
 	owner?: users | null;
@@ -15,6 +15,10 @@ export type InvitationWithOwner = invitations & {
 };
 export class InvitationsRepository {
 	constructor(private readonly prismaService: DatabaseClient = database) {}
+
+	inTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
+		return runInTransaction(work, this.prismaService);
+	}
 
 	async create(data: {
 		projectId?: string;

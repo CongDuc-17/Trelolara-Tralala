@@ -1,15 +1,5 @@
 import z from 'zod';
-import { ZodValidationSchema } from '@/common';
-
-export class UpdateInformationRequestDto {
-	name?: string;
-	description?: string;
-
-	constructor(data: { name?: string; description?: string }) {
-		this.name = data.name;
-		this.description = data.description;
-	}
-}
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 const updateInformationRequestBody = z
 	.object({

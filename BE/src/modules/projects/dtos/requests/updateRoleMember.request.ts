@@ -1,15 +1,5 @@
 import z from 'zod';
-import { ZodValidationSchema } from '@/common';
-
-export class UpdateRoleMemberProjectRequestDto {
-	userId: string;
-	roleId: string;
-
-	constructor(data: { userId: string; roleId: string }) {
-		this.userId = data.userId;
-		this.roleId = data.roleId;
-	}
-}
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 const updateRoleMemberProjectRequestBody = z.object({
 	userId: z.string().uuid(),

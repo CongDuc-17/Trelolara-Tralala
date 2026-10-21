@@ -1,5 +1,9 @@
 import { BoardStatusEnum } from '@prisma/client';
-import { prisma as database, runInTransaction, type DatabaseClient } from '../database/prisma.service';
+import {
+	prisma as database,
+	runInTransaction,
+	type DatabaseClient,
+} from '../database/prisma.service';
 
 export class BoardMembersRepository {
 	constructor(private readonly prisma: DatabaseClient = database) {}
@@ -54,9 +58,7 @@ export class BoardMembersRepository {
 						},
 					},
 				},
-				orderBy: {
-					invitedAt: 'desc',
-				},
+				orderBy: [{ invitedAt: 'desc' }, { id: 'asc' }],
 			}),
 			this.prisma.boardMembers.count({
 				where: {
@@ -125,9 +127,7 @@ export class BoardMembersRepository {
 						},
 					},
 				},
-				orderBy: {
-					invitedAt: 'desc',
-				},
+				orderBy: [{ invitedAt: 'desc' }, { id: 'asc' }],
 			}),
 			this.prisma.boardMembers.count({
 				where: {
@@ -140,8 +140,13 @@ export class BoardMembersRepository {
 		]);
 	}
 
-	async assignUserRoleBoard(boardId: string, userId: string, roleId: string) {
-		return this.prisma.boardMembers.create({
+	async assignUserRoleBoard(
+		boardId: string,
+		userId: string,
+		roleId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		return client.boardMembers.create({
 			data: {
 				boardId,
 				userId,
@@ -150,14 +155,20 @@ export class BoardMembersRepository {
 		});
 	}
 
-	async isUserMemberOfBoard(boardId: string, userId: string) {
-		const m = await this.prisma.boardMembers.findFirst({
+	async isUserMemberOfBoard(
+		boardId: string,
+		userId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		const m = await client.boardMembers.findFirst({
 			where: { boardId, userId },
 			include: {
 				role: {
 					select: {
 						id: true,
 						name: true,
+						status: true,
+						deletedAt: true,
 					},
 				},
 			},
@@ -168,6 +179,7 @@ export class BoardMembersRepository {
 	async getBoardMembers(boardId: string) {
 		return this.prisma.boardMembers.findMany({
 			where: { boardId },
+			orderBy: [{ invitedAt: 'asc' }, { id: 'asc' }],
 			include: {
 				user: {
 					select: {
@@ -187,18 +199,39 @@ export class BoardMembersRepository {
 		});
 	}
 
-	async changeRoleOfMemberBoard(boardId: string, userId: string, newRoleId: string) {
-		return this.prisma.boardMembers.updateMany({
+	async countAdministrators(
+		boardId: string,
+		client: DatabaseClient = this.prisma,
+	): Promise<number> {
+		return client.boardMembers.count({
+			where: {
+				boardId,
+				role: { name: 'BOARD_ADMIN', status: 'ACTIVE', deletedAt: null },
+			},
+		});
+	}
+
+	async changeRoleOfMemberBoard(
+		boardId: string,
+		userId: string,
+		newRoleId: string,
+		client: DatabaseClient = this.prisma,
+	) {
+		return client.boardMembers.updateMany({
 			where: { boardId, userId },
 			data: { roleId: newRoleId },
 		});
 	}
-	async removeMember(boardId: string, userId: string) {
+	async removeMember(
+		boardId: string,
+		userId: string,
+		client: DatabaseClient = this.prisma,
+	) {
 		return runInTransaction(async (transaction) => {
 			await transaction.cardMembers.deleteMany({
 				where: { userId, card: { list: { boardId } } },
 			});
 			return transaction.boardMembers.deleteMany({ where: { boardId, userId } });
-		}, this.prisma);
+		}, client);
 	}
 }

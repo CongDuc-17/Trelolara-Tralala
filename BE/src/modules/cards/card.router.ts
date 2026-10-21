@@ -77,6 +77,7 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(moveCardRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.MOVE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.moveCard,
 );
 
@@ -93,6 +94,7 @@ router.patch(
 	'/:cardId/archive',
 	authMiddleware.verifyAccessToken,
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.archiveCard,
 );
 
@@ -109,6 +111,7 @@ router.patch(
 	'/:cardId/restore',
 	authMiddleware.verifyAccessToken,
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.restoreCard,
 );
 
@@ -126,6 +129,7 @@ router.delete(
 	'/:cardId',
 	authMiddleware.verifyAccessToken,
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.DELETE_CARD),
+	authMiddleware.verifyBoardLifecycle('delete'),
 	cardsController.deleteCard,
 );
 
@@ -141,6 +145,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(addLabelRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.addLabelToCard,
 );
 
@@ -156,6 +161,7 @@ router.delete(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(removeLabelRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.removeLabelFromCard,
 );
 
@@ -171,6 +177,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(addMemberRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.ASSIGN_MEMBER),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.addMemberToCard,
 );
 
@@ -186,6 +193,7 @@ router.delete(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(removeMemberRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UNASSIGN_MEMBER),
+	authMiddleware.verifyListLifecycle(),
 	cardsController.removeMemberFromCard,
 );
 
@@ -201,6 +209,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createChecklistValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	checklistsController.createChecklist,
 );
 
@@ -235,6 +244,7 @@ router.post(
 	'/:cardId/comments',
 	authMiddleware.verifyAccessToken,
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyListLifecycle(),
 	commentsController.createComment,
 );
 

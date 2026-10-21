@@ -2,16 +2,6 @@ import z from 'zod';
 import { ZodValidationSchema } from '@/common';
 import { GetProjectByIdRequestSchema } from '../../../projects/dtos/requests/getProjectById.request';
 
-export class CreateBoardRequestDto {
-	name: string;
-	description?: string;
-
-	constructor(data: { name: string; description?: string }) {
-		this.name = data.name;
-		this.description = data.description;
-	}
-}
-
 export const CreateBoardRequestValidationSchema: ZodValidationSchema = {
 	params: GetProjectByIdRequestSchema.params,
 	body: z.object({

@@ -2,10 +2,6 @@ import z from 'zod';
 
 import { ZodValidationSchema } from '@/common';
 
-export class CreateListRequestDto {
-	name: string;
-}
-
 const createListRequestBody = z
 	.object({
 		name: z.string().min(1).max(100),

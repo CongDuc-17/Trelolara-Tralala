@@ -1,14 +1,6 @@
 import z from 'zod';
 import { ZodValidationSchema } from '@/common';
 
-export class UpdateInformationBoardRequestDto {
-	name?: string;
-	description?: string;
-	constructor(data: { name?: string; description?: string }) {
-		this.name = data.name;
-		this.description = data.description;
-	}
-}
 const updateInformationBoardRequestBody = z
 	.object({
 		name: z

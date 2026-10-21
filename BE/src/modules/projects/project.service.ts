@@ -1,377 +1,298 @@
-import { ProjectsRepository } from './project.repository';
-
 import {
-	HttpResponseBodySuccessDto,
-	InternalServerException,
+	ForbiddenException,
 	NotFoundException,
 	OptionalException,
-	PaginationDto,
-	PaginationUtils,
-} from '@/common';
-import { CreateProjectRequestDto, GetProjectsRequestDto } from './dtos/requests';
-import { ProjectMembersRepository } from '../projectMembers/projectMember.repository';
-import { ProjectStatusEnum, RoleStatusEnum } from '@prisma/client';
+} from '@/common/exceptions';
 import { ProjectRoleEnum } from '@/common/enums/roles';
+import { DatabaseClient } from '../database';
+import { ProjectMembersRepository } from '../projectMembers/projectMember.repository';
 import { RolesRepository } from '../roles/roles.repository';
-import { Forbidden } from '@/common/exceptions/app-error';
+import { ProjectsRepository } from './project.repository';
 import {
-	GetMembersResponseDTO,
-	GetProjectResponseDTO,
-	GetProjectsResponseDTO,
-} from './dtos/responses';
+	ProjectDetails,
+	ProjectInput,
+	ProjectMemberSummary,
+	ProjectPage,
+	ProjectPagination,
+	ProjectStatus,
+	ProjectSummary,
+} from './projects.types';
 
 export class ProjectsService {
 	constructor(
-		private readonly projectsRepository: ProjectsRepository = new ProjectsRepository(),
-		private readonly projectMembersRepository: ProjectMembersRepository = new ProjectMembersRepository(),
-		private readonly rolesRepository: RolesRepository = new RolesRepository(),
+		private readonly projectsRepository = new ProjectsRepository(),
+		private readonly projectMembersRepository = new ProjectMembersRepository(),
+		private readonly rolesRepository = new RolesRepository(),
 	) {}
 
-	async createProject(
-		createProject: CreateProjectRequestDto,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<GetProjectResponseDTO>> {
-		const projectAdminRole = await this.rolesRepository.findByName(
-			ProjectRoleEnum.PROJECT_ADMIN,
-		);
-		if (!projectAdminRole) {
-			throw new NotFoundException('Project admin role not found');
-		}
-
-		const project = await this.projectsRepository.createProject(
-			createProject.name,
-			createProject.description,
-		);
-		await this.projectMembersRepository.assignUserRoleProject(
-			project.id,
-			userId,
-			projectAdminRole.id,
-		);
-		return {
-			success: true,
-			data: new GetProjectResponseDTO({
-				...project,
-				description: project.description ?? undefined,
-				status: project.status,
-				createdAt: project.createdAt,
-				updatedAt: project.updatedAt,
-				membersCount: 1,
-				boardsCount: 0,
-			}),
-		};
+	async createProject(input: ProjectInput, userId: string): Promise<ProjectDetails> {
+		return this.projectsRepository.inTransaction(async (repository, client) => {
+			const role = await this.rolesRepository.findByName(
+				ProjectRoleEnum.PROJECT_ADMIN,
+				client,
+			);
+			if (!role) throw new NotFoundException('Project admin role not found');
+			const project = await repository.createProject(input.name, input.description);
+			await this.projectMembersRepository.assignUserRoleProject(
+				project.id,
+				userId,
+				role.id,
+				client,
+			);
+			return this.projectDetails(project, { membersCount: 1, boardsCount: 0 });
+		});
 	}
 
 	async getAllProjects(
 		userId: string,
-		getProjectsRequest: GetProjectsRequestDto,
-		pagination: PaginationDto,
-	): Promise<HttpResponseBodySuccessDto<GetProjectsResponseDTO[]>> {
-		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
-			pagination,
-		);
-		const { status } = getProjectsRequest;
-		const [projectsOfUser, totalProjectsOfUser] =
+		filter: { status?: ProjectStatus },
+		pagination: ProjectPagination,
+	): Promise<ProjectPage<ProjectSummary>> {
+		const { page, limit } = pagination;
+		const [memberships, totalItems] =
 			await this.projectMembersRepository.getProjectsOfUser({
-				userId: userId,
-				status: status as ProjectStatusEnum,
-				skip: paginationUtils.skip,
-				take: paginationUtils.take,
+				userId,
+				status: filter.status,
+				skip: (page - 1) * limit,
+				take: limit,
 			});
-
-		const projects = projectsOfUser.map(
-			(up) =>
-				new GetProjectsResponseDTO({
-					...up.project,
-					description: up.project.description ?? undefined,
-					roleId: up.role.id,
-					roleName: up.role.name,
-					membersCount: up.project._count.members,
-					boardsCount: up.project._count.boards,
-				}),
-		);
-
 		return {
-			success: true,
-			data: projects,
-			pagination:
-				paginationUtils.convertPaginationResponseDtoFromTotalRecords(
-					totalProjectsOfUser,
-				),
-		};
-	}
-
-	async getProjectById(
-		projectId: string,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<GetProjectResponseDTO>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-
-		const isMember = await this.projectMembersRepository.isUserMemberOfProject(
-			projectId,
-			userId,
-		);
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this project');
-		}
-
-		return {
-			success: true,
-			data: new GetProjectResponseDTO({
-				...project,
+			items: memberships.map(({ project, role }) => ({
+				id: project.id,
+				name: project.name,
 				description: project.description ?? undefined,
 				status: project.status,
-				createdAt: project.createdAt,
-				updatedAt: project.updatedAt,
+				roleId: role.id,
+				roleName: role.name,
 				membersCount: project._count.members,
 				boardsCount: project._count.boards,
-			}),
+			})),
+			totalItems,
+			page,
+			limit,
 		};
 	}
 
-	async updateInformationProject(
+	async getProjectById(projectId: string): Promise<ProjectDetails> {
+		const project = await this.requireProject(this.projectsRepository, projectId);
+		return this.projectDetails(project, {
+			membersCount: project._count.members,
+			boardsCount: project._count.boards,
+		});
+	}
+
+	async updateProject(
 		projectId: string,
-
-		updateData: Partial<CreateProjectRequestDto>,
-	): Promise<HttpResponseBodySuccessDto<GetProjectResponseDTO>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-
-		const updatePayload: any = {};
-
-		if (updateData.name && updateData.name !== project.name) {
-			updatePayload.name = updateData.name;
-		}
-
-		if (
-			updateData.description !== undefined &&
-			updateData.description !== project.description
-		) {
-			updatePayload.description = updateData.description;
-		}
-
-		if (Object.keys(updatePayload).length === 0) {
-			console.log('No changes detected, skipping update.');
-			return {
-				success: true,
-				data: new GetProjectResponseDTO({
-					...project,
-					description: project.description ?? undefined,
-					status: project.status,
-					createdAt: project.createdAt,
-					updatedAt: project.updatedAt,
+		input: Partial<ProjectInput>,
+	): Promise<ProjectDetails> {
+		return this.projectsRepository.inTransaction(async (repository) => {
+			await repository.lockProject(projectId);
+			const project = await this.requireActiveProject(repository, projectId);
+			const data: Partial<ProjectInput> = {};
+			if (input.name !== undefined && input.name !== project.name)
+				data.name = input.name;
+			if (
+				input.description !== undefined &&
+				input.description !== project.description
+			)
+				data.description = input.description;
+			if (!Object.keys(data).length)
+				return this.projectDetails(project, {
 					membersCount: project._count.members,
 					boardsCount: project._count.boards,
-				}),
-			};
-		}
-
-		const updatedProject = await this.projectsRepository.updateProject(
-			projectId,
-			updatePayload,
-		);
-
-		return {
-			success: true,
-			data: new GetProjectResponseDTO({
-				...updatedProject,
-				description: updatedProject.description ?? undefined,
-				status: updatedProject.status,
-				createdAt: updatedProject.createdAt,
-				updatedAt: updatedProject.updatedAt,
-			}),
-		};
+				});
+			const updated = await repository.updateProject(projectId, data);
+			return this.projectDetails(updated);
+		});
 	}
 
-	async archiveProject(projectId: string): Promise<HttpResponseBodySuccessDto<null>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-
-		await this.projectsRepository.archiveProject(projectId);
-
-		return {
-			success: true,
-			data: null,
-		};
+	async archiveProject(projectId: string): Promise<void> {
+		await this.projectsRepository.inTransaction(async (repository) => {
+			await repository.lockProject(projectId);
+			await this.requireActiveProject(repository, projectId);
+			await repository.archiveProject(projectId);
+		});
 	}
 
-	async restoreProject(projectId: string): Promise<HttpResponseBodySuccessDto<null>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-		if (project.status !== ProjectStatusEnum.ARCHIVED) {
-			throw new OptionalException(400, 'Only archived project can be restored');
-		}
-		await this.projectsRepository.restoreProject(projectId);
-
-		return {
-			success: true,
-			data: null,
-		};
+	async restoreProject(projectId: string): Promise<void> {
+		await this.projectsRepository.inTransaction(async (repository) => {
+			await repository.lockProject(projectId);
+			const project = await this.requireProject(repository, projectId);
+			if (project.status !== 'ARCHIVED')
+				throw new OptionalException(400, 'Only archived project can be restored');
+			await repository.restoreProject(projectId);
+		});
 	}
 
-	async softDeleteProject(
-		projectId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		const project = await this.projectsRepository.getProjectById(projectId);
-		if (!project) {
-			throw new NotFoundException('Project not found');
-		}
-		await this.projectsRepository.softDeleteProject(projectId);
-
-		return {
-			success: true,
-			data: null,
-		};
-	}
-
-	async deleteProject(
-		projectId: string,
-		userId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		try {
-			const project = await this.projectsRepository.getProjectById(projectId);
-			if (!project) {
-				throw new NotFoundException('Project not found');
-			}
-			const isMember = await this.projectMembersRepository.isUserMemberOfProject(
-				projectId,
-				userId,
-			);
-			if (!isMember) {
-				throw new Forbidden('You are not a member of this project');
-			}
-			if (isMember.role.name !== ProjectRoleEnum.PROJECT_ADMIN) {
-				throw new Forbidden('Only project admin can delete the project');
-			}
-			await this.projectsRepository.deleteProject(projectId);
-
-			return {
-				success: true,
-				data: null,
-			};
-		} catch (error) {
-			console.error('[ProjectsService] deleteProject error:', error);
-			if (error instanceof NotFoundException || error instanceof Forbidden) {
-				throw error;
-			}
-			throw new InternalServerException();
-		}
+	async softDeleteProject(projectId: string): Promise<void> {
+		await this.projectsRepository.inTransaction(async (repository) => {
+			await repository.lockProject(projectId);
+			const project = await this.requireProject(repository, projectId);
+			// Repeated deletion must not extend the purge grace period.
+			if (project.status !== 'DELETED')
+				await repository.softDeleteProject(projectId);
+		});
 	}
 
 	async getProjectMembers(
 		projectId: string,
-		pagination: PaginationDto,
-	): Promise<HttpResponseBodySuccessDto<GetMembersResponseDTO[]>> {
-		const existingProject = await this.projectsRepository.getProjectById(projectId);
-		if (!existingProject) {
-			throw new NotFoundException('Project not found');
-		}
-		const paginationUtils = new PaginationUtils().extractSkipTakeFromPagination(
-			pagination,
-		);
-		const [members, totalMembers] =
+		pagination: ProjectPagination,
+	): Promise<ProjectPage<ProjectMemberSummary>> {
+		await this.requireProject(this.projectsRepository, projectId);
+		const { page, limit } = pagination;
+		const [members, totalItems] =
 			await this.projectMembersRepository.getProjectMembers({
-				projectId: projectId,
-				skip: paginationUtils.skip,
-				take: paginationUtils.take,
+				projectId,
+				skip: (page - 1) * limit,
+				take: limit,
 			});
-		const membersResponse = members.map(
-			(m) =>
-				new GetMembersResponseDTO({
-					projectId: m.projectId,
-					id: m.user.id,
-					name: m.user.name,
-					email: m.user.email,
-					avatar: m.user.avatar,
-					acceptedAt: m.accepted ? m.invitedAt : null,
-					invitedAt: m.invitedAt,
-					roleId: m.role.id,
-					roleName: m.role.name,
-				}),
-		);
 		return {
-			success: true,
-			data: membersResponse,
-			pagination:
-				paginationUtils.convertPaginationResponseDtoFromTotalRecords(
-					totalMembers,
-				),
+			items: members.map((member) => ({
+				projectId: member.projectId,
+				id: member.user.id,
+				name: member.user.name,
+				email: member.user.email,
+				avatar: member.user.avatar,
+				acceptedAt: member.accepted ? member.invitedAt : null,
+				invitedAt: member.invitedAt,
+				roleId: member.role.id,
+				roleName: member.role.name,
+			})),
+			totalItems,
+			page,
+			limit,
 		};
 	}
 
-	async changeRoleMemberProject(
+	async changeMemberRole(
 		projectId: string,
 		userId: string,
 		newRoleId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		const existingProject = await this.projectsRepository.getProjectById(projectId);
-		if (!existingProject) {
-			throw new NotFoundException('Project not found');
-		}
-
-		const role = await this.rolesRepository.findById(newRoleId);
-		if (!role) {
-			throw new NotFoundException('Role not found');
-		}
-		if (role.status === RoleStatusEnum.INACTIVE) {
-			throw new OptionalException(400, 'Role is inactive');
-		}
-		// Check xem role có phù hợp với phạm vi Project không (bắt đầu với PROJECT_)
-		if (!role.name.startsWith('PROJECT_')) {
-			throw new OptionalException(400, 'Role must be a project role (PROJECT_*)');
-		}
-		if (role.name === ProjectRoleEnum.PROJECT_ADMIN) {
-			throw new OptionalException(400, 'Cannot assign project admin role');
-		}
-		const isMember = await this.projectMembersRepository.isUserMemberOfProject(
-			projectId,
-			userId,
-		);
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this project');
-		}
-
-		const changed = await this.projectMembersRepository.changeRoleOfMemberProject(
-			projectId,
-			userId,
-			newRoleId,
-		);
-
-		return {
-			success: changed.count > 0,
-			data: null,
-		};
+		actorId: string,
+	): Promise<void> {
+		await this.projectsRepository.inTransaction(async (repository, client) => {
+			await repository.lockProject(projectId);
+			await this.requireActiveProject(repository, projectId);
+			const role = await this.rolesRepository.findById(newRoleId, client);
+			if (!role) throw new NotFoundException('Role not found');
+			if (role.status !== 'ACTIVE')
+				throw new OptionalException(400, 'Role is inactive');
+			if (!role.name.startsWith('PROJECT_'))
+				throw new OptionalException(
+					400,
+					'Role must be a project role (PROJECT_*)',
+				);
+			const member = await this.requireMember(projectId, userId, client);
+			if (
+				member.role.name === ProjectRoleEnum.PROJECT_ADMIN ||
+				role.name === ProjectRoleEnum.PROJECT_ADMIN
+			) {
+				await this.requireAdminActor(projectId, actorId, client);
+			}
+			if (
+				member.role.name === ProjectRoleEnum.PROJECT_ADMIN &&
+				role.name !== ProjectRoleEnum.PROJECT_ADMIN
+			) {
+				await this.protectLastAdmin(projectId, client);
+			}
+			await this.projectMembersRepository.changeRoleOfMemberProject(
+				projectId,
+				userId,
+				role.id,
+				client,
+			);
+		});
 	}
 
 	async removeMember(
 		projectId: string,
 		userId: string,
-	): Promise<HttpResponseBodySuccessDto<null>> {
-		const existingProject = await this.projectsRepository.getProjectById(projectId);
-		if (!existingProject) {
-			throw new NotFoundException('Project not found');
-		}
-		const isMember = await this.projectMembersRepository.isUserMemberOfProject(
+		actorId: string,
+	): Promise<void> {
+		await this.projectsRepository.inTransaction(async (repository, client) => {
+			await repository.lockProject(projectId);
+			await this.requireActiveProject(repository, projectId);
+			const member = await this.requireMember(projectId, userId, client);
+			if (member.role.name === ProjectRoleEnum.PROJECT_ADMIN) {
+				await this.requireAdminActor(projectId, actorId, client);
+				await this.protectLastAdmin(projectId, client);
+			}
+			await this.projectMembersRepository.removeMember(projectId, userId, client);
+		});
+	}
+
+	private async requireProject(repository: ProjectsRepository, projectId: string) {
+		const project = await repository.getProjectById(projectId);
+		if (!project) throw new NotFoundException('Project not found');
+		return project;
+	}
+
+	private async requireActiveProject(
+		repository: ProjectsRepository,
+		projectId: string,
+	) {
+		const project = await this.requireProject(repository, projectId);
+		if (project.status !== 'ACTIVE' || project.deletedAt)
+			throw new OptionalException(409, 'Project is read-only');
+		return project;
+	}
+
+	private async requireMember(
+		projectId: string,
+		userId: string,
+		client: DatabaseClient,
+	) {
+		const member = await this.projectMembersRepository.isUserMemberOfProject(
 			projectId,
 			userId,
+			client,
 		);
+		if (!member) throw new NotFoundException('Project member not found');
+		return member;
+	}
 
-		if (!isMember) {
-			throw new Forbidden('You are not a member of this project');
-		}
-		await this.projectMembersRepository.removeMember(projectId, userId);
+	private async requireAdminActor(
+		projectId: string,
+		actorId: string,
+		client: DatabaseClient,
+	): Promise<void> {
+		if (
+			!(await this.projectMembersRepository.isActiveAdmin(
+				projectId,
+				actorId,
+				client,
+			))
+		)
+			throw new ForbiddenException();
+	}
 
+	private async protectLastAdmin(
+		projectId: string,
+		client: DatabaseClient,
+	): Promise<void> {
+		if ((await this.projectMembersRepository.countAdmins(projectId, client)) <= 1)
+			throw new OptionalException(409, 'Project must retain at least one admin');
+	}
+
+	private projectDetails(
+		project: {
+			id: string;
+			name: string;
+			description: string | null;
+			status: ProjectStatus;
+			createdAt: Date;
+			updatedAt: Date;
+		},
+		counts: { membersCount?: number; boardsCount?: number } = {},
+	): ProjectDetails {
 		return {
-			success: true,
-			data: null,
+			id: project.id,
+			name: project.name,
+			description: project.description ?? undefined,
+			status: project.status,
+			createdAt: project.createdAt,
+			updatedAt: project.updatedAt,
+			...counts,
 		};
 	}
 }

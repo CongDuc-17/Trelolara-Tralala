@@ -1,13 +1,5 @@
 import z from 'zod';
-import { ZodValidationSchema } from '@/common';
-
-export class RemoveMemberProjectRequestDto {
-	userId: string;
-
-	constructor(data: { userId: string }) {
-		this.userId = data.userId;
-	}
-}
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 const removeMemberProjectRequestBody = z.object({
 	userId: z.string().uuid(),

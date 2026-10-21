@@ -1,179 +1,135 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import { OptionalException } from '@/common/exceptions';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { BoardsService } from './boards.service';
 import {
-	CreateBoardRequestDto,
-	BoardsResponseDto,
-	UserBoardResponseDto,
-	UpdateBoardResponseDto,
-	UpdateInformationBoardRequestDto,
 	GetBoardMembersResponseDto,
-} from './dtos';
-import { Exception } from '@/common/exceptions/app-error';
-import { HttpResponseDto, OptionalException, PaginationDto } from '@/common';
-import { boardMembers } from '@prisma/client';
-import { StatusCodes } from 'http-status-codes';
-import { GetBoardsOfProjectRequestDto } from '../projects/dtos/requests';
-import { GetBoardResponseDto } from './dtos/responses/getBoard.response';
+	GetBoardResponseDto,
+	UpdateBoardResponseDto,
+} from './dtos/responses';
+import type { BoardStatus } from './boards.types';
 
 export class BoardsController {
-	constructor(private boardsService: BoardsService = new BoardsService()) {}
+	constructor(private readonly service = new BoardsService()) {}
 
-	async getMyBoards(req: Request): Promise<Response> {
-		const pagination: PaginationDto = new PaginationDto(req.query);
-		const status: GetBoardsOfProjectRequestDto = new GetBoardsOfProjectRequestDto(
-			req.query,
+	async getMyBoards(req: Request, res: Response): Promise<Response> {
+		const result = await this.service.getBoardsOfUser(
+			req.user!.id!,
+			{ status: req.query.status as BoardStatus | undefined },
+			new PaginationDto(req.query),
 		);
-		const userId = (req.user as { id: string }).id;
-		const result = await this.boardsService.getBoardsOfUser(
-			userId,
-			status,
-			pagination,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<UserBoardResponseDto[]>(result);
-	}
-
-	async createBoard(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const createBoardDto = new CreateBoardRequestDto(req.body);
-
-		const userId = (req.user as { id: string }).id;
-		const result = await this.boardsService.createBoard(
-			projectId,
-			createBoardDto,
-			userId,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetBoardResponseDto>(result);
-	}
-
-	async getBoards(req: Request): Promise<Response> {
-		const projectId = req.params.projectId as string;
-		const pagination: PaginationDto = new PaginationDto(req.query);
-
-		const status: GetBoardsOfProjectRequestDto = new GetBoardsOfProjectRequestDto(
-			req.query,
-		);
-		const userId = (req.user as { id: string }).id;
-		const result = await this.boardsService.getBoardsOfUserInProject(
-			projectId,
-			userId,
-			status,
-			pagination,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<BoardsResponseDto[]>(result);
-	}
-
-	async getBoardById(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const userId = (req.user as { id: string }).id;
-		const result = await this.boardsService.getBoardById(boardId, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetBoardResponseDto>(result);
-	}
-
-	async updateBoardInformation(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const updateBoardDto = new UpdateInformationBoardRequestDto(req.body);
-		const result = await this.boardsService.updateBoard(boardId, updateBoardDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<UpdateBoardResponseDto>(result);
-	}
-
-	async uploadBackground(req: Request, res: Response): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const file = req.file as Express.Multer.File;
-		if (!file) {
-			return new HttpResponseDto().exception(
-				new OptionalException(400, 'File is required'),
-			);
-		}
-
-		const result = await this.boardsService.uploadBackground(boardId, file);
-		if (result instanceof Exception) {
-			return res.status(result.status || 400).json({
-				success: false,
-				message: result.message,
-			});
-		}
-		return res.status(StatusCodes.OK).json({
+		return res.json({
 			success: true,
-			data: result.data,
+			data: result.items.map((board) => ({ ...board })),
+			pagination: this.pagination(result),
 		});
 	}
 
-	async archiveBoard(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const userId = (req.user as { id: string }).id;
-		const result = await this.boardsService.archiveBoard(boardId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
-	}
-
-	async restoreBoard(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-
-		const result = await this.boardsService.restoreBoard(boardId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
-	}
-
-	async deleteBoard(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-
-		const result = await this.boardsService.deleteBoard(boardId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
-	}
-
-	async getBoardMembers(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const result = await this.boardsService.getBoardMembers(boardId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetBoardMembersResponseDto[]>(result);
-	}
-
-	async changeRoleOfMemberBoard(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const { userId, roleId } = req.body;
-
-		const result = await this.boardsService.changeRoleOfMemberBoard(
-			boardId,
-			userId,
-			roleId,
+	async createBoard(req: Request, res: Response): Promise<Response> {
+		const result = await this.service.createBoard(
+			req.params.projectId as string,
+			req.body,
+			req.user!.id!,
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+		return res.json({ success: true, data: new GetBoardResponseDto(result) });
 	}
 
-	async removeMember(req: Request): Promise<Response> {
-		const boardId = req.params.boardId as string;
-		const { userId } = req.body;
-		const result = await this.boardsService.removeMember(boardId, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<null>(result);
+	async getBoards(req: Request, res: Response): Promise<Response> {
+		const result = await this.service.getBoardsOfUserInProject(
+			req.params.projectId as string,
+			req.user!.id!,
+			{ status: req.query.status as BoardStatus | undefined },
+			new PaginationDto(req.query),
+		);
+		return res.json({
+			success: true,
+			data: result.items,
+			pagination: this.pagination(result),
+		});
+	}
+
+	async getBoardById(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: new GetBoardResponseDto(
+				await this.service.getBoardById(
+					req.params.boardId as string,
+					req.user!.id!,
+				),
+			),
+		});
+	}
+
+	async updateBoardInformation(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: new UpdateBoardResponseDto(
+				await this.service.updateBoard(req.params.boardId as string, req.body),
+			),
+		});
+	}
+
+	async uploadBackground(req: Request, res: Response): Promise<Response> {
+		if (!req.file) throw new OptionalException(400, 'File is required');
+		return res.json({
+			success: true,
+			data: new UpdateBoardResponseDto(
+				await this.service.uploadBackground(
+					req.params.boardId as string,
+					req.file,
+				),
+			),
+		});
+	}
+
+	async archiveBoard(req: Request, res: Response): Promise<Response> {
+		await this.service.archiveBoard(req.params.boardId as string);
+		return res.json({ success: true, data: null });
+	}
+
+	async restoreBoard(req: Request, res: Response): Promise<Response> {
+		await this.service.restoreBoard(req.params.boardId as string);
+		return res.json({ success: true, data: null });
+	}
+
+	async deleteBoard(req: Request, res: Response): Promise<Response> {
+		await this.service.deleteBoard(req.params.boardId as string);
+		return res.json({ success: true, data: null });
+	}
+
+	async getBoardMembers(req: Request, res: Response): Promise<Response> {
+		const result = await this.service.getBoardMembers(req.params.boardId as string);
+		return res.json({
+			success: true,
+			data: result.map((member) => new GetBoardMembersResponseDto(member)),
+		});
+	}
+
+	async changeRoleOfMemberBoard(req: Request, res: Response): Promise<Response> {
+		await this.service.changeRoleOfMemberBoard(
+			req.params.boardId as string,
+			req.body.userId,
+			req.body.roleId,
+			req.user!.id!,
+		);
+		return res.json({ success: true, data: null });
+	}
+
+	async removeMember(req: Request, res: Response): Promise<Response> {
+		await this.service.removeMember(
+			req.params.boardId as string,
+			req.body.userId,
+			req.user!.id!,
+		);
+		return res.json({ success: true, data: null });
+	}
+
+	private pagination(page: { totalItems: number; page: number; limit: number }) {
+		return {
+			totalItems: page.totalItems,
+			itemsPerPage: page.limit,
+			currentPage: page.page,
+			totalPages: Math.ceil(page.totalItems / page.limit),
+		};
 	}
 }

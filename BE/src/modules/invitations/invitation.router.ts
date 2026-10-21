@@ -43,6 +43,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(CreateInvitationRequestValidationSchemaProject),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyProjectLifecycle(),
 	authMiddleware.verifyInvitationRole('project'),
 	invitationController.inviteUserToProject,
 );
@@ -60,6 +61,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(CreateInvitationRequestValidationSchemaBoard),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyBoardLifecycle(),
 	authMiddleware.verifyInvitationRole('board'),
 	invitationController.inviteUserToBoard,
 );
@@ -77,6 +79,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(ShareLinkRequestValidationSchemaProject),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyProjectLifecycle(),
 	authMiddleware.verifyInvitationRole('project'),
 	invitationController.createShareLinkForProject,
 );
@@ -93,6 +96,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(ShareLinkRequestValidationSchemaBoard),
 	authMiddleware.verifyBoardPermission(BoardPermissionEnum.INVITE_MEMBER),
+	authMiddleware.verifyBoardLifecycle(),
 	authMiddleware.verifyInvitationRole('board'),
 	invitationController.createShareLinkForBoard,
 );

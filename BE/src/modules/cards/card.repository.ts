@@ -1,11 +1,15 @@
 import { CardStatusEnum } from '@prisma/client';
-import { prisma as database, type DatabaseClient } from '../database';
+import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
 import { ChecklistsRepository } from '../checklists/checklists.repository';
 export class CardsRepository {
 	constructor(
 		private readonly prismaService: DatabaseClient = database,
 		private readonly checklistRepository = new ChecklistsRepository(),
 	) {}
+
+	inTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
+		return runInTransaction(work, this.prismaService);
+	}
 
 	async getAllCardsByListId(listId: string, status?: string) {
 		return this.prismaService.cards.findMany({
@@ -55,8 +59,11 @@ export class CardsRepository {
 		});
 	}
 
-	async getLastCardByListId(listId: string) {
-		return this.prismaService.cards.findFirst({
+	async getLastCardByListId(
+		listId: string,
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cards.findFirst({
 			where: { listId: listId, deletedAt: null, status: CardStatusEnum.ACTIVE },
 			orderBy: { position: 'desc' },
 		});
@@ -197,8 +204,13 @@ export class CardsRepository {
 		});
 	}
 
-	async createCard(title: string, listId: string, position: number) {
-		return this.prismaService.cards.create({
+	async createCard(
+		title: string,
+		listId: string,
+		position: number,
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cards.create({
 			data: {
 				title: title,
 				listId: listId,

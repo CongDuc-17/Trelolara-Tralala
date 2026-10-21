@@ -27,7 +27,11 @@ import {
 	UpdateInformationRequestValidationSchema,
 } from './dtos/requests/updateInformation.request';
 import { UpdateRoleMemberProjectRequestSchema } from './dtos/requests';
-import { CreateBoardRequestSchema, BoardsResponseDTOSchema } from '../boards/dtos';
+import {
+	CreateBoardRequestSchema,
+	CreateBoardRequestValidationSchema,
+	BoardsResponseDTOSchema,
+} from '../boards/dtos';
 import { BoardsController } from '../boards/boards.controller';
 
 import { GetProjectsResponseDTOSchema } from './dtos/responses/getProjects.response';
@@ -35,7 +39,10 @@ import {
 	GetMembersResponseDTOSchema,
 	GetProjectResponseDTOSchema,
 } from './dtos/responses';
-import { RemoveMemberProjectRequestSchema } from './dtos/requests/removeMember.request';
+import {
+	RemoveMemberProjectRequestSchema,
+	RemoveMemberProjectRequestValidationSchema,
+} from './dtos/requests/removeMember.request';
 const projectsController = new ProjectsController();
 const boardsController = new BoardsController();
 export const projectsRegistry = new OpenAPIRegistry();
@@ -58,8 +65,8 @@ projectsRegistry.registerPath({
 router.get(
 	'/',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifySystemPermission(ProjectPermissionEnum.GET_PROJECT),
 	validateRequestMiddleware(getProjectsRequestSchema),
+	authMiddleware.verifySystemPermission(ProjectPermissionEnum.GET_PROJECT),
 	projectsController.getAllProjects,
 );
 
@@ -74,8 +81,8 @@ projectsRegistry.registerPath({
 router.post(
 	'/',
 	authMiddleware.verifyAccessToken,
-	authMiddleware.verifySystemPermission(ProjectPermissionEnum.CREATE_PROJECT),
 	validateRequestMiddleware(CreateProjectRequestValidationSchema),
+	authMiddleware.verifySystemPermission(ProjectPermissionEnum.CREATE_PROJECT),
 	projectsController.createProject,
 );
 
@@ -109,6 +116,7 @@ router.patch(
 	validateRequestMiddleware(UpdateInformationRequestValidationSchema),
 
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_PROJECT),
+	authMiddleware.verifyProjectLifecycle(),
 	projectsController.updateProject,
 );
 
@@ -122,7 +130,9 @@ projectsRegistry.registerPath({
 router.patch(
 	'/:projectId/archive',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(GetProjectByIdRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.ARCHIVE_PROJECT),
+	authMiddleware.verifyProjectLifecycle(),
 	projectsController.archiveProject,
 );
 
@@ -136,7 +146,9 @@ projectsRegistry.registerPath({
 router.patch(
 	'/:projectId/restore',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(GetProjectByIdRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UNARCHIVE_PROJECT),
+	authMiddleware.verifyProjectLifecycle('restore'),
 	projectsController.restoreProject,
 );
 
@@ -151,7 +163,9 @@ projectsRegistry.registerPath({
 router.delete(
 	'/:projectId',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(GetProjectByIdRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.DELETE_PROJECT),
+	authMiddleware.verifyProjectLifecycle('delete'),
 	projectsController.deleteProject,
 );
 
@@ -188,7 +202,8 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(UpdateRoleMemberProjectRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.UPDATE_MEMBER_ROLE),
-	projectsController.changeRoleMemberProject,
+	authMiddleware.verifyProjectLifecycle(),
+	projectsController.changeMemberRole,
 );
 
 projectsRegistry.registerPath({
@@ -201,7 +216,9 @@ projectsRegistry.registerPath({
 router.delete(
 	'/:projectId/members',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(RemoveMemberProjectRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(ProjectPermissionEnum.REMOVE_MEMBER),
+	authMiddleware.verifyProjectLifecycle(),
 	projectsController.removeMember,
 );
 
@@ -216,7 +233,9 @@ projectsRegistry.registerPath({
 router.post(
 	'/:projectId/boards',
 	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(CreateBoardRequestValidationSchema),
 	authMiddleware.verifyProjectPermission(BoardPermissionEnum.CREATE_BOARD),
+	authMiddleware.verifyProjectLifecycle(),
 
 	boardsController.createBoard,
 );

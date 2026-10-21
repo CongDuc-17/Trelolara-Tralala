@@ -160,14 +160,31 @@ export class CardsService {
 		listId: string,
 		userId: string,
 	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const list = await this.listsRepository.getListById(listId);
-		if (!list) {
-			throw new Exception(404, 'List not found');
-		}
-
-		const lastCard = await this.cardsRepository.getLastCardByListId(listId);
-		const position = lastCard ? lastCard.position + 1 : 1;
-		const newCard = await this.cardsRepository.createCard(title, listId, position);
+		const newCard = await this.listsRepository.inTransaction(
+			async (repository, client) => {
+				await repository.lockList(listId);
+				const list = await repository.getListById(listId);
+				if (!list) throw new Exception(404, 'List not found');
+				const board = await repository.getBoardState(list.boardId);
+				if (!board) throw new Exception(404, 'Board not found');
+				if (
+					list.status !== ListStatusEnum.ACTIVE ||
+					list.deletedAt ||
+					board.status !== 'ACTIVE' ||
+					board.deletedAt ||
+					board.project.status !== 'ACTIVE' ||
+					board.project.deletedAt
+				) {
+					throw new Exception(409, 'Cannot create a card in an inactive list');
+				}
+				const lastCard = await this.cardsRepository.getLastCardByListId(
+					listId,
+					client,
+				);
+				const position = lastCard ? lastCard.position + 1 : 1;
+				return this.cardsRepository.createCard(title, listId, position, client);
+			},
+		);
 		return {
 			success: true,
 			data: newCard,
@@ -196,6 +213,14 @@ export class CardsService {
 					400,
 					'Cannot move card to a list in a different board',
 				);
+			}
+			if (
+				sourceList.status !== ListStatusEnum.ACTIVE ||
+				sourceList.deletedAt ||
+				targetList.status !== ListStatusEnum.ACTIVE ||
+				targetList.deletedAt
+			) {
+				throw new Exception(409, 'Cannot move a card from or to an inactive list');
 			}
 
 			const before = beforeCardId
@@ -363,10 +388,6 @@ export class CardsService {
 			throw new Exception(400, 'User already exists on the card');
 		}
 
-		const addedMember = await this.cardMembersRepository.addMemberToCard(
-			cardId,
-			userId,
-		);
 		const actor = await this.usersRepository.findUser({
 			userId: currentUserId,
 		});
@@ -374,17 +395,32 @@ export class CardsService {
 			throw new NotFoundException('Actor not found');
 		}
 
-		if (userId !== currentUserId) {
-			await this.notificationsService.notifyCardAssigned({
-				recipientUserId: userId,
-				actorId: currentUserId,
-				actorName: actor.name,
-				cardId: card.id,
-				cardTitle: card.title,
-				boardId: list.boardId,
-				listId: card.listId,
-			});
-		}
+		const { addedMember, notification } = await this.cardsRepository.inTransaction(
+			async (client) => {
+				const addedMember = await this.cardMembersRepository.addMemberToCard(
+					cardId,
+					userId,
+					client,
+				);
+				const notification =
+					userId !== currentUserId
+						? await this.notificationsService.persistCardAssigned(
+								{
+									recipientUserId: userId,
+									actorId: currentUserId,
+									actorName: actor.name,
+									cardId: card.id,
+									cardTitle: card.title,
+									boardId: list.boardId,
+									listId: card.listId,
+								},
+								client,
+							)
+						: null;
+				return { addedMember, notification };
+			},
+		);
+		if (notification) await this.notificationsService.deliver(notification);
 		return {
 			success: true,
 			data: addedMember,

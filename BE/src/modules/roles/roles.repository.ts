@@ -11,14 +11,14 @@ export class RolesRepository {
 		});
 		return userRole?.roleId;
 	}
-	async findByName(roleName: string) {
-		return this.prismaService.roles.findFirst({
+	async findByName(roleName: string, client: DatabaseClient = this.prismaService) {
+		return client.roles.findFirst({
 			where: { name: roleName, deletedAt: null, status: RoleStatusEnum.ACTIVE },
 		});
 	}
 
-	async findById(roleId: string) {
-		return this.prismaService.roles.findUnique({
+	async findById(roleId: string, client: DatabaseClient = this.prismaService) {
+		return client.roles.findUnique({
 			where: { id: roleId, deletedAt: null },
 		});
 	}

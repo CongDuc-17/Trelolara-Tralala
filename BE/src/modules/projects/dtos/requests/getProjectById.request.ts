@@ -1,12 +1,5 @@
 import z from 'zod';
-import { ZodValidationSchema } from '@/common';
-
-export class GetProjectByIdRequestDto {
-	projectId: string;
-	constructor(data: { projectId: string }) {
-		this.projectId = data.projectId;
-	}
-}
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 const getProjectByIdRequestParams = z
 	.object({

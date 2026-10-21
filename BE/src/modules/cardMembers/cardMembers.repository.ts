@@ -2,8 +2,12 @@ import { prisma as database, type DatabaseClient } from '../database';
 export class CardMembersRepository {
 	constructor(private readonly prismaService: DatabaseClient = database) {}
 
-	async addMemberToCard(cardId: string, userId: string) {
-		return this.prismaService.cardMembers.create({
+	async addMemberToCard(
+		cardId: string,
+		userId: string,
+		client: DatabaseClient = this.prismaService,
+	) {
+		return client.cardMembers.create({
 			data: {
 				cardId: cardId,
 				userId: userId,
