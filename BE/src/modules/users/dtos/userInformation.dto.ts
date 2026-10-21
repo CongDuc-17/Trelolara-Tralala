@@ -1,6 +1,6 @@
 import { UserStatusEnum } from '@prisma/client';
 
-import { users } from '@prisma/client';
+import { UserProfile } from '../users.types';
 
 export class UserInformationDto {
 	id: string;
@@ -15,7 +15,7 @@ export class UserInformationDto {
 	updatedAt: Date;
 	deletedAt: Date | null;
 
-	constructor(user: users) {
+	constructor(user: UserProfile) {
 		this.id = user.id;
 		this.email = user.email;
 		this.name = user.name;

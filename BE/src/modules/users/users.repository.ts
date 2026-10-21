@@ -1,8 +1,6 @@
-import { Prisma, UserStatusEnum } from '@prisma/client';
-
 import { prisma as database, type DatabaseClient } from '../database';
 
-import { users } from '@prisma/client';
+import { UpdateProfileInput, UserProfile } from './users.types';
 
 export class UsersRepository {
 	constructor(private readonly prismaService: DatabaseClient = database) {}
@@ -14,10 +12,10 @@ export class UsersRepository {
 		take,
 	}: {
 		name?: string;
-		status?: UserStatusEnum;
+		status?: UserProfile['status'];
 		skip: number;
 		take: number;
-	}): Promise<[users[], number]> {
+	}): Promise<[UserProfile[], number]> {
 		return Promise.all([
 			this.prismaService.users.findMany({
 				where: {
@@ -43,8 +41,8 @@ export class UsersRepository {
 	}: {
 		userId?: string;
 		email?: string;
-		userStatus?: UserStatusEnum;
-	}): Promise<users | null> {
+		userStatus?: UserProfile['status'];
+	}): Promise<UserProfile | null> {
 		return this.prismaService.users.findFirst({
 			where: {
 				id: userId,
@@ -59,12 +57,11 @@ export class UsersRepository {
 		user,
 	}: {
 		userId: string;
-		user: Prisma.usersUpdateManyMutationInput;
-	}): Promise<users> {
-		const { id, ...userData } = user;
+		user: UpdateProfileInput & { avatar?: string };
+	}): Promise<UserProfile> {
 		return this.prismaService.users.update({
 			where: { id: userId },
-			data: userData,
+			data: user,
 		});
 	}
 }

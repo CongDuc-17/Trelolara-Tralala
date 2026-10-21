@@ -4,6 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 
 import {
 	getUserByUserIdRequestSchema,
+	getUserByUserIdRequestValidationSchema,
 	getUserResponseDtoSchema,
 	getUsersRequestSchema,
 	getUsersRequestValidationSchema,
@@ -15,7 +16,8 @@ import {
 } from './dtos';
 import { UsersController } from './users.controller';
 
-import { autoBindUtil, validateRequestMiddleware } from '@/common';
+import { autoBindUtil } from '@/common/utils/autoBind.utils';
+import { validateRequestMiddleware } from '@/common/middlewares/validationRequest.middleware';
 import authMiddleware from '@/common/middlewares/auth.middleware';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
 import { uploadAvatarMiddleware } from '@/common/middlewares/upload.middleware';
@@ -85,6 +87,11 @@ usersRegistry.registerPath({
 	request: getUserByUserIdRequestSchema,
 	responses: createApiResponse(getUserResponseDtoSchema, 'Success', StatusCodes.OK),
 });
-router.get('/:userId', authMiddleware.verifyAccessToken, usersController.getUserByUserId);
+router.get(
+	'/:userId',
+	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(getUserByUserIdRequestValidationSchema),
+	usersController.getUserByUserId,
+);
 
 export const usersRouter = router;

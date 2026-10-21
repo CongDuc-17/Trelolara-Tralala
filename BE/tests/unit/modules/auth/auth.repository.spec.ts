@@ -38,7 +38,10 @@ function setup() {
 				async () => ({ id: 'default-user-role' }) as { id: string } | null,
 			),
 		},
-		accounts: { create: jest.fn(async () => ({ id: 'account-1' })) },
+		accounts: {
+			create: jest.fn(async () => ({ id: 'account-1' })),
+			upsert: jest.fn(async () => undefined),
+		},
 		tokens: {
 			deleteMany: jest.fn(async () => ({ count: 1 })),
 			create: jest.fn(),
@@ -138,6 +141,23 @@ describe('AuthRepository query and transaction boundaries', () => {
 		expect(transaction.tokens.deleteMany).toHaveBeenCalledWith({
 			where: { userId: 'user-1' },
 		});
+	});
+
+	it('password upsert supports Google-only users without changing profile or verification', async () => {
+		const { transaction } = setup();
+		await new AuthRepository(transaction as unknown as DatabaseClient).upsertPassword(
+			{
+				userId: 'user-1',
+				password: 'hash',
+				salt: 'salt',
+			},
+		);
+		expect(transaction.accounts.upsert).toHaveBeenCalledWith({
+			where: { userId: 'user-1' },
+			create: { userId: 'user-1', password: 'hash', salt: 'salt' },
+			update: { password: 'hash', salt: 'salt' },
+		});
+		expect(transaction.users.update).not.toHaveBeenCalled();
 	});
 
 	const google = {

@@ -1,4 +1,3 @@
-import { Exception } from '@/common/exceptions/app-error';
 import { Request, Response } from 'express';
 
 import {
@@ -8,92 +7,69 @@ import {
 	GetUsersResponseDto,
 	UpdateMyInformationRequestDto,
 	UpdateMyPasswordRequestDto,
-	UserInformationDto,
 } from './dtos';
 import { UsersService } from './users.service';
+import { UserProfile } from './users.types';
 
-import { HttpResponseDto, PaginationDto } from '@/common';
-import { StatusCodes } from 'http-status-codes';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
 
 export class UsersController {
-	constructor(private readonly usersService: UsersService = new UsersService()) {}
+	constructor(private readonly usersService = new UsersService()) {}
 
-	async getUsers(req: Request): Promise<Response> {
-		const getUsersRequest: GetUsersRequestDto = new GetUsersRequestDto(req.query);
-		const pagination: PaginationDto = new PaginationDto(req.query);
-
-		const result = await this.usersService.getUsers(getUsersRequest, pagination);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetUsersResponseDto[]>(result);
-	}
-
-	async getUserByUserId(req: Request): Promise<Response> {
-		const { userId } = req.params as { userId: string };
-
-		const getUserByUserIdRequestDto = new GetUserByUserIdRequestDto(
-			userId,
-			req.query,
+	async getUsers(req: Request, res: Response): Promise<Response> {
+		const result = await this.usersService.getUsers(
+			new GetUsersRequestDto(req.query),
+			new PaginationDto(req.query),
 		);
-
-		const result = await this.usersService.getUserByUserId(getUserByUserIdRequestDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetUserResponseDto>(result);
+		return res.status(200).json({
+			success: true,
+			data: result.items.map((user) => new GetUsersResponseDto(user)),
+			pagination: {
+				totalItems: result.totalItems,
+				itemsPerPage: result.limit,
+				currentPage: result.page,
+				totalPages: Math.ceil(result.totalItems / result.limit),
+			},
+		});
 	}
 
-	async getMyInformation(req: Request): Promise<Response> {
-		console.log(req.user);
-		const myInformationDto = req.user as UserInformationDto;
+	async getUserByUserId(req: Request, res: Response): Promise<Response> {
+		const { userId } = req.params as { userId: string };
+		const user = await this.usersService.getUserByUserId(
+			new GetUserByUserIdRequestDto(userId, req.query),
+		);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetUserResponseDto(user) });
+	}
 
-		const result = await this.usersService.getMyInformation(myInformationDto);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetUserResponseDto>(result);
+	getMyInformation(req: Request, res: Response): Response {
+		return res.status(200).json({
+			success: true,
+			data: new GetUserResponseDto(req.user as UserProfile),
+		});
 	}
 
 	async updateMyInformation(req: Request, res: Response): Promise<Response> {
-		const updateMyInformationRequestDto = new UpdateMyInformationRequestDto(req.body);
-
-		const myInformationDto = req.user as UserInformationDto;
-		const file = req.file;
-		try {
-			const result = await this.usersService.updateMyInformation(
-				updateMyInformationRequestDto,
-				myInformationDto,
-				file,
-			);
-			if (result instanceof Exception) {
-				return res.status(result.status || 400).json({
-					success: false,
-					message: result.message,
-				});
-			}
-			return res.status(StatusCodes.OK).json({
-				success: true,
-				data: result.data,
-			});
-		} catch (error) {
-			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-				success: false,
-				message: 'Lỗi server',
-			});
-		}
+		const actor = req.user as UserProfile;
+		const user = await this.usersService.updateMyInformation(
+			new UpdateMyInformationRequestDto(req.body),
+			actor.id,
+			req.file,
+		);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetUserResponseDto(user) });
 	}
 
-	async updateMyPassword(req: Request): Promise<Response> {
-		const updateMyPasswordRequestDto = new UpdateMyPasswordRequestDto(req.body);
-		const myInformationDto = req.user as UserInformationDto;
-		const result = await this.usersService.updateMyPassword(
-			updateMyPasswordRequestDto,
-			myInformationDto,
+	async updateMyPassword(req: Request, res: Response): Promise<Response> {
+		const { newPassword } = new UpdateMyPasswordRequestDto(req.body);
+		const user = await this.usersService.updateMyPassword(
+			newPassword,
+			req.user as UserProfile,
 		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetUserResponseDto>(result);
+		return res
+			.status(200)
+			.json({ success: true, data: new GetUserResponseDto(user) });
 	}
 }

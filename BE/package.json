@@ -61,7 +61,6 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "reflect-metadata": "^0.2.2",
-    "resend": "^6.12.3",
     "swagger-ui-express": "^5.0.1",
     "tsyringe": "^4.10.0",
     "ws": "^8.20.0",

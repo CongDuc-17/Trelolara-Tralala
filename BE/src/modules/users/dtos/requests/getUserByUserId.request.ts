@@ -1,7 +1,7 @@
 import { UserStatusEnum } from '@prisma/client';
 import z from 'zod';
 
-import { ZodValidationSchema } from '@/common';
+import type { ZodValidationSchema } from '@/common/middlewares/validationRequest.middleware';
 
 export class GetUserByUserIdRequestDto {
 	userId: string;

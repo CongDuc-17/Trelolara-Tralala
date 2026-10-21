@@ -1,86 +1,73 @@
+import { Prisma } from '@prisma/client';
+
 import { prisma as database, type DatabaseClient } from '../database';
-import { Prisma, Notifications } from '@prisma/client';
+
+import type {
+	CreateNotificationInput,
+	NotificationPage,
+	NotificationRecord,
+} from './notifications.types';
+
 export class NotificationsRepository {
-	constructor(private readonly prismaService: DatabaseClient = database) {}
+	constructor(private readonly client: DatabaseClient = database) {}
 
-	async createOne(data: Prisma.NotificationsCreateInput): Promise<Notifications> {
-		return this.prismaService.notifications.create({
-			data,
-		});
-	}
-
-	async findById(id: string): Promise<Notifications | null> {
-		return this.prismaService.notifications.findUnique({
-			where: { id },
+	createOne(
+		input: CreateNotificationInput,
+		client: DatabaseClient = this.client,
+	): Promise<NotificationRecord> {
+		const { recipientUserId, ...data } = input;
+		return client.notifications.create({
+			data: { ...data, userId: recipientUserId },
 		});
 	}
 
 	async findManyByUserId(params: {
 		userId: string;
 		isRead?: boolean;
-		skip?: number;
-		take?: number;
-	}): Promise<[Notifications[], number]> {
-		const { userId, isRead, skip = 0, take = 10 } = params;
-
+		skip: number;
+		take: number;
+	}): Promise<NotificationPage> {
+		const { userId, isRead, skip, take } = params;
 		const where: Prisma.NotificationsWhereInput = {
 			userId,
 			...(typeof isRead === 'boolean' ? { isRead } : {}),
 		};
-
-		const [notifications, total] = await Promise.all([
-			this.prismaService.notifications.findMany({
+		const [items, total] = await Promise.all([
+			this.client.notifications.findMany({
 				where,
-				orderBy: { createdAt: 'desc' },
+				orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
 				skip,
 				take,
 			}),
-			this.prismaService.notifications.count({ where }),
+			this.client.notifications.count({ where }),
 		]);
-
-		return [notifications, total];
+		return { items, total };
 	}
 
-	async countUnreadByUserId(userId: string): Promise<number> {
-		return this.prismaService.notifications.count({
-			where: {
-				userId,
-				isRead: false,
-			},
-		});
+	countUnreadByUserId(userId: string): Promise<number> {
+		return this.client.notifications.count({ where: { userId, isRead: false } });
 	}
 
-	async markAsRead(
-		notificationId: string,
-		userId: string,
-	): Promise<Notifications | null> {
-		const notification = await this.prismaService.notifications.findFirst({
-			where: {
-				id: notificationId,
-				userId,
-			},
+	async markAsRead(notificationId: string, userId: string): Promise<boolean> {
+		const result = await this.client.notifications.updateMany({
+			where: { id: notificationId, userId, isRead: false },
+			data: { isRead: true, readAt: new Date() },
 		});
+		if (result.count > 0) return true;
 
-		if (!notification) return null;
-
-		return this.prismaService.notifications.update({
-			where: { id: notificationId },
-			data: {
-				isRead: true,
-				readAt: new Date(),
-			},
-		});
+		// An already-read notification is a successful retry; preserve its readAt.
+		return (
+			(await this.client.notifications.findFirst({
+				where: { id: notificationId, userId },
+				select: { id: true },
+			})) !== null
+		);
 	}
+
 	async markAllAsRead(userId: string): Promise<void> {
-		await this.prismaService.notifications.updateMany({
-			where: {
-				userId,
-				isRead: false,
-			},
-			data: {
-				isRead: true,
-				readAt: new Date(),
-			},
+		await this.client.notifications.updateMany({
+			where: { userId, isRead: false },
+			data: { isRead: true, readAt: new Date() },
 		});
 	}
 }

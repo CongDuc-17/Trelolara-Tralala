@@ -1,4 +1,4 @@
-import { hash } from 'bcrypt';
+import { compare, hash } from 'bcrypt';
 
 import { AuthRepository } from '@/modules/auth/auth.repository';
 import { AuthService } from '@/modules/auth/auth.service';
@@ -64,6 +64,9 @@ function setup() {
 		revokeSessions: jest.fn(async () => undefined),
 		markVerified: jest.fn(async () => ({ ...user, verify: true })),
 		updatePassword: jest.fn(async () => account),
+		upsertPassword: jest.fn(
+			async (_input: Parameters<AuthRepository['upsertPassword']>[0]) => undefined,
+		),
 		inTransaction: jest.fn(),
 	};
 	repository.inTransaction.mockImplementation(
@@ -254,6 +257,41 @@ describe('AuthService with isolated adapters', () => {
 		await service.logout(user.id);
 		expect(repository.revokeSessions).toHaveBeenCalledWith(user.id);
 		expect(repository.lockUser).toHaveBeenCalledWith(user.id);
+	});
+
+	it('ordinary password change creates or replaces credentials and revokes all sessions under the same lock', async () => {
+		const { service, repository } = setup();
+		await expect(
+			service.changePassword(user.id, 'new-password'),
+		).resolves.toBeUndefined();
+		expect(repository.lockUser).toHaveBeenCalledWith(user.id);
+		expect(repository.findUser).toHaveBeenCalledWith({ userId: user.id });
+		const input = repository.upsertPassword.mock.calls[0][0];
+		expect(input).toMatchObject({ userId: user.id });
+		expect(await compare('new-password', input.password)).toBe(true);
+		expect(repository.revokeSessions).toHaveBeenCalledWith(user.id);
+		expect(repository.markVerified).not.toHaveBeenCalled();
+		expect(repository.createSession).not.toHaveBeenCalled();
+	});
+
+	it('password change rejects an unavailable account before credential or session writes', async () => {
+		const { service, repository } = setup();
+		repository.findUser.mockResolvedValueOnce(null);
+		await expect(
+			service.changePassword(user.id, 'new-password'),
+		).rejects.toMatchObject({ status: 401 });
+		expect(repository.upsertPassword).not.toHaveBeenCalled();
+		expect(repository.revokeSessions).not.toHaveBeenCalled();
+	});
+
+	it('password change does not commit credentials if revoking sessions fails', async () => {
+		const { service, repository, commits } = setup();
+		repository.revokeSessions.mockRejectedValueOnce(new Error('DB failure'));
+		await expect(service.changePassword(user.id, 'new-password')).rejects.toThrow(
+			'DB failure',
+		);
+		expect(repository.upsertPassword).toHaveBeenCalledTimes(1);
+		expect(commits).toEqual([]);
 	});
 
 	it('cleans only the generated OTP when sending fails', async () => {

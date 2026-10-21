@@ -1,9 +1,13 @@
-export class GetNotificationsRequestDto {
-	isRead?: boolean;
+import { z } from 'zod';
 
-	constructor(query: Record<string, unknown>) {
-		if (query.isRead !== undefined) {
-			this.isRead = query.isRead === 'true';
-		}
-	}
-}
+import { PaginationSchema } from '@/common/dtos/pagination.dto';
+
+export const getNotificationsQuerySchema = z.object({
+	...PaginationSchema,
+	isRead: z
+		.enum(['true', 'false'])
+		.transform((value) => value === 'true')
+		.optional(),
+});
+
+export const getNotificationsRequestSchema = { query: getNotificationsQuerySchema };
