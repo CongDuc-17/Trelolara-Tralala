@@ -21,6 +21,9 @@ import { validateRequestMiddleware } from '@/common/middlewares/validationReques
 import authMiddleware from '@/common/middlewares/auth.middleware';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
 import { uploadAvatarMiddleware } from '@/common/middlewares/upload.middleware';
+import { CardSearchController } from '../cards/card-search.controller';
+import { myWorkQuery } from '../cards/card-search.schema';
+import { cardSearchPageSchema } from '../cards/card-search.response';
 
 const usersController = new UsersController();
 
@@ -28,6 +31,25 @@ export const usersRegistry = new OpenAPIRegistry();
 
 const router = express.Router({ mergeParams: true });
 autoBindUtil(usersController);
+const cardSearch = new CardSearchController();
+autoBindUtil(cardSearch);
+usersRegistry.registerPath({
+	method: 'get',
+	path: '/users/me/cards',
+	tags: ['Cards'],
+	request: { query: myWorkQuery },
+	responses: createApiResponse(
+		cardSearchPageSchema,
+		'Assigned cards with current read access',
+		200,
+	),
+});
+router.get(
+	'/me/cards',
+	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({ query: myWorkQuery }),
+	cardSearch.mine,
+);
 
 usersRegistry.registerPath({
 	method: 'get',

@@ -50,6 +50,7 @@ describe('BoardsRepository transaction boundaries', () => {
 			cardMembers: { deleteMany: jest.fn() },
 			cardComments: { deleteMany: jest.fn() },
 			cardAttachments: {
+				findMany: jest.fn().mockResolvedValue([]),
 				deleteMany: jest
 					.fn()
 					.mockRejectedValue(new Error('attachment delete failed')),

@@ -16,6 +16,7 @@ export class LabelsController {
 		const label = await this.service.updateLabel(
 			req.params.labelId as string,
 			req.body,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: new LabelResponseDto(label) });
 	}
@@ -26,7 +27,7 @@ export class LabelsController {
 		return res.json({ data: labels.map((label) => new LabelResponseDto(label)) });
 	}
 	async deleteLabel(req: Request, res: Response): Promise<Response> {
-		await this.service.deleteLabel(req.params.labelId as string);
+		await this.service.deleteLabel(req.params.labelId as string, req.user!.id!);
 		return res.json({ success: true, data: null });
 	}
 }

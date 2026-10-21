@@ -35,6 +35,16 @@ export interface ListNotificationsInput {
 	isRead?: boolean;
 }
 
+export interface CardDueSoonInput {
+	recipientUserId: string;
+	cardId: string;
+	cardTitle: string;
+	boardId: string;
+	listId: string;
+	dueDate: string;
+	reminderRevision: string;
+}
+
 export interface NotificationPage {
 	items: NotificationRecord[];
 	total: number;

@@ -1,11 +1,15 @@
 import { prisma, runInTransaction, type DatabaseClient } from '../database';
 import { deleteCardTree } from './card-deletion';
+import { PermissionService } from '../permissions/permission.service';
+import { PermissionsRepository } from '../permissions/permissions.repository';
+import { CardPermissionEnum } from '@/common/enums/permissions';
 import type {
 	CardIncludes,
 	CardListEntry,
 	CardQuery,
 	CardRecord,
 	CardStatus,
+	CardUpdateInput,
 } from './cards.types';
 
 const baseSelect = {
@@ -13,6 +17,8 @@ const baseSelect = {
 	title: true,
 	description: true,
 	dueDate: true,
+	isComplete: true,
+	reminderMinutesBefore: true,
 	position: true,
 	listId: true,
 	createdAt: true,
@@ -149,6 +155,18 @@ export class CardsRepository {
 		client: DatabaseClient = this.client,
 	): Promise<CardRecord> {
 		return client.cards.create({ data: { title, listId, position } });
+	}
+	canUpdate(userId: string, boardId: string, client: DatabaseClient): Promise<boolean> {
+		return new PermissionService(
+			new PermissionsRepository(client),
+		).hasBoardPermission(userId, boardId, [CardPermissionEnum.UPDATE_CARD]);
+	}
+	updateCard(
+		cardId: string,
+		changes: CardUpdateInput,
+		client: DatabaseClient,
+	): Promise<CardRecord> {
+		return client.cards.update({ where: { id: cardId }, data: changes });
 	}
 	updateCardPosition(
 		listId: string,

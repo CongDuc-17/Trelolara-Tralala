@@ -3,6 +3,8 @@ import express from 'express';
 import { StatusCodes } from 'http-status-codes';
 
 import { CardsController } from './card.controller';
+import { attachmentsRouter } from '../attachments/attachments.router';
+import { cardActivitiesRouter } from '../cardActivities/cardActivities.router';
 import { ChecklistsController } from '../checklists/checklists.controller';
 import { autoBindUtil, validateRequestMiddleware } from '@/common';
 import authMiddleware from '@/common/middlewares/auth.middleware';
@@ -25,13 +27,13 @@ import {
 	addLabelRequestValidationSchema,
 	removeLabelRequestSchema,
 	removeLabelRequestValidationSchema,
-	getCardRequestParams,
 	getCardRequestParamsSchema,
+	updateCardRequestSchema,
+	updateCardRequestValidationSchema,
 } from './dtos';
 
 import { CardPermissionEnum } from '@/common/enums/permissions';
 import {
-	checklistByIdRequestSchema,
 	createChecklistRequestSchema,
 	createChecklistValidationSchema,
 } from '../checklists/dtos/requests';
@@ -70,6 +72,22 @@ router.get(
 	validateRequestMiddleware(getCardRequestValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
 	cardsController.getCardById,
+);
+
+cardsRegistry.registerPath({
+	method: 'patch',
+	path: '/cards/{cardId}',
+	tags: ['Cards'],
+	request: updateCardRequestSchema,
+	responses: createApiResponse(cardResponseDtoSchema, 'Success', StatusCodes.OK),
+});
+router.patch(
+	'/:cardId',
+	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware(updateCardRequestValidationSchema),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
+	authMiddleware.verifyCardLifecycle(),
+	cardsController.updateCard,
 );
 
 cardsRegistry.registerPath({
@@ -269,4 +287,6 @@ router.post(
 	commentsController.createComment,
 );
 
+router.use('/:cardId/attachments', attachmentsRouter);
+router.use('/:cardId/activities', cardActivitiesRouter);
 export const cardsRouter = router;

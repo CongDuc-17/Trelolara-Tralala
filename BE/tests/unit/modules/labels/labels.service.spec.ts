@@ -2,8 +2,13 @@ import { LabelsService } from '@/modules/labels/labels.service';
 import { LabelsRepository } from '@/modules/labels/labels.repository';
 import type { LabelRecord } from '@/modules/labels/labels.types';
 import type { DatabaseClient } from '@/modules/database';
+import type { CardActivityRecord } from '@/modules/cardActivities/cardActivities.types';
 
 function fixture() {
+	let activities: Pick<
+		CardActivityRecord,
+		'cardId' | 'userId' | 'action' | 'metadata'
+	>[] = [];
 	let labels: LabelRecord[] = [
 		{
 			id: 'label',
@@ -23,7 +28,7 @@ function fixture() {
 		deletedAt: null as Date | null,
 		project: { status: 'ACTIVE', deletedAt: null as Date | null },
 	};
-	const failures = { code: '', delete: false };
+	const failures = { code: '', delete: false, activity: false };
 	const events: string[] = [];
 	const read = {
 		boards: { findUnique: jest.fn(async () => board) },
@@ -35,6 +40,7 @@ function fixture() {
 			async (work: (client: DatabaseClient) => Promise<unknown>) => {
 				let draft = labels.map((row) => ({ ...row }));
 				let links = [...relations];
+				const history = [...activities];
 				let locked = false;
 				const write = () => {
 					if (!locked) throw new Error('Write without parent lock');
@@ -44,6 +50,15 @@ function fixture() {
 						});
 				};
 				const scoped = {
+					cardActivity: {
+						create: jest.fn(
+							async ({ data }: { data: (typeof activities)[number] }) => {
+								write();
+								if (failures.activity) throw new Error('Activity failed');
+								history.push(data);
+							},
+						),
+					},
 					boards: read.boards,
 					$queryRaw: jest.fn(async (parts: TemplateStringsArray) => {
 						events.push(
@@ -94,6 +109,12 @@ function fixture() {
 						}),
 					},
 					cardLabels: {
+						findMany: jest.fn(
+							async ({ where }: { where: { labelId: string } }) =>
+								links
+									.filter((row) => row.labelId === where.labelId)
+									.map(({ cardId }) => ({ cardId })),
+						),
 						deleteMany: jest.fn(
 							async ({ where }: { where: { labelId: string } }) => {
 								write();
@@ -108,6 +129,7 @@ function fixture() {
 				const result = await work(scoped);
 				labels = draft;
 				relations = links;
+				activities = history;
 				events.push('commit');
 				return result;
 			},
@@ -122,15 +144,54 @@ function fixture() {
 		events,
 		rows: () => labels,
 		relations: () => relations,
+		activities: () => activities,
 	};
 }
 
 describe('LabelsService', () => {
+	it('records changes on attached cards, including label deletion, and omits no-op edits', async () => {
+		const f = fixture();
+		await f.service.updateLabel('label', { name: 'Ready', color: 'red' }, 'actor');
+		expect(f.activities()).toEqual([]);
+		await f.service.updateLabel('label', { name: 'Done' }, 'actor');
+		await f.service.deleteLabel('label', 'actor');
+		expect(f.activities()).toEqual([
+			{
+				cardId: 'card',
+				userId: 'actor',
+				action: 'label_updated',
+				metadata: { labelId: 'label', changedFields: ['name'] },
+			},
+			{
+				cardId: 'card',
+				userId: 'actor',
+				action: 'label_removed',
+				metadata: { labelId: 'label', reason: 'label_deleted' },
+			},
+		]);
+	});
+	it.each(['update', 'delete'])(
+		'rolls label %s and its relations back if activity fails',
+		async (action) => {
+			const f = fixture();
+			f.failures.activity = true;
+			await expect(
+				action === 'update'
+					? f.service.updateLabel('label', { name: 'Done' }, 'actor')
+					: f.service.deleteLabel('label', 'actor'),
+			).rejects.toThrow('Activity failed');
+			expect(f.rows()[0].name).toBe('Ready');
+			expect(f.relations()).toHaveLength(2);
+			expect(f.activities()).toEqual([]);
+		},
+	);
 	it.each([{ name: 'Done' }, { color: 'blue' }])(
 		'patches only the provided fields: %j',
 		async (input) => {
 			const f = fixture();
-			await expect(f.service.updateLabel('label', input)).resolves.toMatchObject({
+			await expect(
+				f.service.updateLabel('label', input, 'actor'),
+			).resolves.toMatchObject({
 				name: 'Ready',
 				color: 'red',
 				...input,
@@ -140,11 +201,15 @@ describe('LabelsService', () => {
 	);
 	it('whitelists fields and rejects an empty patch', async () => {
 		const f = fixture();
-		await f.service.updateLabel('label', { name: 'Done', boardId: 'foreign' } as {
-			name: string;
-		});
+		await f.service.updateLabel(
+			'label',
+			{ name: 'Done', boardId: 'foreign' } as {
+				name: string;
+			},
+			'actor',
+		);
 		expect(f.rows()[0].boardId).toBe('board');
-		await expect(f.service.updateLabel('label', {})).rejects.toMatchObject({
+		await expect(f.service.updateLabel('label', {}, 'actor')).rejects.toMatchObject({
 			status: 422,
 		});
 	});
@@ -156,7 +221,7 @@ describe('LabelsService', () => {
 			await expect(
 				action === 'create'
 					? f.service.createLabel('Ready', 'blue', 'board')
-					: f.service.updateLabel('label', { color: 'blue' }),
+					: f.service.updateLabel('label', { color: 'blue' }, 'actor'),
 			).rejects.toMatchObject({ status: 409 });
 			expect(f.rows()).toHaveLength(1);
 		},
@@ -178,10 +243,10 @@ describe('LabelsService', () => {
 				f.service.createLabel('New', 'red', 'board'),
 			).rejects.toMatchObject({ status: 409 });
 			await expect(
-				f.service.updateLabel('label', { name: 'New' }),
+				f.service.updateLabel('label', { name: 'New' }, 'actor'),
 			).rejects.toMatchObject({ status: 409 });
 			await expect(f.service.getLabelsByBoardId('board')).resolves.toHaveLength(1);
-			await f.service.deleteLabel('label');
+			await f.service.deleteLabel('label', 'actor');
 			expect(f.rows()).toEqual([]);
 			expect(f.relations()).toEqual([{ labelId: 'other', cardId: 'card' }]);
 		},
@@ -189,16 +254,18 @@ describe('LabelsService', () => {
 	it('rolls back relation deletion when label deletion fails', async () => {
 		const f = fixture();
 		f.failures.delete = true;
-		await expect(f.service.deleteLabel('label')).rejects.toThrow('Delete failed');
+		await expect(f.service.deleteLabel('label', 'actor')).rejects.toThrow(
+			'Delete failed',
+		);
 		expect(f.rows()).toHaveLength(1);
 		expect(f.relations()).toHaveLength(2);
 	});
 	it('returns missing-label errors before mutation', async () => {
 		const f = fixture();
 		await expect(
-			f.service.updateLabel('missing', { name: 'New' }),
+			f.service.updateLabel('missing', { name: 'New' }, 'actor'),
 		).rejects.toMatchObject({ status: 404 });
-		await expect(f.service.deleteLabel('missing')).rejects.toMatchObject({
+		await expect(f.service.deleteLabel('missing', 'actor')).rejects.toMatchObject({
 			status: 404,
 		});
 		expect(f.events).toEqual([]);

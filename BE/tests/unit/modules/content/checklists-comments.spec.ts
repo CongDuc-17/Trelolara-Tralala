@@ -4,18 +4,20 @@ import { CommentsRepository } from '@/modules/comments/comments.repository';
 describe('Checklists and checklist items', () => {
 	it('creates checklist/items under the card transaction and preserves completed:false on partial PATCH', async () => {
 		const f = contentFixture();
-		await expect(f.checklists.createChecklist('card', 'New')).resolves.toMatchObject({
+		await expect(
+			f.checklists.createChecklist('card', 'New', 'actor'),
+		).resolves.toMatchObject({
 			title: 'New',
 			cardId: 'card',
 		});
-		await f.items.createChecklistItem('checklist', 'New item');
+		await f.items.createChecklistItem('checklist', 'New item', 'actor');
 		await expect(
-			f.items.updateChecklistItem('item', undefined, false),
+			f.items.updateChecklistItem('item', 'actor', undefined, false),
 		).resolves.toMatchObject({ title: 'Task', completed: false });
 		await expect(
-			f.items.updateChecklistItem('item', 'Renamed'),
+			f.items.updateChecklistItem('item', 'actor', 'Renamed'),
 		).resolves.toMatchObject({ title: 'Renamed', completed: false });
-		await expect(f.items.updateChecklistItem('item')).rejects.toMatchObject({
+		await expect(f.items.updateChecklistItem('item', 'actor')).rejects.toMatchObject({
 			status: 422,
 		});
 		expect(f.events.indexOf('1:lock:Cards')).toBeLessThan(
@@ -26,7 +28,7 @@ describe('Checklists and checklist items', () => {
 		const f = contentFixture();
 		f.state().card.status = 'ARCHIVED';
 		f.board.status = 'ARCHIVED';
-		await f.checklists.deleteChecklist('checklist');
+		await f.checklists.deleteChecklist('checklist', 'actor');
 		expect(f.state().checklists.map((row) => row.id)).toEqual(['other']);
 		expect(f.state().items.map((row) => row.id)).toEqual(['other-item']);
 		expect(f.events.filter((event) => event === 'items:delete')).toHaveLength(1);
@@ -37,7 +39,9 @@ describe('Checklists and checklist items', () => {
 		async (failure) => {
 			const f = contentFixture();
 			f.failures[failure] = true;
-			await expect(f.checklists.deleteChecklist('checklist')).rejects.toThrow();
+			await expect(
+				f.checklists.deleteChecklist('checklist', 'actor'),
+			).rejects.toThrow();
 			expect(f.state().checklists).toHaveLength(2);
 			expect(f.state().items).toHaveLength(2);
 		},
@@ -53,20 +57,20 @@ describe('Checklists and checklist items', () => {
 				if (target === 'project') f.board.project.status = 'ARCHIVED';
 			});
 			await expect(
-				f.items.updateChecklistItem('item', 'Changed'),
+				f.items.updateChecklistItem('item', 'actor', 'Changed'),
 			).rejects.toMatchObject({ status: 409 });
 			expect(f.state().items[0].title).toBe('Task');
 		},
 	);
 	it('deletes only the selected item and reports missing resources', async () => {
 		const f = contentFixture();
-		await f.items.deleteChecklistItem('item');
+		await f.items.deleteChecklistItem('item', 'actor');
 		expect(f.state().items.map((row) => row.id)).toEqual(['other-item']);
-		await expect(f.items.deleteChecklistItem('item')).rejects.toMatchObject({
+		await expect(f.items.deleteChecklistItem('item', 'actor')).rejects.toMatchObject({
 			status: 404,
 		});
 		await expect(
-			f.checklists.updateChecklistTitle('missing', 'Title'),
+			f.checklists.updateChecklistTitle('missing', 'Title', 'actor'),
 		).rejects.toMatchObject({ status: 404 });
 	});
 });

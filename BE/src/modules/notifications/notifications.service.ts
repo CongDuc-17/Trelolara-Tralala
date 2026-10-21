@@ -11,6 +11,7 @@ import type {
 	BoardInvitedInput,
 	CardAssignedInput,
 	CardCommentedInput,
+	CardDueSoonInput,
 	ListNotificationsInput,
 	NotificationPage,
 	NotificationRecord,
@@ -22,6 +23,25 @@ export class NotificationsService {
 		private readonly repository = new NotificationsRepository(),
 		private readonly socket = new NotificationsSocketService(),
 	) {}
+
+	persistCardDueSoon(
+		input: CardDueSoonInput,
+		client: DatabaseClient,
+	): Promise<NotificationRecord> {
+		const { recipientUserId, cardTitle, ...metadata } = input;
+		return this.repository.createOne(
+			{
+				recipientUserId,
+				type: NotificationTypeEnum.CARD_DUE_SOON,
+				title: 'Card deadline approaching',
+				content: `Card ${cardTitle} is due soon`,
+				entityType: NotificationEntityTypeEnum.CARD,
+				entityId: input.cardId,
+				metadata,
+			},
+			client,
+		);
+	}
 
 	getMyNotifications(
 		userId: string,

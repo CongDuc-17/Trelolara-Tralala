@@ -1,4 +1,5 @@
 import { BoardStatusEnum } from '@prisma/client';
+import { recordCardActivity } from '../cardActivities/card-activity';
 import {
 	prisma as database,
 	runInTransaction,
@@ -225,12 +226,24 @@ export class BoardMembersRepository {
 	async removeMember(
 		boardId: string,
 		userId: string,
+		actorId: string,
 		client: DatabaseClient = this.prisma,
 	) {
 		return runInTransaction(async (transaction) => {
+			const assignments = await transaction.cardMembers.findMany({
+				where: { userId, card: { list: { boardId } } },
+				select: { cardId: true },
+			});
 			await transaction.cardMembers.deleteMany({
 				where: { userId, card: { list: { boardId } } },
 			});
+			for (const assignment of assignments)
+				await recordCardActivity(transaction, {
+					cardId: assignment.cardId,
+					userId: actorId,
+					action: 'member_removed',
+					metadata: { userId, reason: 'board_member_removed' },
+				});
 			return transaction.boardMembers.deleteMany({ where: { boardId, userId } });
 		}, client);
 	}

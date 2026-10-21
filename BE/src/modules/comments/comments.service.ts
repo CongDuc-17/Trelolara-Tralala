@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@/common/exceptions';
 import { CardsService } from '../cards/card.service';
+import { recordCardActivity } from '../cardActivities/card-activity';
 import { CardMembersRepository } from '../cardMembers/cardMembers.repository';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CommentsRepository } from './comments.repository';
@@ -41,6 +42,8 @@ export class CommentsService {
 		const saved = await this.cards.withLockedCard(
 			input.cardId,
 			async (card, list, client) => {
+				if (!(await this.repository.canWrite(input.userId, list.boardId, client)))
+					throw new ForbiddenException();
 				if (input.commentId) {
 					const existing = await this.repository.getCommentById(
 						{ commentId: input.commentId },
@@ -48,9 +51,9 @@ export class CommentsService {
 					);
 					if (!existing) throw new NotFoundException('Comment not found');
 					if (existing.userId !== input.userId) throw new ForbiddenException();
+					if (existing.content === input.content)
+						return { comment: existing, notifications: [] };
 				}
-				if (!(await this.repository.canWrite(input.userId, list.boardId, client)))
-					throw new ForbiddenException();
 				const comment = input.commentId
 					? await this.repository.updateComment(
 							{ commentId: input.commentId, content: input.content },
@@ -64,6 +67,12 @@ export class CommentsService {
 							},
 							client,
 						);
+				await recordCardActivity(client, {
+					cardId: card.id,
+					userId: input.userId,
+					action: input.commentId ? 'comment_updated' : 'comment_created',
+					metadata: { commentId: comment.id },
+				});
 				const recipients = await this.members.listUserIds(card.id, client);
 				const notifications = [];
 				for (const recipientUserId of new Set(

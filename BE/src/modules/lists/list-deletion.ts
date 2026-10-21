@@ -1,4 +1,5 @@
 import type { DatabaseClient } from '../database';
+import { deleteAttachments } from '../attachments/attachment-deletion';
 
 /** Caller holds the parent locks and owns the transaction. */
 export async function deleteListTree(
@@ -13,7 +14,7 @@ export async function deleteListTree(
 	await client.cardLabels.deleteMany({ where: { card } });
 	await client.cardMembers.deleteMany({ where: { card } });
 	await client.cardComments.deleteMany({ where: { card } });
-	await client.cardAttachments.deleteMany({ where: { card } });
+	await deleteAttachments(client, { listId });
 	await client.cardActivity.deleteMany({ where: { card } });
 	await client.cards.deleteMany({ where: card });
 	await client.lists.delete({ where: { id: listId } });

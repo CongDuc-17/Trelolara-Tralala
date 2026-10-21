@@ -1,4 +1,5 @@
 import type { DatabaseClient } from '../database';
+import { deleteAttachments } from '../attachments/attachment-deletion';
 
 /** Caller owns the transaction so project deletion can include every board. */
 export async function deleteBoardTree(
@@ -16,7 +17,7 @@ export async function deleteBoardTree(
 	});
 	await client.cardMembers.deleteMany({ where: { card } });
 	await client.cardComments.deleteMany({ where: { card } });
-	await client.cardAttachments.deleteMany({ where: { card } });
+	await deleteAttachments(client, { boardId });
 	await client.cardActivity.deleteMany({ where: { card } });
 	await client.cards.deleteMany({ where: card });
 	await client.lists.deleteMany({ where: { boardId } });

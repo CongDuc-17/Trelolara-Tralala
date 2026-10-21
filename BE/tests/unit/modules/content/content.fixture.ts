@@ -19,8 +19,10 @@ import type {
 import type { CommentRecord } from '@/modules/comments/comments.types';
 import type { DatabaseClient } from '@/modules/database';
 import { makeCard, now } from '../cards/cards.fixture';
+import type { CardActivityRecord } from '@/modules/cardActivities/cardActivities.types';
 
 type State = {
+	activities: Omit<CardActivityRecord, 'user'>[];
 	card: ReturnType<typeof makeCard>;
 	checklists: ChecklistRecord[];
 	items: ChecklistItemRecord[];
@@ -28,6 +30,7 @@ type State = {
 	notifications: NotificationRecord[];
 };
 const copy = (state: State): State => ({
+	activities: state.activities.map((row) => ({ ...row })),
 	card: { ...state.card },
 	checklists: state.checklists.map((row) => ({ ...row })),
 	items: state.items.map((row) => ({ ...row })),
@@ -37,6 +40,7 @@ const copy = (state: State): State => ({
 
 export function contentFixture() {
 	let state: State = {
+		activities: [],
 		card: makeCard('card'),
 		checklists: [
 			{ id: 'checklist', cardId: 'card', title: 'Tasks', createdAt: now },
@@ -90,7 +94,12 @@ export function contentFixture() {
 		project: { status: 'ACTIVE', deletedAt: null as Date | null },
 	};
 	const access = { allowed: true, role: 'BOARD_MEMBER' };
-	const failures = { notification: false, commit: false, checklistDelete: false };
+	const failures = {
+		notification: false,
+		commit: false,
+		checklistDelete: false,
+		activity: false,
+	};
 	const recipients = ['actor', 'recipient'];
 	const events: string[] = [];
 	let queue = Promise.resolve();
@@ -99,6 +108,29 @@ export function contentFixture() {
 
 	function models(read: () => State, write: () => State) {
 		return {
+			cardActivity: {
+				create: jest.fn(
+					async ({
+						data,
+					}: {
+						data: Pick<
+							CardActivityRecord,
+							'cardId' | 'userId' | 'action' | 'metadata'
+						>;
+					}) => {
+						if (failures.activity) throw new Error('Activity write failed');
+						const row = {
+							...data,
+							id: 'activity-' + write().activities.length,
+							details: null,
+							createdAt: now,
+						};
+						write().activities.push(row);
+						events.push('activity');
+						return row;
+					},
+				),
+			},
 			cards: {
 				findUnique: jest.fn(
 					async ({

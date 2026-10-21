@@ -21,6 +21,8 @@ import {
 	notificationsRouter,
 } from './notifications/notifications.router';
 import { commentsRegistry, commentsRouter } from './comments/comments.router';
+import { attachmentsRegistry } from './attachments/attachments.router';
+import { cardActivitiesRegistry } from './cardActivities/cardActivities.router';
 export const Registries = [
 	healthCheckRegistry,
 	authRegistry,
@@ -29,6 +31,8 @@ export const Registries = [
 	boardsRegistry,
 	listsRegistry,
 	cardsRegistry,
+	attachmentsRegistry,
+	cardActivitiesRegistry,
 	labelsRegistry,
 	checklistsRegistry,
 	checklistItemsRegistry,

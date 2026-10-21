@@ -43,6 +43,16 @@ export class CardsController {
 			),
 		});
 	}
+	async updateCard(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.updateCard(
+				req.params.cardId as string,
+				req.body,
+				req.user!.id!,
+			),
+		});
+	}
 	async moveCard(req: Request, res: Response): Promise<Response> {
 		return res.json({
 			success: true,
@@ -67,7 +77,10 @@ export class CardsController {
 	async restoreCard(req: Request, res: Response): Promise<Response> {
 		return res.json({
 			success: true,
-			data: await this.service.restoreCard(req.params.cardId as string),
+			data: await this.service.restoreCard(
+				req.params.cardId as string,
+				req.user!.id!,
+			),
 		});
 	}
 	async deleteCard(req: Request, res: Response): Promise<Response> {
@@ -85,6 +98,7 @@ export class CardsController {
 			data: await this.service.addLabelToCard(
 				req.params.cardId as string,
 				req.body.labelId,
+				req.user!.id!,
 			),
 		});
 	}
@@ -92,6 +106,7 @@ export class CardsController {
 		await this.service.removeLabelFromCard(
 			req.params.cardId as string,
 			req.params.labelId as string,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: null });
 	}
@@ -109,6 +124,7 @@ export class CardsController {
 		await this.service.removeMemberFromCard(
 			req.params.cardId as string,
 			req.params.memberId as string,
+			req.user!.id!,
 		);
 		return res.json({ success: true, data: null });
 	}

@@ -11,6 +11,8 @@ import { LabelsService } from '@/modules/labels/labels.service';
 import { PermissionsRepository } from '@/modules/permissions/permissions.repository';
 import { BoardPermissionEnum, CardPermissionEnum } from '@/common/enums/permissions';
 import { makeCard } from './cards.fixture';
+import { validateRequestMiddleware } from '@/common/middlewares/validationRequest.middleware';
+import { updateCardRequestValidationSchema } from '@/modules/cards/dtos/requests/updateCard.request';
 
 jest.mock('@/modules/database', () => ({ prisma: {} }));
 jest.mock('@/common/middlewares/auth.middleware', () => {
@@ -80,6 +82,18 @@ describe('Card and label route security', () => {
 		);
 	});
 	it.each([
+		[cardsRouter, 'patch', '/:cardId', { cardId: 'bad' }, { title: 'Updated' }, {}],
+		[cardsRouter, 'patch', '/:cardId', { cardId: id }, {}, {}],
+		[cardsRouter, 'patch', '/:cardId', { cardId: id }, { dueDate: '2026-10-21' }, {}],
+		[cardsRouter, 'patch', '/:cardId', { cardId: id }, { isComplete: 'false' }, {}],
+		[
+			cardsRouter,
+			'patch',
+			'/:cardId',
+			{ cardId: id },
+			{ title: 'Updated', members: [] },
+			{},
+		],
 		[cardsRouter, 'patch', '/:cardId/archive', { cardId: 'bad' }, {}, {}],
 		[cardsRouter, 'patch', '/:cardId/restore', { cardId: 'bad' }, {}, {}],
 		[cardsRouter, 'delete', '/:cardId', { cardId: 'bad' }, {}, {}],
@@ -100,6 +114,7 @@ describe('Card and label route security', () => {
 		},
 	);
 	it.each([
+		[cardsRouter, 'patch', '/:cardId', { cardId: id }, { isComplete: true }],
 		[cardsRouter, 'get', '/:cardId', { cardId: id }, {}],
 		[cardsRouter, 'post', '/:cardId/labels', { cardId: id }, { labelId: id }],
 		[
@@ -140,11 +155,21 @@ describe('Card and label route security', () => {
 			{
 				name: 'BOARD_VIEWER',
 				permissions: [
+					CardPermissionEnum.UPDATE_CARD,
 					CardPermissionEnum.ASSIGN_MEMBER,
 					BoardPermissionEnum.UPDATE_BOARD,
 				],
 			},
 		]);
+		await expect(
+			runBeforeController(
+				cardsRouter,
+				'patch',
+				'/:cardId',
+				{ cardId: id },
+				{ dueDate: null },
+			),
+		).resolves.toMatchObject({ status: 403 });
 		await expect(
 			runBeforeController(
 				cardsRouter,
@@ -163,6 +188,33 @@ describe('Card and label route security', () => {
 				{ color: 'red' },
 			),
 		).resolves.toMatchObject({ status: 403 });
+	});
+	it('allows an authorized member PATCH through validation and active card guards', async () => {
+		jest.mocked(PermissionsRepository.prototype.listBoardRoles).mockResolvedValue([
+			{ name: 'BOARD_MEMBER', permissions: [CardPermissionEnum.UPDATE_CARD] },
+		]);
+		jest.spyOn(PermissionsRepository.prototype, 'findBoardState').mockResolvedValue({
+			status: 'ACTIVE',
+			deletedAt: null,
+			project: { status: 'ACTIVE', deletedAt: null },
+		});
+		jest.spyOn(PermissionsRepository.prototype, 'findListState').mockResolvedValue({
+			status: 'ACTIVE',
+			deletedAt: null,
+		});
+		jest.spyOn(PermissionsRepository.prototype, 'findCardState').mockResolvedValue({
+			status: 'ACTIVE',
+			deletedAt: null,
+		});
+		await expect(
+			runBeforeController(
+				cardsRouter,
+				'patch',
+				'/:cardId',
+				{ cardId: id },
+				{ dueDate: null, isComplete: false },
+			),
+		).resolves.toBeUndefined();
 	});
 	it('allows member reads and partial label updates with the existing permission', async () => {
 		jest.mocked(PermissionsRepository.prototype.listBoardRoles).mockResolvedValue([
@@ -202,6 +254,36 @@ describe('Card and label route security', () => {
 });
 
 describe('Card and label HTTP envelopes', () => {
+	it('passes parsed dates/null/false to the service and returns the existing mutation envelope', async () => {
+		const dueDate = new Date('2026-10-21T10:00:00Z');
+		const row = { ...makeCard(id), dueDate };
+		const service = { updateCard: jest.fn().mockResolvedValue(row) };
+		const controller = new CardsController(service as unknown as CardsService);
+		const req = {
+			params: { cardId: id },
+			user: { id },
+			body: {
+				dueDate: '2026-10-21T17:00:00+07:00',
+				description: null,
+				isComplete: false,
+			},
+		} as unknown as Request;
+		const json = jest.fn().mockReturnThis();
+		const res = { json, locals: {} } as unknown as Response;
+		const next = jest.fn();
+		validateRequestMiddleware(updateCardRequestValidationSchema)(req, res, next);
+		expect(next).toHaveBeenCalledWith();
+		await controller.updateCard(req, res);
+		expect(service.updateCard).toHaveBeenCalledWith(
+			id,
+			{ dueDate, description: null, isComplete: false },
+			id,
+		);
+		expect(json).toHaveBeenCalledWith({ success: true, data: row });
+		expect(JSON.parse(JSON.stringify(json.mock.calls[0][0])).data.dueDate).toBe(
+			'2026-10-21T10:00:00.000Z',
+		);
+	});
 	it('generates card documentation with include fields and relation mutation schemas', () => {
 		const document = new OpenApiGeneratorV3(
 			cardsRegistry.definitions,
@@ -214,8 +296,51 @@ describe('Card and label HTTP envelopes', () => {
 							data: {
 								properties: {
 									memberCount: { type: 'number' },
+									isComplete: { type: 'boolean' },
+									isOverdue: { type: 'boolean' },
 									checklists: { type: 'array' },
 									comments: { type: 'array' },
+								},
+							},
+						},
+					},
+				},
+			},
+		});
+		expect(document.paths['/cards/{cardId}']?.patch).toMatchObject({
+			requestBody: {
+				required: true,
+				content: {
+					'application/json': {
+						schema: {
+							additionalProperties: false,
+							properties: {
+								title: { type: 'string', maxLength: 100 },
+								description: { type: 'string', nullable: true },
+								dueDate: {
+									type: 'string',
+									format: 'date-time',
+									nullable: true,
+								},
+								isComplete: { type: 'boolean' },
+							},
+						},
+					},
+				},
+			},
+			responses: {
+				'200': {
+					content: {
+						'application/json': {
+							schema: {
+								properties: {
+									success: { type: 'boolean' },
+									data: {
+										properties: {
+											isComplete: { type: 'boolean' },
+											updatedAt: { type: 'string' },
+										},
+									},
 								},
 							},
 						},
@@ -315,12 +440,13 @@ describe('Card and label HTTP envelopes', () => {
 		const req = {
 			params: { boardId: id, labelId: id },
 			body: { color: 'red' },
+			user: { id },
 		} as unknown as Request;
 		await controller.getLabelsByBoardId(req, res);
 		const { createdAt: _createdAt, ...label } = row;
 		expect(json).toHaveBeenLastCalledWith({ data: [label] });
 		await controller.updateLabel(req, res);
-		expect(service.updateLabel).toHaveBeenCalledWith(id, { color: 'red' });
+		expect(service.updateLabel).toHaveBeenCalledWith(id, { color: 'red' }, id);
 		expect(json).toHaveBeenLastCalledWith({ success: true, data: label });
 		await controller.deleteLabel(req, res);
 		expect(json).toHaveBeenLastCalledWith({ success: true, data: null });

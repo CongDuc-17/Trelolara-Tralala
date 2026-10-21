@@ -136,7 +136,10 @@ function setup(initial: ListRecord[] = []) {
 					'cards',
 				].map((table) => [
 					table,
-					{ deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+					{
+						findMany: jest.fn().mockResolvedValue([]),
+						deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+					},
 				]),
 			),
 		};

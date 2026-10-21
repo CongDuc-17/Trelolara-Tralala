@@ -41,12 +41,39 @@ import { uploadAvatarMiddleware } from '@/common/middlewares/upload.middleware';
 import { getBoardResponseDtoSchema } from './dtos/responses/getBoard.response';
 import { PaginationSchema } from '@/common/dtos/pagination.dto';
 import { BoardStatusEnum } from '@prisma/client';
+import { CardSearchController } from '../cards/card-search.controller';
+import { cardSearchQuery } from '../cards/card-search.schema';
+import { cardSearchPageSchema } from '../cards/card-search.response';
+import { CardPermissionEnum } from '@/common/enums/permissions';
 
 const boardsController = new BoardsController();
 const listsController = new ListsController();
 const labelsController = new LabelsController();
 export const boardsRegistry = new OpenAPIRegistry();
 const router = express.Router();
+const cardSearch = new CardSearchController();
+autoBindUtil(cardSearch);
+boardsRegistry.registerPath({
+	method: 'get',
+	path: '/boards/{boardId}/cards',
+	tags: ['Cards'],
+	request: { params: z.strictObject({ boardId: z.uuid() }), query: cardSearchQuery },
+	responses: createApiResponse(
+		cardSearchPageSchema,
+		'Filtered cards, newest first',
+		200,
+	),
+});
+router.get(
+	'/:boardId/cards',
+	authMiddleware.verifyAccessToken,
+	validateRequestMiddleware({
+		params: z.strictObject({ boardId: z.uuid() }),
+		query: cardSearchQuery,
+	}),
+	authMiddleware.verifyBoardPermission(CardPermissionEnum.GET_CARD),
+	cardSearch.board,
+);
 
 autoBindUtil(boardsController);
 autoBindUtil(listsController);

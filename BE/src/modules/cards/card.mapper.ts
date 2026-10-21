@@ -1,4 +1,11 @@
-import type { CardDetails, CardIncludes, CardQuery } from './cards.types';
+import type { CardDetails, CardIncludes, CardQuery, CardRecord } from './cards.types';
+
+export function isCardOverdue(
+	card: Pick<CardRecord, 'dueDate' | 'isComplete'>,
+	now = Date.now(),
+): boolean {
+	return !card.isComplete && card.dueDate !== null && card.dueDate.getTime() < now;
+}
 
 export function mapCard(card: CardQuery, include?: CardIncludes): CardDetails {
 	return {
@@ -6,6 +13,9 @@ export function mapCard(card: CardQuery, include?: CardIncludes): CardDetails {
 		title: card.title,
 		description: card.description,
 		dueDate: card.dueDate,
+		isComplete: card.isComplete,
+		reminderMinutesBefore: card.reminderMinutesBefore,
+		isOverdue: isCardOverdue(card),
 		position: card.position,
 		listId: card.listId,
 		createdAt: card.createdAt,

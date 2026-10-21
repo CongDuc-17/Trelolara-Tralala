@@ -28,6 +28,7 @@ describe('card creation through a list', () => {
 			cards: { findMany: jest.fn(), create: jest.fn() },
 		};
 		const client = {
+			cardActivity: { create: jest.fn() },
 			cards: {
 				findMany: jest.fn().mockResolvedValue([{ id: 'previous', position: 3 }]),
 				create: jest.fn().mockResolvedValue(card),
@@ -153,14 +154,12 @@ describe('card movement through a list', () => {
 		};
 		const target = { ...source, id: 'target' };
 		const repository = {
-			getCardById: jest
-				.fn()
-				.mockResolvedValue({
-					id: 'card',
-					listId: source.id,
-					status: 'ACTIVE',
-					deletedAt: null,
-				}),
+			getCardById: jest.fn().mockResolvedValue({
+				id: 'card',
+				listId: source.id,
+				status: 'ACTIVE',
+				deletedAt: null,
+			}),
 			lockCard: jest.fn(),
 			inTransaction: jest.fn(),
 			updateCardPosition: jest.fn(),

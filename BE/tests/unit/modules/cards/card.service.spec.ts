@@ -156,9 +156,9 @@ describe('Card ordering and lifecycle', () => {
 			if (target === 'list') f.state().lists[0].status = 'ARCHIVED';
 			if (target === 'board') f.board.status = 'ARCHIVED';
 			if (target === 'project') f.board.project.status = 'ARCHIVED';
-			await expect(f.service.addLabelToCard('card', 'label')).rejects.toMatchObject(
-				{ status: 409 },
-			);
+			await expect(
+				f.service.addLabelToCard('card', 'label', 'actor'),
+			).rejects.toMatchObject({ status: 409 });
 			expect(f.state().relations).toEqual([]);
 		},
 	);
@@ -172,15 +172,15 @@ describe('Card ordering and lifecycle', () => {
 		});
 		expect(f.state().lists[0].status).toBe('ACTIVE');
 		f.state().lists[0].status = 'ARCHIVED';
-		await expect(f.service.restoreCard('card')).rejects.toMatchObject({
+		await expect(f.service.restoreCard('card', 'actor')).rejects.toMatchObject({
 			status: 409,
 		});
 		f.state().lists[0].status = 'ACTIVE';
-		await expect(f.service.restoreCard('card')).resolves.toMatchObject({
+		await expect(f.service.restoreCard('card', 'actor')).resolves.toMatchObject({
 			status: 'ACTIVE',
 			deletedAt: null,
 		});
-		await expect(f.service.restoreCard('card')).rejects.toMatchObject({
+		await expect(f.service.restoreCard('card', 'actor')).rejects.toMatchObject({
 			status: 400,
 		});
 	});
@@ -240,11 +240,11 @@ describe('Card labels and assignments', () => {
 	it('attaches a label only from the same board and prevents duplicate concurrent attaches', async () => {
 		const f = cardFixture();
 		await expect(
-			f.service.addLabelToCard('card', 'foreign-label'),
+			f.service.addLabelToCard('card', 'foreign-label', 'actor'),
 		).rejects.toMatchObject({ status: 422 });
 		const results = await Promise.allSettled([
-			f.service.addLabelToCard('card', 'label'),
-			f.service.addLabelToCard('card', 'label'),
+			f.service.addLabelToCard('card', 'label', 'actor'),
+			f.service.addLabelToCard('card', 'label', 'actor'),
 		]);
 		expect(results.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
 		expect(f.state().relations).toHaveLength(1);
@@ -261,12 +261,12 @@ describe('Card labels and assignments', () => {
 			{ id: 'd', cardId: 'other', userId: 'assignee' },
 		);
 		f.membership.exists = false;
-		await f.service.removeLabelFromCard('card', 'label');
-		await f.service.removeMemberFromCard('card', 'assignee');
+		await f.service.removeLabelFromCard('card', 'label', 'actor');
+		await f.service.removeMemberFromCard('card', 'assignee', 'actor');
 		expect(f.state().relations.map((row) => row.cardId)).toEqual(['other']);
 		expect(f.state().assignments.map((row) => row.cardId)).toEqual(['other']);
 		await expect(
-			f.service.removeMemberFromCard('card', 'assignee'),
+			f.service.removeMemberFromCard('card', 'assignee', 'actor'),
 		).rejects.toMatchObject({ status: 404 });
 	});
 
