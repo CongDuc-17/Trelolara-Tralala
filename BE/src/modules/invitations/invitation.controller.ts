@@ -1,105 +1,66 @@
-import { Exception } from '@/common/exceptions/app-error';
-import { Request, Response } from 'express';
-
+import type { Request, Response } from 'express';
 import { InvitationService } from './invitation.service';
-import { HttpResponseDto } from '@/common/dtos/httpResponse.dto';
 
 export class InvitationController {
-	constructor(private readonly invitationService = new InvitationService()) {}
-	async inviteUserToProject(req: Request): Promise<Response> {
-		const { projectId } = req.params as { projectId: string };
-		const { email, roleId } = req.body;
-		const inviterId = (req.user as { id: string }).id;
-		const result = await this.invitationService.inviteUserToProject(
-			projectId,
-			inviterId,
-			email,
-			roleId,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	constructor(private readonly service = new InvitationService()) {}
+	async inviteUserToProject(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.inviteUserToProject(
+				req.params.projectId as string,
+				req.user!.id!,
+				req.body.email,
+				req.body.roleId,
+			),
+		});
 	}
-
-	async inviteUserToBoard(req: Request): Promise<Response> {
-		const { boardId } = req.params as { boardId: string };
-		const { email, roleId } = req.body;
-		const inviterId = (req.user as { id: string }).id;
-		const result = await this.invitationService.inviteUserToBoard(
-			boardId,
-			inviterId,
-			email,
-			roleId,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async inviteUserToBoard(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.inviteUserToBoard(
+				req.params.boardId as string,
+				req.user!.id!,
+				req.body.email,
+				req.body.roleId,
+			),
+		});
 	}
-
-	async createShareLinkForProject(req: Request): Promise<Response> {
-		const { projectId } = req.params as { projectId: string };
-		console.log('projectId', projectId);
-		const inviterId = (req.user as { id: string }).id;
-		const roleId = req.body.roleId;
-		const result = await this.invitationService.createShareLinkForProject(
-			projectId,
-			inviterId,
-			roleId,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async createShareLinkForProject(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.createShareLinkForProject(
+				req.params.projectId as string,
+				req.user!.id!,
+				req.body.roleId,
+			),
+		});
 	}
-
-	async createShareLinkForBoard(req: Request): Promise<Response> {
-		const { boardId } = req.params as { boardId: string };
-		const inviterId = (req.user as { id: string }).id;
-		const roleId = req.body.roleId;
-		const result = await this.invitationService.createShareLinkForBoard(
-			boardId,
-			inviterId,
-			roleId,
-		);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async createShareLinkForBoard(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.createShareLinkForBoard(
+				req.params.boardId as string,
+				req.user!.id!,
+				req.body.roleId,
+			),
+		});
 	}
-
-	async acceptInvitation(req: Request, res: Response, next: Function) {
-		const { token } = req.params as { token: string };
-		const userId = (req.user as { id: string }).id;
-		const result = await this.invitationService.acceptInvitation(token, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async acceptInvitation(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.acceptInvitation(
+				req.params.token as string,
+				req.user!.id!,
+			),
+		});
 	}
-
-	async rejectInvitation(req: Request, res: Response, next: Function) {
-		const { token } = req.params as { token: string };
-		const userId = (req.user as { id: string }).id;
-		const result = await this.invitationService.rejectInvitation(token, userId);
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<any>(result);
+	async rejectInvitation(req: Request, res: Response): Promise<Response> {
+		return res.json({
+			success: true,
+			data: await this.service.rejectInvitation(
+				req.params.token as string,
+				req.user!.id!,
+			),
+		});
 	}
-
-	// async getInvitationInfo(req: Request, res: Response, next: Function) {
-	// 	try {
-	// 		const { token } = req.params;
-	// 		const result = await this.invitationService.getInvitationInfo(token);
-	// 		res.status(result.code).json({
-	// 			success: result.success,
-	// 			message: result.message,
-	// 			data: result.data,
-	// 		});
-	// 	} catch (error) {
-	// 		next(error);
-	// 	}
-	// }
 }

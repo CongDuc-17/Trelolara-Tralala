@@ -2,10 +2,6 @@ import z from 'zod';
 
 import { ZodValidationSchema } from '@/common';
 
-export class UpdateChecklistTitleRequestDto {
-	title: string;
-}
-
 const updateChecklistTitleRequestBody = z
 	.object({
 		title: z.string().min(1).max(255).describe('Updated checklist title'),

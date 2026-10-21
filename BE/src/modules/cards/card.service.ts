@@ -266,7 +266,8 @@ export class CardsService {
 		});
 	}
 
-	private withLockedCard<T>(
+	// Nested content use cases share this lifecycle check and the same parent-locked transaction.
+	withLockedCard<T>(
 		cardId: string,
 		work: (card: CardRecord, list: ListRecord, client: DatabaseClient) => Promise<T>,
 		active = true,

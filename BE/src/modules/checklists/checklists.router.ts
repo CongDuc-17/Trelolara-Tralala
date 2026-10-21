@@ -1,4 +1,3 @@
-import { checklistItems } from '@prisma/client';
 import { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import express from 'express';
 import { StatusCodes } from 'http-status-codes';

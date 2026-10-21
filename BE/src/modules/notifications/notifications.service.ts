@@ -52,12 +52,14 @@ export class NotificationsService {
 	// Call only after the transaction commits; delivery cannot roll back saved work.
 	async deliver(
 		notifications: NotificationRecord | NotificationRecord[],
-	): Promise<void> {
+	): Promise<boolean> {
 		const records = Array.isArray(notifications) ? notifications : [notifications];
+		let delivered = true;
 		for (const record of records) {
 			try {
 				this.socket.emitNewNotification(record.userId, record);
 			} catch {
+				delivered = false;
 				console.warn('Notification event delivery failed');
 			}
 		}
@@ -66,9 +68,11 @@ export class NotificationsService {
 				const count = await this.repository.countUnreadByUserId(userId);
 				this.socket.emitUnreadCount(userId, count);
 			} catch {
+				delivered = false;
 				console.warn('Notification unread count delivery failed');
 			}
 		}
+		return delivered;
 	}
 
 	persistProjectInvited(
@@ -88,6 +92,14 @@ export class NotificationsService {
 					projectId: input.projectId,
 					projectName: input.projectName,
 					actorName: input.actorName,
+					...(input.invitation
+						? {
+								invitationId: input.invitation.id,
+								token: input.invitation.token,
+								type: input.invitation.type,
+								expiresAt: input.invitation.expiresAt,
+							}
+						: {}),
 				},
 			},
 			client,
@@ -111,6 +123,14 @@ export class NotificationsService {
 					boardId: input.boardId,
 					boardName: input.boardName,
 					actorName: input.actorName,
+					...(input.invitation
+						? {
+								invitationId: input.invitation.id,
+								token: input.invitation.token,
+								type: input.invitation.type,
+								expiresAt: input.invitation.expiresAt,
+							}
+						: {}),
 				},
 			},
 			client,

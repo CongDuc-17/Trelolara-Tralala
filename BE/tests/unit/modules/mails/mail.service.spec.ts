@@ -18,6 +18,22 @@ const message = {
 };
 
 describe('MailsService', () => {
+	it('does not log an invitation token returned in a provider error', async () => {
+		const token = 'a'.repeat(64);
+		const log = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+		const mail = new MailsService(
+			{
+				sendMail: jest
+					.fn()
+					.mockRejectedValue(
+						new Error('Rejected https://frontend.example/invite/' + token),
+					),
+			},
+			sender,
+		);
+		await expect(mail.sendEmail(message)).rejects.toBeInstanceOf(MailDeliveryError);
+		expect(log.mock.calls.flat().join(' ')).not.toContain(token);
+	});
 	beforeEach(() => {
 		resetMailTransporter();
 		jest.clearAllMocks();
@@ -142,4 +158,3 @@ describe('MailsService', () => {
 		}
 	});
 });
-

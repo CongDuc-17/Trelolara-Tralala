@@ -63,7 +63,7 @@ export class PermissionService {
 		resource: PermissionResource,
 		action: ResourceAction = 'write',
 	): Promise<void> {
-		// shortcut: child modules check before writing; move this check under their parent locks in each module refactor.
+		// HTTP guard is an early rejection; mutation services repeat lifecycle checks under their parent locks.
 		const boardId = await this.resolveBoardId(resource);
 		const state = boardId ? await this.repository.findBoardState(boardId) : null;
 		if (!state) throw new NotFoundException('Board not found');

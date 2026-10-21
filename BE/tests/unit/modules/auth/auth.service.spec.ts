@@ -47,6 +47,9 @@ function setup() {
 	const repository = {
 		findUser: jest.fn(async () => user as AuthUser | null),
 		findAccount: jest.fn(async () => account as AuthAccount | null),
+		findVerificationAccount: jest.fn(
+			async () => account as Pick<AuthAccount, 'id' | 'userId' | 'user'> | null,
+		),
 		lockUser: jest.fn(async () => undefined),
 		createRegisteredAccount: jest.fn(
 			async (_input: Parameters<AuthRepository['createRegisteredAccount']>[0]) =>
@@ -92,6 +95,23 @@ function setup() {
 }
 
 describe('AuthService with isolated adapters', () => {
+	it('generates OTP under the user lock and rejects an address changed while waiting for the lock', async () => {
+		const f = setup();
+		await f.service.sendOtp({ email: user.email });
+		expect(f.otps.generateOtp).toHaveBeenCalledWith({ userId: user.id }, f.client);
+		expect(f.repository.lockUser.mock.invocationCallOrder[0]).toBeLessThan(
+			f.otps.generateOtp.mock.invocationCallOrder[0],
+		);
+		const changed = setup();
+		changed.repository.findUser
+			.mockResolvedValueOnce(user)
+			.mockResolvedValueOnce({ ...user, email: 'changed@example.com' });
+		await expect(
+			changed.service.sendOtp({ email: user.email }),
+		).rejects.toMatchObject({ status: 404 });
+		expect(changed.otps.generateOtp).not.toHaveBeenCalled();
+		expect(changed.mail.sendEmail).not.toHaveBeenCalled();
+	});
 	it('ignores any role passed outside HTTP validation and creates USER through the repository contract', async () => {
 		const { service, repository } = setup();
 		repository.findUser.mockResolvedValueOnce(null);
@@ -308,7 +328,7 @@ describe('AuthService with isolated adapters', () => {
 
 	it('commits a failed OTP attempt before returning the validation error', async () => {
 		const { service, repository, otps, commits } = setup();
-		repository.findAccount.mockResolvedValue({
+		repository.findVerificationAccount.mockResolvedValue({
 			...account,
 			user: { ...user, verify: false },
 		});
@@ -322,7 +342,7 @@ describe('AuthService with isolated adapters', () => {
 
 	it('verification consumes OTP and updates the account in one transaction without invitation effects', async () => {
 		const { service, repository, otps, client } = setup();
-		repository.findAccount.mockResolvedValue({
+		repository.findVerificationAccount.mockResolvedValue({
 			...account,
 			user: { ...user, verify: false },
 		});
@@ -334,6 +354,23 @@ describe('AuthService with isolated adapters', () => {
 			client,
 		);
 		expect(repository.markVerified).toHaveBeenCalledWith(user.id);
+	});
+
+	it('verifies a changed email for an OAuth-only identity without creating local credentials', async () => {
+		const f = setup();
+		f.repository.findVerificationAccount.mockResolvedValue({
+			id: 'social-identity',
+			userId: user.id,
+			user: { ...user, verify: false },
+		});
+		await expect(
+			f.service.verify({ email: user.email, otp: '123456' }),
+		).resolves.toMatchObject({
+			id: 'social-identity',
+			userId: user.id,
+			verify: true,
+		});
+		expect(f.repository.upsertPassword).not.toHaveBeenCalled();
 	});
 
 	it('password reset consumes OTP, updates credentials and revokes every session atomically', async () => {

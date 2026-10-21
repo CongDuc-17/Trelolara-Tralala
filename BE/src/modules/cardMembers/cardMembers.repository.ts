@@ -2,6 +2,17 @@ import { prisma as database, type DatabaseClient } from '../database';
 export class CardMembersRepository {
 	constructor(private readonly prismaService: DatabaseClient = database) {}
 
+	async listUserIds(
+		cardId: string,
+		client: DatabaseClient = this.prismaService,
+	): Promise<string[]> {
+		const members = await client.cardMembers.findMany({
+			where: { cardId },
+			select: { userId: true },
+		});
+		return members.map((member) => member.userId);
+	}
+
 	async addMemberToCard(
 		cardId: string,
 		userId: string,

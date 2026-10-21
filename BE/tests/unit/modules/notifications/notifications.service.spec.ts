@@ -134,7 +134,7 @@ describe('Notification persistence and post-commit delivery', () => {
 				notification,
 				{ ...notification, id: 'other', userId: 'other-recipient' },
 			]),
-		).resolves.toBeUndefined();
+		).resolves.toBe(false);
 		expect(socket.emitNewNotification).toHaveBeenCalledTimes(2);
 		expect(socket.emitUnreadCount).toHaveBeenCalledWith('other-recipient', 3);
 		expect(warn.mock.calls.flat().join(' ')).not.toContain('secret-token');
@@ -146,7 +146,7 @@ describe('Notification persistence and post-commit delivery', () => {
 		socket.emitUnreadCount.mockImplementationOnce(() => {
 			throw new Error('socket closed');
 		});
-		await expect(service.deliver(notification)).resolves.toBeUndefined();
+		await expect(service.deliver(notification)).resolves.toBe(false);
 		repository.countUnreadByUserId.mockClear();
 		await service.deliver([]);
 		expect(repository.countUnreadByUserId).not.toHaveBeenCalled();

@@ -3,7 +3,6 @@ import express from 'express';
 import { StatusCodes } from 'http-status-codes';
 
 import { ChecklistItemsController } from './checklistItems.controller';
-import { ChecklistsController } from '../checklists/checklists.controller';
 import { autoBindUtil, validateRequestMiddleware } from '@/common';
 import authMiddleware from '@/common/middlewares/auth.middleware';
 import { createApiResponse } from '@/swagger/openAPIResponseBuilders';
@@ -17,12 +16,10 @@ import {
 import { CardPermissionEnum } from '@/common/enums/permissions/cardPermission.enum';
 
 const checklistItemsController = new ChecklistItemsController();
-const checklistsController = new ChecklistsController();
 export const checklistItemsRegistry = new OpenAPIRegistry();
 
 const router = express.Router({ mergeParams: true });
 autoBindUtil(checklistItemsController);
-autoBindUtil(checklistsController);
 
 checklistItemsRegistry.registerPath({
 	method: 'patch',

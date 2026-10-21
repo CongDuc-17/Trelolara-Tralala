@@ -21,9 +21,12 @@ export class OtpsService {
 			randomInt(100000, 1000000).toString(),
 	) {}
 
-	async generateOtp({ userId }: { userId: string }): Promise<otps> {
+	async generateOtp(
+		{ userId }: { userId: string },
+		client?: DatabaseClient,
+	): Promise<otps> {
 		const now = this.now();
-		const existing = await this.repository.findOtp(userId);
+		const existing = await this.repository.findOtp(userId, client);
 		if (existing && existing.expiresAt > now) {
 			throw new OtpCooldownError(
 				Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000),
@@ -37,12 +40,13 @@ export class OtpsService {
 				code,
 				expiresAt,
 				now,
+				client,
 			);
 			if (!replacement) throw new OtpCooldownError(otpsConfig.otpExpiresIn * 60);
 			return replacement;
 		}
 		try {
-			return await this.repository.createOtp(userId, code, expiresAt);
+			return await this.repository.createOtp(userId, code, expiresAt, client);
 		} catch (error) {
 			if (
 				error &&

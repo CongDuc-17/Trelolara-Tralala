@@ -10,6 +10,7 @@ import {
 	CreateInvitationRequestValidationSchemaBoard,
 } from './dtos/requests/createInvitation.request';
 import express from 'express';
+import { z } from 'zod';
 
 import { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import { StatusCodes } from 'http-status-codes/build/cjs/status-codes';
@@ -107,7 +108,7 @@ invitationsRegistry.registerPath({
 	path: '/invitations/{token}/accept',
 	tags: ['Invitations'],
 	request: TokenInvitationRequestSchema,
-	responses: createApiResponse(InvitationsResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(z.string(), 'Success', StatusCodes.OK),
 });
 router.post(
 	'/:token/accept',
@@ -121,7 +122,7 @@ invitationsRegistry.registerPath({
 	path: '/invitations/{token}/reject',
 	tags: ['Invitations'],
 	request: TokenInvitationRequestSchema,
-	responses: createApiResponse(InvitationsResponseDtoSchema, 'Success', StatusCodes.OK),
+	responses: createApiResponse(z.string(), 'Success', StatusCodes.OK),
 });
 
 router.post(

@@ -1,83 +1,50 @@
-import { CardsRepository } from '../cards/card.repository';
-import { ChecklistItemsRepository } from '../checklistItems/checklistItems.repository';
+import { NotFoundException } from '@/common/exceptions';
+import { CardsService } from '../cards/card.service';
+import type { DatabaseClient } from '../database';
 import { ChecklistsRepository } from './checklists.repository';
+import type { ChecklistRecord } from './checklists.types';
 
-import { Exception } from '@/common/exceptions/app-error';
-
-import { HttpResponseBodySuccessDto } from '@/common/dtos/httpResponseBodySuccess.dto';
-import { NotFoundException } from '@/common/exceptions/notFound.exception';
-import { ChecklistResponseDto } from './dtos/responses/checklist.response';
 export class ChecklistsService {
 	constructor(
-		private readonly checklistsRepository: ChecklistsRepository = new ChecklistsRepository(),
-		private readonly checklistItemsRepository: ChecklistItemsRepository = new ChecklistItemsRepository(),
-		private readonly cardsRepository: CardsRepository = new CardsRepository(),
+		private readonly repository = new ChecklistsRepository(),
+		private readonly cards = new CardsService(),
 	) {}
-
-	async createChecklist(
-		cardId: string,
-		title: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<ChecklistResponseDto>> {
-		const card = await this.cardsRepository.getCardById(cardId);
-		if (!card) {
-			throw new NotFoundException('Card not found');
-		}
-		const checklist = await this.checklistsRepository.createChecklist(cardId, title);
-		return {
-			success: true,
-			data: new ChecklistResponseDto(checklist),
-		};
-	}
-
-	async getChecklistById(
-		checklistId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<ChecklistResponseDto>> {
-		const checklist = await this.checklistsRepository.getChecklistById(checklistId);
-		if (!checklist) {
-			throw new NotFoundException('Checklist not found');
-		}
-		return {
-			success: true,
-			data: new ChecklistResponseDto(checklist),
-		};
-	}
-
-	async updateChecklistTitle(
-		checklistID: string,
-		title: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<ChecklistResponseDto>> {
-		const checklist = await this.checklistsRepository.getChecklistById(checklistID);
-		if (!checklist) {
-			throw new NotFoundException('Checklist not found');
-		}
-		const updatedChecklist = await this.checklistsRepository.updateChecklistTitle(
-			checklistID,
-			title,
+	createChecklist(cardId: string, title: string): Promise<ChecklistRecord> {
+		return this.cards.withLockedCard(cardId, (_card, _list, client) =>
+			this.repository.createChecklist(cardId, title, client),
 		);
-		return {
-			success: true,
-			data: new ChecklistResponseDto(updatedChecklist),
-		};
 	}
-
-	async deleteChecklist(
-		checklistId: string,
-	): Promise<Exception | HttpResponseBodySuccessDto<any>> {
-		const checklist = await this.checklistsRepository.getChecklistById(checklistId);
-		if (!checklist) {
-			throw new NotFoundException('Checklist not found');
-		}
-
-		//xoa cac checklist item lien quan den checklist
-		await this.checklistItemsRepository.deleteCheckListItemsByChecklistId(
-			checklistId,
+	async getChecklistById(id: string): Promise<ChecklistRecord> {
+		const checklist = await this.repository.getChecklistById(id);
+		if (!checklist) throw new NotFoundException('Checklist not found');
+		return checklist;
+	}
+	updateChecklistTitle(id: string, title: string): Promise<ChecklistRecord> {
+		return this.withChecklist(id, (_checklist, client) =>
+			this.repository.updateChecklistTitle(id, title, client),
 		);
-
-		//xoa checklist
-		await this.checklistsRepository.deleteChecklist(checklistId);
-		return {
-			success: true,
-			data: null,
-		};
+	}
+	async deleteChecklist(id: string): Promise<void> {
+		await this.withChecklist(
+			id,
+			(_checklist, client) => this.repository.deleteChecklist(id, client),
+			false,
+		);
+	}
+	async withChecklist<T>(
+		id: string,
+		work: (checklist: ChecklistRecord, client: DatabaseClient) => Promise<T>,
+		active = true,
+	): Promise<T> {
+		const initial = await this.getChecklistById(id);
+		return this.cards.withLockedCard(
+			initial.cardId,
+			async (_card, _list, client) => {
+				const checklist = await this.repository.getChecklistById(id, client);
+				if (!checklist) throw new NotFoundException('Checklist not found');
+				return work(checklist, client);
+			},
+			active,
+		);
 	}
 }

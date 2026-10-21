@@ -1,47 +1,32 @@
+import type { Request, Response } from 'express';
 import { CommentsService } from './comments.service';
 import { GetCommentResponseDto } from './dtos/responses';
-import { Request, Response } from 'express';
-import { HttpResponseDto } from '@/common';
-import { Exception } from '@/common/exceptions/app-error';
+import type { CommentRecord } from './comments.types';
+
+const mapComment = (comment: CommentRecord) =>
+	new GetCommentResponseDto({ ...comment, commentId: comment.id });
 export class CommentsController {
-	constructor(private commentsService: CommentsService = new CommentsService()) {}
-
-	async getCommentsByCardId(req: Request): Promise<Response> {
-		const cardId = req.params.cardId as string;
-		const result = await this.commentsService.getCommentsByCardId({ cardId });
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetCommentResponseDto[]>(result);
-	}
-
-	async createComment(req: Request): Promise<Response> {
-		const cardId = req.params.cardId as string;
-		const userId = (req.user as { id: string }).id;
-		const content = req.body.content as string;
-		const result = await this.commentsService.createComment({
-			cardId,
-			userId,
-			content,
+	constructor(private readonly service = new CommentsService()) {}
+	async getCommentsByCardId(req: Request, res: Response): Promise<Response> {
+		const comments = await this.service.getCommentsByCardId({
+			cardId: req.params.cardId as string,
 		});
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetCommentResponseDto>(result);
+		return res.json({ success: true, data: comments.map(mapComment) });
 	}
-
-	async updateComment(req: Request): Promise<Response> {
-		const commentId = req.params.commentId as string;
-		const content = req.body.content as string;
-		const userId = (req.user as { id: string }).id;
-		const result = await this.commentsService.updateComment({
-			commentId,
-			content,
-			userId,
+	async createComment(req: Request, res: Response): Promise<Response> {
+		const comment = await this.service.createComment({
+			cardId: req.params.cardId as string,
+			userId: req.user!.id!,
+			content: req.body.content,
 		});
-		if (result instanceof Exception) {
-			return new HttpResponseDto().exception(result);
-		}
-		return new HttpResponseDto().success<GetCommentResponseDto>(result);
+		return res.json({ success: true, data: mapComment(comment) });
+	}
+	async updateComment(req: Request, res: Response): Promise<Response> {
+		const comment = await this.service.updateComment({
+			commentId: req.params.commentId as string,
+			userId: req.user!.id!,
+			content: req.body.content,
+		});
+		return res.json({ success: true, data: mapComment(comment) });
 	}
 }

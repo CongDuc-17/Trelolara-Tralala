@@ -74,6 +74,16 @@ export class AuthRepository {
 		});
 	}
 
+	async findVerificationAccount(
+		email: string,
+	): Promise<Pick<AuthAccount, 'id' | 'userId' | 'user'> | null> {
+		const where = { user: { email, status: UserStatusEnum.ACTIVE, deletedAt: null } };
+		const select = { id: true, userId: true, user: true } as const;
+		const local = await this.client.accounts.findFirst({ where, select });
+		if (local) return local;
+		return this.client.socialAccounts.findFirst({ where, select });
+	}
+
 	private async findDefaultRole(): Promise<{ id: string }> {
 		const role = await this.client.roles.findFirst({
 			where: { name: 'USER', status: RoleStatusEnum.ACTIVE, deletedAt: null },

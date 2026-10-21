@@ -41,6 +41,7 @@ export interface NotificationPage {
 }
 
 export interface ProjectInvitedInput {
+	invitation?: { id: string; token: string; type: string; expiresAt: string };
 	recipientUserId: string;
 	actorId?: string;
 	actorName: string;
@@ -49,6 +50,7 @@ export interface ProjectInvitedInput {
 }
 
 export interface BoardInvitedInput {
+	invitation?: { id: string; token: string; type: string; expiresAt: string };
 	recipientUserId: string;
 	actorId?: string;
 	actorName: string;

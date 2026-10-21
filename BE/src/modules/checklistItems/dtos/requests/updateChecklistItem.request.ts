@@ -23,7 +23,11 @@ const updateChecklistItemRequestBody = z
 			.optional()
 			.describe('Updated checklist item completion status'),
 	})
-	.strict();
+	.strict()
+	.refine(
+		(input) => input.title !== undefined || input.completed !== undefined,
+		'No fields to update',
+	);
 
 export const updateChecklistItemValidationSchema: ZodValidationSchema = {
 	params: updateChecklistItemRequestParams,
