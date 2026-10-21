@@ -1,4 +1,5 @@
-import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 export interface MailSender {
 	address: string;
@@ -6,7 +7,7 @@ export interface MailSender {
 }
 
 export function getMailSender(): MailSender {
-	const address = process.env.MAIL_SENDER_ADDRESS?.trim();
+	const address = (process.env.MAIL_SENDER_ADDRESS || process.env.GMAIL_USER)?.trim();
 	if (!address || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
 		throw new Error('Mail sender configuration is invalid');
 	}
@@ -16,10 +17,32 @@ export function getMailSender(): MailSender {
 	};
 }
 
-export function createResendClient(): Resend {
-	const apiKey = process.env.RESEND_API_KEY?.trim();
-	if (!apiKey) {
-		throw new Error('Resend configuration is incomplete');
+let cachedTransporter: Transporter<SMTPTransport.SentMessageInfo> | null = null;
+
+export function getMailTransporter(): Transporter<SMTPTransport.SentMessageInfo> {
+	if (cachedTransporter) return cachedTransporter;
+
+	const user = process.env.GMAIL_USER?.trim();
+	const pass = process.env.GMAIL_APP_PASSWORD?.trim();
+
+	if (!user || !pass) {
+		throw new Error('Gmail SMTP configuration is incomplete');
 	}
-	return new Resend(apiKey);
+
+	cachedTransporter = nodemailer.createTransport({
+		host: 'smtp.gmail.com',
+		port: 465,
+		secure: true,
+		auth: {
+			user,
+			pass,
+		},
+	});
+
+	return cachedTransporter;
 }
+
+export function resetMailTransporter(): void {
+	cachedTransporter = null;
+}
+

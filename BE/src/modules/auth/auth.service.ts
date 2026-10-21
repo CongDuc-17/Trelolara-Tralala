@@ -27,7 +27,7 @@ export class AuthService {
 		private readonly authRepository = new AuthRepository(),
 		private readonly otpsService = new OtpsService(),
 		private readonly mailsService = new MailsService(),
-	) { }
+	) {}
 
 	async register(input: {
 		email: string;
@@ -130,10 +130,25 @@ export class AuthService {
 		if (!user) throw new NotFoundException('email');
 		const otp = await this.otpsService.generateOtp({ userId: user.id });
 		try {
+			const text = `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`;
+			const html = `
+				<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+					<h2 style="color: #2b6cb0;">Xác thực tài khoản</h2>
+					<p>Xin chào,</p>
+					<p>Mã xác thực (OTP) của bạn là:</p>
+					<div style="background-color: #edf2f7; padding: 12px 24px; font-size: 24px; font-weight: bold; letter-spacing: 4px; color: #2d3748; text-align: center; border-radius: 6px; margin: 20px 0;">
+						${otp.otp}
+					</div>
+					<p>Mã có hiệu lực trong <strong>${otpsConfig.otpExpiresIn} phút</strong>. Vui lòng không chia sẻ mã này với bất kỳ ai để bảo vệ tài khoản của bạn.</p>
+					<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+					<p style="font-size: 12px; color: #718096;">Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
+				</div>
+			`.trim();
 			await this.mailsService.sendEmail({
 				recipients: user.email,
 				subject: 'Mã xác thực',
-				html: `Mã xác thực của bạn là "${otp.otp}". Nó có hiệu lực trong ${otpsConfig.otpExpiresIn} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.`,
+				text,
+				html,
 			});
 		} catch (error) {
 			await this.otpsService.invalidateOtp({
@@ -227,6 +242,17 @@ export class AuthService {
 	async logout(userId: string): Promise<void> {
 		await this.authRepository.inTransaction(async (repository) => {
 			await repository.lockUser(userId);
+			await repository.revokeSessions(userId);
+		});
+	}
+
+	async changePassword(userId: string, newPassword: string): Promise<void> {
+		const salt = await genSalt(10);
+		const password = await hash(newPassword, salt);
+		await this.authRepository.inTransaction(async (repository) => {
+			await repository.lockUser(userId);
+			this.assertActiveUser(await repository.findUser({ userId }));
+			await repository.upsertPassword({ userId, password, salt });
 			await repository.revokeSessions(userId);
 		});
 	}

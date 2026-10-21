@@ -1,15 +1,13 @@
-import type { CreateEmailOptions } from 'resend';
+import type { SendMailOptions } from 'nodemailer';
 import { SendEmailDto } from './dtos';
 import {
-	createResendClient,
 	getMailSender,
+	getMailTransporter,
 	type MailSender,
 } from '@/configs/mails.config';
 
-export interface ResendClient {
-	emails: {
-		send(payload: CreateEmailOptions): Promise<{ data: unknown; error: unknown }>;
-	};
+export interface MailTransporter {
+	sendMail(options: SendMailOptions): Promise<unknown>;
 }
 
 export class MailDeliveryError extends Error {
@@ -23,7 +21,7 @@ export class MailDeliveryError extends Error {
 
 export class MailsService {
 	constructor(
-		private client?: ResendClient,
+		private transporter?: MailTransporter,
 		private readonly sender?: MailSender,
 	) {}
 
@@ -31,27 +29,26 @@ export class MailsService {
 		try {
 			const sender = data.sender ?? this.sender ?? getMailSender();
 			const from = `${sender.name} <${sender.address}>`;
-			this.client ??= createResendClient();
-			const payload = {
+			this.transporter ??= getMailTransporter();
+			await this.transporter.sendMail({
 				from,
 				to: data.recipients,
 				subject: data.subject,
 				...(data.html !== undefined ? { html: data.html } : {}),
 				...(data.text !== undefined ? { text: data.text } : {}),
-			} as CreateEmailOptions;
-			const response = await this.client.emails.send(payload);
-			if (response.error) {
-				console.error('[MailsService] Resend send error:', response.error);
-				throw new MailDeliveryError();
-			}
+			});
 			return { success: true };
 		} catch (error) {
 			if (error instanceof MailDeliveryError) throw error;
-			console.error('[MailsService] Email delivery failed:', error);
+			const sanitized = error instanceof Error
+				? error.message.replace(/([a-zA-Z0-9_\s-]*pass(word)?\s*[:=]\s*)[^\s,]+/gi, '$1***').replace(/\b\d{6}\b/g, '******')
+				: 'Unknown delivery error';
+			console.error('[MailsService] Email delivery failed:', sanitized);
 			throw new MailDeliveryError();
 		}
 	}
 }
 
 export { MailsService as MailService };
+
 

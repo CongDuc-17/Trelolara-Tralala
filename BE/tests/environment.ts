@@ -9,5 +9,7 @@ process.env.EXPIRES_IN_ACCESS_TOKEN = '15m';
 process.env.EXPIRES_IN_REFRESH_TOKEN = '7d';
 process.env.GOOGLE_CLIENT_ID = '';
 process.env.GOOGLE_CLIENT_SECRET = '';
-process.env.RESEND_API_KEY = '';
+process.env.GMAIL_USER = '';
+process.env.GMAIL_APP_PASSWORD = '';
+
 
