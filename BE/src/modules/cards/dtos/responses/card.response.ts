@@ -1,51 +1,27 @@
-import z from 'zod';
+import { z } from 'zod';
 
-export class CardResponseDto {
-	id: string;
-	title: string;
-	position: number;
-	listId: string;
-	createdAt: Date;
-	members?: string[];
-	labels?: string[];
-	checklists?: string[];
-	comments?: string[];
-
-	constructor(card: {
-		id: string;
-		title: string;
-		position: number;
-		listId: string;
-		createdAt: Date;
-		members?: string[];
-		labels?: string[];
-		checklists?: string[];
-		comments?: string[];
-	}) {
-		this.id = card.id;
-		this.title = card.title;
-		this.position = card.position;
-		this.listId = card.listId;
-		this.createdAt = card.createdAt;
-		this.members = card.members;
-		this.labels = card.labels;
-		this.checklists = card.checklists;
-		this.comments = card.comments;
-	}
-}
-
-export const cardResponseDtoSchema = z.object({
-	id: z.string().uuid(),
-	title: z.string(),
-	position: z.number(),
-	listId: z.string().uuid(),
-	createdAt: z.date(),
-	members: z.array(z.string()).optional(),
-	labels: z.array(z.string()).optional(),
-	checklists: z.array(z.string()).optional(),
-	comments: z.array(z.string()).optional(),
+export const cardAssignmentResponseDtoSchema = z.object({
+	id: z.uuid(),
+	cardId: z.uuid(),
+	userId: z.uuid(),
+});
+export const cardLabelRelationResponseDtoSchema = z.object({
+	id: z.uuid(),
+	cardId: z.uuid(),
+	labelId: z.uuid(),
 });
 
-export * from './cardBasic.response';
-export * from './cardWithIncludes.response';
-// export * from './cardDetail.response';
+export const cardResponseDtoSchema = z.object({
+	id: z.uuid(),
+	title: z.string(),
+	description: z.string().nullable(),
+	position: z.number(),
+	listId: z.uuid(),
+	status: z.enum(['ACTIVE', 'ARCHIVED']),
+	isComplete: z.boolean(),
+	background: z.string().nullable(),
+	dueDate: z.date().nullable(),
+	createdAt: z.date(),
+	updatedAt: z.date(),
+	deletedAt: z.date().nullable(),
+});

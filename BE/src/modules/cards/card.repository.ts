@@ -1,334 +1,182 @@
-import { CardStatusEnum } from '@prisma/client';
-import { prisma as database, runInTransaction, type DatabaseClient } from '../database';
-import { ChecklistsRepository } from '../checklists/checklists.repository';
-export class CardsRepository {
-	constructor(
-		private readonly prismaService: DatabaseClient = database,
-		private readonly checklistRepository = new ChecklistsRepository(),
-	) {}
+import { prisma, runInTransaction, type DatabaseClient } from '../database';
+import { deleteCardTree } from './card-deletion';
+import type {
+	CardIncludes,
+	CardListEntry,
+	CardQuery,
+	CardRecord,
+	CardStatus,
+} from './cards.types';
 
+const baseSelect = {
+	id: true,
+	title: true,
+	description: true,
+	dueDate: true,
+	position: true,
+	listId: true,
+	createdAt: true,
+} as const;
+const counts = {
+	select: { cardMembers: true, cardLabels: true, checklists: true, comments: true },
+} as const;
+const userSelect = { id: true, name: true, avatar: true } as const;
+
+export class CardsRepository {
+	constructor(private readonly client: DatabaseClient = prisma) {}
 	inTransaction<T>(work: (client: DatabaseClient) => Promise<T>): Promise<T> {
-		return runInTransaction(work, this.prismaService);
+		return runInTransaction(work, this.client);
 	}
 
-	async getAllCardsByListId(listId: string, status?: string) {
-		return this.prismaService.cards.findMany({
-			where: { listId: listId, status: status as CardStatusEnum },
-			include: {
-				cardMembers: {
-					include: {
-						user: {
-							select: {
-								id: true,
-								name: true,
-								avatar: true,
-							},
-						},
-					},
+	async lockCard(cardId: string, client: DatabaseClient = this.client): Promise<void> {
+		const card = await client.cards.findUnique({
+			where: { id: cardId },
+			select: {
+				listId: true,
+				list: {
+					select: { boardId: true, board: { select: { projectId: true } } },
 				},
+			},
+		});
+		if (card) {
+			// Read ancestry together: the original list may disappear after a concurrent move.
+			await client.$queryRaw`SELECT id FROM "Projects" WHERE id = ${card.list.board.projectId} FOR UPDATE`;
+			await client.$queryRaw`SELECT id FROM "Boards" WHERE id = ${card.list.boardId} FOR UPDATE`;
+			await client.$queryRaw`SELECT id FROM "Lists" WHERE id = ${card.listId} FOR UPDATE`;
+		}
+		await client.$queryRaw`SELECT id FROM "Cards" WHERE id = ${cardId} FOR UPDATE`;
+	}
+
+	getCardById(
+		cardId: string,
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord | null> {
+		return client.cards.findUnique({ where: { id: cardId } });
+	}
+
+	getAllCardsByListId(listId: string, status?: CardStatus): Promise<CardListEntry[]> {
+		return this.client.cards.findMany({
+			where: { listId, status },
+			orderBy: [{ position: 'asc' }, { id: 'asc' }],
+			include: {
+				cardMembers: { include: { user: { select: userSelect } } },
 				cardLabels: {
-					include: {
-						label: {
-							select: {
-								id: true,
-								name: true,
-								color: true,
-							},
-						},
-					},
+					include: { label: { select: { id: true, name: true, color: true } } },
 				},
 				checklists: {
 					include: {
 						checklistItems: {
+							select: { id: true, title: true, completed: true },
+							orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+						},
+					},
+				},
+				_count: { select: { comments: true } },
+			},
+		});
+	}
+
+	getActiveCardsByListId(
+		listId: string,
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord[]> {
+		return client.cards.findMany({
+			where: { listId, status: 'ACTIVE', deletedAt: null },
+			orderBy: [{ position: 'asc' }, { id: 'asc' }],
+		});
+	}
+
+	getCardWithCounts(cardId: string): Promise<CardQuery | null> {
+		return this.client.cards.findUnique({
+			where: { id: cardId },
+			select: { ...baseSelect, _count: counts },
+		});
+	}
+
+	getCardWithIncludes(
+		cardId: string,
+		include: CardIncludes,
+	): Promise<CardQuery | null> {
+		// Keep the dynamic Prisma selection behind the module's fixed projection contract.
+		return this.client.cards.findUnique({
+			where: { id: cardId },
+			select: {
+				...baseSelect,
+				_count: counts,
+				cardMembers: include.members
+					? { select: { id: true, userId: true, user: { select: userSelect } } }
+					: false,
+				cardLabels: include.labels
+					? {
+							select: {
+								id: true,
+								label: { select: { id: true, name: true, color: true } },
+							},
+						}
+					: false,
+				checklists: include.checklists
+					? {
 							select: {
 								id: true,
 								title: true,
-								completed: true,
+								checklistItems: {
+									select: { id: true, title: true, completed: true },
+									orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+								},
 							},
-							orderBy: { createdAt: 'asc' },
-						},
-					},
-				},
-				_count: {
-					select: {
-						comments: true,
-					},
-				},
-			},
-			orderBy: { position: 'asc' },
-		});
-	}
-
-	async getLastCardByListId(
-		listId: string,
-		client: DatabaseClient = this.prismaService,
-	) {
-		return client.cards.findFirst({
-			where: { listId: listId, deletedAt: null, status: CardStatusEnum.ACTIVE },
-			orderBy: { position: 'desc' },
-		});
-	}
-
-	async getCardById(cardId: string) {
-		return this.prismaService.cards.findUnique({
-			where: { id: cardId },
-			include: {
-				cardMembers: {
-					include: {
-						user: {
+						}
+					: false,
+				comments: include.comments
+					? {
 							select: {
 								id: true,
-								name: true,
-								email: true,
-								avatar: true,
+								content: true,
+								createdAt: true,
+								updatedAt: true,
+								user: { select: userSelect },
 							},
-						},
-					},
-				},
-				cardLabels: {
-					include: {
-						label: {
-							select: {
-								id: true,
-								name: true,
-								color: true,
-							},
-						},
-					},
-				},
+							orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+						}
+					: false,
 			},
-		});
+		}) as Promise<CardQuery | null>;
 	}
 
-	async getCardWithCounts(cardId: string) {
-		const card = await this.prismaService.cards.findUnique({
-			where: { id: cardId },
-			select: {
-				id: true,
-				title: true,
-				description: true,
-				dueDate: true,
-				position: true,
-				listId: true,
-				createdAt: true,
-				_count: {
-					select: {
-						cardMembers: true,
-						cardLabels: true,
-						checklists: true,
-						comments: true,
-					},
-				},
-			},
-		});
-
-		return card;
-	}
-
-	async getCardWithIncludes(
-		cardId: string,
-		include: {
-			members?: boolean;
-			labels?: boolean;
-			checklists?: boolean;
-			comments?: boolean;
-		},
-	) {
-		const selectOptions: any = {
-			id: true,
-			title: true,
-			description: true,
-			dueDate: true,
-			position: true,
-			listId: true,
-			createdAt: true,
-		};
-
-		if (include.members) {
-			selectOptions.cardMembers = {
-				select: {
-					id: true,
-					userId: true,
-					user: { select: { id: true, name: true, avatar: true } },
-				},
-			};
-		}
-
-		if (include.labels) {
-			selectOptions.cardLabels = {
-				select: {
-					id: true,
-					label: { select: { id: true, name: true, color: true } },
-				},
-			};
-		}
-
-		if (include.checklists) {
-			selectOptions.checklists = {
-				select: {
-					id: true,
-					title: true,
-					checklistItems: {
-						select: { id: true, title: true, completed: true },
-						orderBy: { createdAt: 'asc' },
-					},
-				},
-			};
-		}
-
-		if (include.comments) {
-			selectOptions.comments = {
-				select: {
-					id: true,
-					content: true,
-					createdAt: true,
-					updatedAt: true,
-					user: { select: { id: true, name: true, avatar: true } },
-				},
-				orderBy: { createdAt: 'asc' },
-			};
-		}
-
-		return this.prismaService.cards.findUnique({
-			where: { id: cardId },
-			select: selectOptions,
-		});
-	}
-
-	async getCardInList(cardId: string, listId: string) {
-		return this.prismaService.cards.findFirst({
-			where: {
-				id: cardId,
-				listId: listId,
-			},
-		});
-	}
-
-	async createCard(
+	createCard(
 		title: string,
 		listId: string,
 		position: number,
-		client: DatabaseClient = this.prismaService,
-	) {
-		return client.cards.create({
-			data: {
-				title: title,
-				listId: listId,
-				position: position,
-			},
-		});
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord> {
+		return client.cards.create({ data: { title, listId, position } });
 	}
-
-	async updateCardPosition(targetListId: string, cardId: string, newPosition: number) {
-		return this.prismaService.cards.update({
-			where: {
-				id: cardId,
-			},
-			data: {
-				listId: targetListId,
-				position: newPosition,
-			},
-		});
-	}
-
-	async updateInformationCard(
+	updateCardPosition(
+		listId: string,
 		cardId: string,
-		data: {
-			title?: string;
-			description?: string;
-			dueDate?: Date;
-		},
-	) {
-		return this.prismaService.cards.update({
+		position: number,
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord> {
+		return client.cards.update({ where: { id: cardId }, data: { listId, position } });
+	}
+	archiveCard(
+		cardId: string,
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord> {
+		return client.cards.update({
 			where: { id: cardId },
-			data: {
-				title: data.title,
-				description: data.description,
-				dueDate: data.dueDate,
-				updatedAt: new Date(),
-			},
+			data: { status: 'ARCHIVED', deletedAt: new Date() },
 		});
 	}
-
-	async archiveCard(cardId: string) {
-		return this.prismaService.cards.update({
+	restoreCard(
+		cardId: string,
+		client: DatabaseClient = this.client,
+	): Promise<CardRecord> {
+		return client.cards.update({
 			where: { id: cardId },
-			data: { deletedAt: new Date(), status: CardStatusEnum.ARCHIVED },
+			data: { status: 'ACTIVE', deletedAt: null },
 		});
 	}
-
-	async restoreCard(cardId: string) {
-		return this.prismaService.cards.update({
-			where: { id: cardId },
-			data: { deletedAt: null, status: CardStatusEnum.ACTIVE },
-		});
-	}
-
-	async deleteCard(cardId: string) {
-		await this.prismaService.cardMembers.deleteMany({
-			where: { cardId: cardId },
-		});
-		await this.prismaService.cardLabels.deleteMany({
-			where: { cardId: cardId },
-		});
-
-		const checklists = await this.prismaService.checklists.findMany({
-			where: { cardId: cardId },
-			select: { id: true },
-		});
-
-		for (const checklist of checklists) {
-			await this.checklistRepository.deleteChecklist(checklist.id);
-		}
-
-		const comments = await this.prismaService.cardComments.findMany({
-			where: { cardId: cardId },
-			select: { id: true },
-		});
-
-		for (const comment of comments) {
-			await this.prismaService.cardComments.delete({
-				where: { id: comment.id },
-			});
-		}
-
-		return this.prismaService.cards.delete({
-			where: { id: cardId },
-		});
-	}
-
-	// cardMember
-	async addMemberToCard(cardId: string, userId: string[]) {
-		if (userId.length === 0) return;
-		return this.prismaService.cardMembers.createMany({
-			data: userId.map((id) => ({ cardId: cardId, userId: id })),
-			skipDuplicates: true,
-		});
-	}
-
-	async removeMemberFromCard(cardId: string, userId: string[]) {
-		if (userId.length === 0) return;
-		return this.prismaService.cardMembers.deleteMany({
-			where: {
-				cardId: cardId,
-				userId: { in: userId },
-			},
-		});
-	}
-
-	async getMembersInCard(cardId: string) {
-		return this.prismaService.cardMembers.findMany({
-			where: { cardId: cardId },
-			include: {
-				user: {
-					select: {
-						id: true,
-						name: true,
-						email: true,
-						avatar: true,
-					},
-				},
-			},
-		});
+	deleteCard(cardId: string, client: DatabaseClient = this.client): Promise<void> {
+		return deleteCardTree(client, cardId);
 	}
 }

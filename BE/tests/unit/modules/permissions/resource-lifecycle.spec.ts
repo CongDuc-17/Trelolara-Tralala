@@ -23,6 +23,7 @@ function setup() {
 		findBoardProjectId: jest.fn(async () => projectId),
 		findProjectState: jest.fn(async () => active()),
 		findListState: jest.fn(async () => active() as ReturnType<typeof active> | null),
+		findCardState: jest.fn(async () => active() as ReturnType<typeof active> | null),
 		findBoardState: jest.fn(async () => ({ ...active(), project: active() })),
 		listSystemRoles: jest.fn(async () => [] as PermissionRole[]),
 		listProjectRoles: jest.fn(async () => [] as PermissionRole[]),
@@ -37,6 +38,22 @@ function setup() {
 }
 
 describe('Project and board lifecycle policy', () => {
+	it('allows an active card write and rejects archived, deleted or missing cards', async () => {
+		const { service, repository } = setup();
+		await expect(
+			service.assertCardLifecycle({ cardId: roleId }),
+		).resolves.toBeUndefined();
+		for (const state of [
+			{ status: 'ARCHIVED', deletedAt: null },
+			{ status: 'ACTIVE', deletedAt: new Date() },
+			null,
+		]) {
+			repository.findCardState.mockResolvedValueOnce(state);
+			await expect(
+				service.assertCardLifecycle({ cardId: roleId }),
+			).rejects.toMatchObject({ status: state ? 409 : 404 });
+		}
+	});
 	it('keeps archived list descendants read-only and checks their list after the ancestors', async () => {
 		const { service, repository } = setup();
 		repository.findListState.mockResolvedValue({

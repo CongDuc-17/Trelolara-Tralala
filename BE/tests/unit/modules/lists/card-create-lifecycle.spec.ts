@@ -6,7 +6,7 @@ import { CardsController } from '@/modules/cards/card.controller';
 import { Exception } from '@/common/exceptions/app-error';
 import type { DatabaseClient } from '@/modules/database';
 import type { ListsRepository } from '@/modules/lists/list.repository';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 describe('card creation through a list', () => {
 	function setup() {
@@ -25,11 +25,11 @@ describe('card creation through a list', () => {
 		};
 		const card = { id: 'card', listId: list.id, title: 'Task', position: 4 };
 		const baseClient = {
-			cards: { findFirst: jest.fn(), create: jest.fn() },
+			cards: { findMany: jest.fn(), create: jest.fn() },
 		};
 		const client = {
 			cards: {
-				findFirst: jest.fn().mockResolvedValue({ position: 3 }),
+				findMany: jest.fn().mockResolvedValue([{ id: 'previous', position: 3 }]),
 				create: jest.fn().mockResolvedValue(card),
 			},
 		};
@@ -49,15 +49,12 @@ describe('card creation through a list', () => {
 
 	it('locks and rereads the list before using one transaction client for tail read and create', async () => {
 		const { service, repository, client, baseClient, card } = setup();
-		await expect(service.createCard('Task', 'list', 'actor')).resolves.toEqual({
-			success: true,
-			data: card,
-		});
+		await expect(service.createCard('Task', 'list', 'actor')).resolves.toEqual(card);
 		expect(repository.lockList).toHaveBeenCalledWith('list');
 		expect(repository.getListById.mock.invocationCallOrder[0]).toBeGreaterThan(
 			repository.lockList.mock.invocationCallOrder[0],
 		);
-		expect(client.cards.findFirst).toHaveBeenCalledWith(
+		expect(client.cards.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({ listId: 'list' }),
 			}),
@@ -65,7 +62,7 @@ describe('card creation through a list', () => {
 		expect(client.cards.create).toHaveBeenCalledWith({
 			data: { title: 'Task', listId: 'list', position: 4 },
 		});
-		expect(baseClient.cards.findFirst).not.toHaveBeenCalled();
+		expect(baseClient.cards.findMany).not.toHaveBeenCalled();
 		expect(baseClient.cards.create).not.toHaveBeenCalled();
 	});
 
@@ -79,7 +76,7 @@ describe('card creation through a list', () => {
 			await expect(
 				service.createCard('Task', 'list', 'actor'),
 			).rejects.toMatchObject({ status: 409 });
-			expect(client.cards.findFirst).not.toHaveBeenCalled();
+			expect(client.cards.findMany).not.toHaveBeenCalled();
 			expect(client.cards.create).not.toHaveBeenCalled();
 		},
 	);
@@ -142,7 +139,7 @@ describe('card creation through a list', () => {
 			body: { title: 'Task' },
 			user: { id: 'actor' },
 		} as unknown as Request;
-		await expect(controller.createCard(request)).rejects.toBe(error);
+		await expect(controller.createCard(request, {} as Response)).rejects.toBe(error);
 	});
 });
 
@@ -156,7 +153,16 @@ describe('card movement through a list', () => {
 		};
 		const target = { ...source, id: 'target' };
 		const repository = {
-			getCardById: jest.fn().mockResolvedValue({ id: 'card', listId: source.id }),
+			getCardById: jest
+				.fn()
+				.mockResolvedValue({
+					id: 'card',
+					listId: source.id,
+					status: 'ACTIVE',
+					deletedAt: null,
+				}),
+			lockCard: jest.fn(),
+			inTransaction: jest.fn(),
 			updateCardPosition: jest.fn(),
 		};
 		const lists = {
@@ -164,6 +170,26 @@ describe('card movement through a list', () => {
 				id === source.id ? source : target,
 			),
 		};
+		const client = {
+			lists: { findUnique: lists.getListById },
+			boards: {
+				findUnique: jest.fn(async () => ({
+					projectId: 'project',
+					status: 'ACTIVE',
+					deletedAt: null,
+					project: { status: 'ACTIVE', deletedAt: null },
+				})),
+			},
+			$queryRaw: jest.fn(async () => []),
+		};
+		lists.getListById.mockImplementation(async (input) => {
+			const lookup =
+				typeof input === 'object'
+					? (input as { where: { id: string } }).where.id
+					: input;
+			return lookup === source.id ? source : target;
+		});
+		repository.inTransaction.mockImplementation((work) => work(client));
 		const service = new CardsService(
 			repository as unknown as CardsRepository,
 			lists as unknown as ListsRepository,
@@ -213,6 +239,6 @@ describe('card movement through a list', () => {
 			body: { targetListId: 'target' },
 			user: { id: 'actor' },
 		} as unknown as Request;
-		await expect(controller.moveCard(request)).rejects.toBe(error);
+		await expect(controller.moveCard(request, {} as Response)).rejects.toBe(error);
 	});
 });

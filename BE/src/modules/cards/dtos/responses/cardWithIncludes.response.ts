@@ -1,65 +1,43 @@
-import { CardBasicResponseDto, cardBasicResponseDtoSchema } from './cardBasic.response';
-
 import { z } from 'zod';
-export class CardWithIncludesResponseDto extends CardBasicResponseDto {
-	members?: {
-		id: string;
-		userId: string;
-		userName: string;
-		userAvatar?: string;
-	}[];
-
-	labels?: {
-		id: string;
-		name: string;
-		color: string;
-	}[];
-
-	checklists?: {
-		id: string;
-		title: string;
-		itemCount: number;
-		completedCount: number;
-	}[];
-
-	comments?: {
-		id: string;
-		content: string;
-		authorName: string;
-		createdAt: Date;
-	}[];
-
-	memberSchema = z.object({
-		id: z.string().uuid(),
-		userId: z.string().uuid(),
-		userName: z.string(),
-		userAvatar: z.string().optional(),
-	});
-
-	labelSchema = z.object({
-		id: z.string().uuid(),
-		name: z.string(),
-		color: z.string(),
-	});
-
-	checklistSchema = z.object({
-		id: z.string().uuid(),
-		title: z.string(),
-		itemCount: z.number(),
-		completedCount: z.number(),
-	});
-
-	commentSchema = z.object({
-		id: z.string().uuid(),
-		content: z.string(),
-		authorName: z.string(),
-		createdAt: z.date(),
-	});
-
-	cardWithIncludesResponseDtoSchema = cardBasicResponseDtoSchema.extend({
-		members: z.array(this.memberSchema).optional(),
-		labels: z.array(this.labelSchema).optional(),
-		checklists: z.array(this.checklistSchema).optional(),
-		comments: z.array(this.commentSchema).optional(),
-	});
-}
+import { cardBasicResponseDtoSchema } from './cardBasic.response';
+export const cardWithIncludesResponseDtoSchema = cardBasicResponseDtoSchema.extend({
+	members: z
+		.array(
+			z.object({
+				id: z.uuid(),
+				userId: z.uuid(),
+				userName: z.string(),
+				userAvatar: z.string().nullable(),
+			}),
+		)
+		.optional(),
+	labels: z
+		.array(z.object({ id: z.uuid(), name: z.string(), color: z.string() }))
+		.optional(),
+	checklists: z
+		.array(
+			z.object({
+				id: z.uuid(),
+				title: z.string(),
+				itemCount: z.number(),
+				completedCount: z.number(),
+				checklistItems: z.array(
+					z.object({ id: z.uuid(), title: z.string(), completed: z.boolean() }),
+				),
+			}),
+		)
+		.optional(),
+	comments: z
+		.array(
+			z.object({
+				id: z.uuid(),
+				content: z.string(),
+				createdAt: z.date(),
+				updatedAt: z.date(),
+				userId: z.uuid(),
+				userName: z.string(),
+				userAvatar: z.string().nullable(),
+			}),
+		)
+		.optional(),
+});

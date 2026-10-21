@@ -27,7 +27,13 @@ import { UsersRepository } from '@/modules/users/users.repository';
 
 const actor = { id: 'actor', name: 'Author', email: 'author@example.com' };
 const recipient = { id: 'recipient', name: 'Reader', email: 'reader@example.com' };
-const card = { id: 'card', title: 'Task', listId: 'list' };
+const card = {
+	id: 'card',
+	title: 'Task',
+	listId: 'list',
+	status: 'ACTIVE',
+	deletedAt: null,
+};
 const now = new Date();
 const comment = {
 	id: 'comment',
@@ -74,6 +80,7 @@ function setup(
 		cards: {
 			findUnique: jest.fn(async () => ({
 				...card,
+				list: { boardId: 'board', board: { projectId: 'project' } },
 				cardMembers: [
 					{ userId: actor.id },
 					...(options.noRecipients ? [] : [{ userId: recipient.id }]),
@@ -89,7 +96,11 @@ function setup(
 					? null
 					: {
 							userId: recipient.id,
-							role: { name: BoardRoleEnum.BOARD_MEMBER },
+							role: {
+								name: BoardRoleEnum.BOARD_MEMBER,
+								status: 'ACTIVE',
+								deletedAt: null,
+							},
 						},
 			),
 		},
@@ -97,11 +108,31 @@ function setup(
 			const draft = [...committed];
 			events.push('begin');
 			transaction = {
+				$queryRaw: jest.fn(async () => []),
+				cards: client.cards,
+				lists: {
+					findUnique: jest.fn(async () => ({
+						id: 'list',
+						boardId: 'board',
+						status: 'ACTIVE',
+						deletedAt: null,
+					})),
+				},
+				boards: {
+					findUnique: jest.fn(async () => ({
+						id: 'board',
+						projectId: 'project',
+						status: 'ACTIVE',
+						deletedAt: null,
+						project: { status: 'ACTIVE', deletedAt: null },
+					})),
+				},
 				cardComments: {
 					create: write(draft, 'comment:create', comment),
 					update: write(draft, 'comment:update', comment),
 				},
 				cardMembers: {
+					findFirst: client.cardMembers.findFirst,
 					create: write(draft, 'assignment', {
 						id: 'member',
 						cardId: card.id,
@@ -115,6 +146,7 @@ function setup(
 					}),
 				},
 				boardMembers: {
+					findFirst: client.boardMembers.findFirst,
 					create: write(draft, 'board:member', {
 						id: 'member',
 						roleId: 'board-role',
@@ -263,9 +295,9 @@ const operations: Operation[] = [
 describe.each(operations)('%s notification transaction', (operation) => {
 	it('uses one transaction for both writes and delivers after commit', async () => {
 		const test = setup({ boardMember: operation !== 'board:member' });
-		await expect(test.operations[operation]()).resolves.toMatchObject({
-			success: true,
-		});
+		await expect(test.operations[operation]()).resolves.toMatchObject(
+			operation === 'assignment' ? { cardId: card.id } : { success: true },
+		);
 		expect(test.events).toEqual([
 			'begin',
 			operation,
@@ -316,7 +348,7 @@ it.each(['comment:create', 'comment:update'] as const)(
 
 it('self-assignment commits without a self-notification', async () => {
 	const test = setup();
-	await expect(test.assignSelf()).resolves.toMatchObject({ success: true });
+	await expect(test.assignSelf()).resolves.toMatchObject({ cardId: card.id });
 	expect(test.persist).not.toHaveBeenCalled();
 	expect(test.notifications.deliver).not.toHaveBeenCalled();
 	expect(test.committed()).toEqual(['assignment']);

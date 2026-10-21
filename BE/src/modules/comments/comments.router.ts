@@ -31,7 +31,7 @@ router.patch(
 	'/:commentId',
 	authMiddleware.verifyAccessToken,
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	commentsController.updateComment,
 );
 

@@ -13,6 +13,18 @@ export const getCardRequestParamsSchema = {
 const getCardRequestQuery = z.object({
 	include: z
 		.string()
+		.refine(
+			(value) =>
+				!value ||
+				value
+					.split(',')
+					.every((token) =>
+						['members', 'labels', 'checklists', 'comments'].includes(
+							token.trim(),
+						),
+					),
+			'Invalid include',
+		)
 		.optional()
 		.describe('Comma-separated: members,labels,checklists,comments'),
 });

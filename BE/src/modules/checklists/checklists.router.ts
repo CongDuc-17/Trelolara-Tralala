@@ -43,7 +43,7 @@ router.patch(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(updateChecklistTitleValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	checklistsController.updateChecklistTitle,
 );
 
@@ -79,7 +79,7 @@ router.post(
 	authMiddleware.verifyAccessToken,
 	validateRequestMiddleware(createChecklistItemValidationSchema),
 	authMiddleware.verifyBoardPermission(CardPermissionEnum.UPDATE_CARD),
-	authMiddleware.verifyListLifecycle(),
+	authMiddleware.verifyCardLifecycle(),
 	checklistItemsController.createChecklistItem,
 );
 

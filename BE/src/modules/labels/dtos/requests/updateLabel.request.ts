@@ -6,7 +6,11 @@ const updateLabelRequestBody = z
 		name: z.string().min(1).max(50).optional(),
 		color: z.string().min(1).max(20).optional(),
 	})
-	.strict();
+	.strict()
+	.refine(
+		(input) => input.name !== undefined || input.color !== undefined,
+		'No fields to update',
+	);
 
 export const updateLabelRequestParams = z
 	.object({

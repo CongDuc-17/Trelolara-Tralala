@@ -48,3 +48,39 @@ describe('Lifecycle lookup follows the persisted list ancestry', () => {
 		await expect(repository.findListState({ labelId: 'label' })).resolves.toBeNull();
 	});
 });
+
+describe('Lifecycle lookup follows the persisted card ancestry', () => {
+	it.each(['cardId', 'checklistId', 'checklistItemId', 'commentId'])(
+		'resolves the card through %s',
+		async (key) => {
+			const state = { status: 'ARCHIVED', deletedAt: new Date() };
+			const row =
+				key === 'cardId'
+					? state
+					: key === 'checklistItemId'
+						? { checklist: { card: state } }
+						: { card: state };
+			const findUnique = jest
+				.fn()
+				.mockResolvedValueOnce(row)
+				.mockResolvedValueOnce(null);
+			const model =
+				key === 'cardId'
+					? 'cards'
+					: key === 'checklistId'
+						? 'checklists'
+						: key === 'checklistItemId'
+							? 'checklistItems'
+							: 'cardComments';
+			const repository = new PermissionsRepository({
+				[model]: { findUnique },
+			} as unknown as DatabaseClient);
+			await expect(
+				repository.findCardState({ [key]: 'resource' }),
+			).resolves.toEqual(state);
+			await expect(
+				repository.findCardState({ [key]: 'missing' }),
+			).resolves.toBeNull();
+		},
+	);
+});

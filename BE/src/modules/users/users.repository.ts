@@ -34,16 +34,19 @@ export class UsersRepository {
 		]);
 	}
 
-	async findUser({
-		userId,
-		email,
-		userStatus,
-	}: {
-		userId?: string;
-		email?: string;
-		userStatus?: UserProfile['status'];
-	}): Promise<UserProfile | null> {
-		return this.prismaService.users.findFirst({
+	async findUser(
+		{
+			userId,
+			email,
+			userStatus,
+		}: {
+			userId?: string;
+			email?: string;
+			userStatus?: UserProfile['status'];
+		},
+		client: DatabaseClient = this.prismaService,
+	): Promise<UserProfile | null> {
+		return client.users.findFirst({
 			where: {
 				id: userId,
 				email: email,

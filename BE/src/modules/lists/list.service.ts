@@ -1,4 +1,8 @@
 import { NotFoundException, OptionalException } from '@/common/exceptions';
+import {
+	calculateNewPosition,
+	isPositionBetween,
+} from '@/common/utils/calculateNewPosition';
 import { ListsRepository } from './list.repository';
 import type { ListRecord, ListStatus } from './lists.types';
 
@@ -148,12 +152,12 @@ export class ListsService {
 		siblings: ListRecord[],
 		index: number,
 	): Promise<number> {
-		let position = this.positionBetween(
+		let position = calculateNewPosition(
 			siblings[index - 1]?.position,
 			siblings[index]?.position,
 		);
 		if (
-			this.fitsPosition(
+			isPositionBetween(
 				position,
 				siblings[index - 1]?.position,
 				siblings[index]?.position,
@@ -163,24 +167,10 @@ export class ListsService {
 		// A finite, strict gap is required; PostgreSQL Float positions need no uniqueness constraint.
 		for (let i = 0; i < siblings.length; i++)
 			await repository.updateListPosition(siblings[i].id, i + 1);
-		position = this.positionBetween(
+		position = calculateNewPosition(
 			index > 0 ? index : undefined,
 			index < siblings.length ? index + 1 : undefined,
 		);
 		return position;
-	}
-
-	private positionBetween(before?: number, after?: number): number {
-		if (before === undefined)
-			return after === undefined ? 1 : after > 0 ? after / 2 : after - 1;
-		return after === undefined ? before + 1 : before + (after - before) / 2;
-	}
-
-	private fitsPosition(position: number, before?: number, after?: number): boolean {
-		return (
-			Number.isFinite(position) &&
-			(before === undefined || position > before) &&
-			(after === undefined || position < after)
-		);
 	}
 }

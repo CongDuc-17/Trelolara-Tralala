@@ -90,6 +90,17 @@ export class AuthMiddleware {
 		};
 	}
 
+	verifyCardLifecycle(): RequestHandler {
+		return async (req, _res, next) => {
+			try {
+				await this.permissions.assertCardLifecycle(getResource(req));
+				next();
+			} catch (error) {
+				next(error);
+			}
+		};
+	}
+
 	verifySystemPermission(...permissions: string[]): RequestHandler {
 		return async (req, _res, next) => {
 			try {
