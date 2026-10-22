@@ -14,6 +14,7 @@ import { Profile } from "./pages/Profile";
 import { VerifyEmail } from "./components/VerifyEmail";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Home } from "./pages/Home";
+import { RequireSession } from "./features/auth/RequireSession";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/verify" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route element={<RequireSession />}>
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects/:projectId" element={<ProjectDetail />} />
@@ -31,6 +33,7 @@ function App() {
           <Route path="cards/:cardId" element={<CardDetail />} />
         </Route>
         <Route path="/me" element={<Profile />} />
+      </Route>
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

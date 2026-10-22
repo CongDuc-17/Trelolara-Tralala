@@ -17,50 +17,80 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { apiClient } from "@/lib/apiClient";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRef, useState } from "react";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { getApiError } from "@/lib/errors";
+import { authLink, safeReturnTo } from "@/features/auth/redirect";
+import { useResendCooldown } from "@/features/auth/useResendCooldown";
 
 export function VerifyEmail() {
   const [otp, setOtp] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const pending = useRef(false);
+  const { resendIn, startCooldown } = useResendCooldown();
+  const [params] = useSearchParams();
+  const returnTo = safeReturnTo(params.get("returnTo"));
   const navigate = useNavigate();
-  const email = localStorage.getItem("emailForVerification") || "";
+  const [email] = useState(() => localStorage.getItem("emailForVerification") || "");
 
-  useEffect(() => {
-    if (!email) navigate("/register", { replace: true });
-  }, [email, navigate]);
+  if (!email) return <Navigate to={authLink("/register", returnTo)} replace />;
 
-  const handleVerify = async () => {
-    setLoading(true);
+  const handleVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pending.current) return;
     if (otp.length !== 6) {
       toast.error("Please enter the 6-digit code");
       return;
     }
     try {
+      pending.current = true;
       setLoading(true);
+      setError("");
       await apiClient.post("/auth/verify", {
         email,
         otp,
       });
       localStorage.removeItem("emailForVerification");
       toast.success("Email verified successfully. You can now log in.");
-      navigate("/login", { replace: true });
+      navigate(authLink("/login", returnTo), { replace: true });
     } catch (error) {
-      console.error("Verification failed", error);
-      toast.error("Verification failed. Please try again.");
+      const issue = getApiError(error);
+      if (issue.kind !== "canceled") { setError(issue.message); toast.error(issue.message); }
     } finally {
+      pending.current = false;
       setLoading(false);
     }
   };
+
+  async function handleResend() {
+    if (pending.current || resendIn > 0) return;
+    pending.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      await apiClient.post("/auth/send-otp", { email });
+      startCooldown();
+      toast.success("OTP sent to your email");
+    } catch (error) {
+      const issue = getApiError(error);
+      if (issue.kind !== "canceled") { setError(issue.message); toast.error(issue.message); }
+    } finally {
+      pending.current = false;
+      setLoading(false);
+    }
+  }
   return (
     <>
       <Toaster position="top-right" />
       <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+        <form id="verify-form" className="max-w-md" onSubmit={handleVerify}>
         <Card className="mx-auto max-w-md">
           <CardHeader>
-            <CardTitle>Verify your login</CardTitle>
+            <CardTitle><h1>Verify your login</h1></CardTitle>
             <CardDescription>
               Enter the verification code we sent to your email address:{" "}
               <span className="font-medium">{email}</span>.
@@ -72,13 +102,19 @@ export function VerifyEmail() {
                 <FieldLabel htmlFor="otp-verification">
                   Verification code
                 </FieldLabel>
-                <Button variant="outline" size="xs">
+                <Button type="button" variant="outline" size="xs" onClick={handleResend} disabled={loading || resendIn > 0}>
                   <RefreshCwIcon />
-                  Resend Code
+                  {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend Code"}
                 </Button>
               </div>
               <InputOTP
                 maxLength={6}
+                minLength={6}
+                pattern={REGEXP_ONLY_DIGITS}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={otp}
+                disabled={loading}
                 id="otp-verification"
                 required
                 onChange={setOtp}
@@ -96,19 +132,22 @@ export function VerifyEmail() {
                 </InputOTPGroup>
               </InputOTP>
             </Field>
+            {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           </CardContent>
           <CardFooter>
             <Field>
               <Button
-                type="button"
+                type="submit"
+                form="verify-form"
                 className="w-full"
-                onClick={() => handleVerify()}
+                disabled={loading}
               >
                 Verify
               </Button>
             </Field>
           </CardFooter>
         </Card>
+        </form>
       </div>
     </>
   );

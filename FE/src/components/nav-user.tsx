@@ -16,23 +16,28 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import type { User } from "@/stores/user.store";
-import { apiClient } from "@/lib/apiClient";
-import { Navigate } from "react-router-dom";
+import type { User } from "@/features/auth/types";
+import { useSession } from "@/features/auth/session-context";
+import { getApiError } from "@/lib/errors";
+import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 export function NavUser({ user }: { user: User | null }) {
   const { isMobile } = useSidebar();
+  const { logout, isLoggingOut } = useSession();
+  const navigate = useNavigate();
   const displayName = user?.name ?? "User";
   const displayEmail = user?.email ?? "";
   const avatarSrc = user?.avatar ?? "";
   const avatarFallback = displayName.slice(0, 2).toUpperCase();
   const handleLogout = async () => {
     try {
-      await apiClient.post("/auth/logout");
-      Navigate({ to: "/login", replace: true });
+      await logout();
+      navigate("/login", { replace: true });
     } catch (error) {
-      console.log(error);
+      const issue = getApiError(error);
+      if (issue.kind !== "canceled") toast.error(issue.message);
     }
   };
   return (
@@ -88,7 +93,7 @@ export function NavUser({ user }: { user: User | null }) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onSelect={handleLogout}>
+            <DropdownMenuItem onSelect={handleLogout} disabled={isLoggingOut}>
               <LogOut />
               Log out
             </DropdownMenuItem>

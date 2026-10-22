@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
@@ -30,45 +29,23 @@ import { Progress } from "@/components/ui/progress";
 import { useBoards } from "@/hooks/useBoards";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  useCardsStore,
-  type CardLabel,
-  type CardMember,
-  type Checklist,
-} from "@/stores/cards.store";
+import { useCardsStore, type Card, type ChecklistItem, type Comment } from "@/stores/cards.store";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserStore } from "@/stores/user.store";
+import { useSession } from "@/features/auth/session-context";
 import { Spinner } from "@/components/ui/spinner";
-
-interface Card {
-  id: string;
-  title: string;
-  description?: string;
-  listId: string;
-  position: number;
-  createdAt?: string;
-  updatedAt?: string;
-  cardMembers?: CardMember[];
-  cardLabels?: CardLabel[];
-  checklists?: Checklist[];
-  comments?: any[];
-}
 
 export function CardDetail() {
   const { cardId, boardId } = useParams();
   const navigate = useNavigate();
 
-  const { user: currentUser } = useUserStore();
+  const { user: currentUser } = useSession();
 
   const [loading, setLoading] = useState(true);
-  const [newDescription, setNewDescription] = useState("");
   const [newComments, setComments] = useState("");
   const [activeChecklistId, setActiveChecklistId] = useState<string | null>(
     null,
   );
   const [inputValue, setInputValue] = useState("");
-  const [confirmDeleteChecklistId, setConfirmDeleteChecklistId] =
-    useState(false);
 
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
@@ -79,7 +56,7 @@ export function CardDetail() {
   >(null);
 
   const { labelsBoard, fetchLabelsBoard } = useBoards();
-  const { cards, setCurrentCardId, setCards, updateCard } = useCardsStore();
+  const { setCurrentCardId, setCards, updateCard } = useCardsStore();
   const card = useCardsStore((state) =>
     state.cards.find((c) => c.id === cardId),
   );
@@ -91,7 +68,8 @@ export function CardDetail() {
   const fetchCard = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(
+      // shortcut: legacy relationship names remain here, normalize BE detail includes in D01.
+      const response = await apiClient.get<Card>(
         `/cards/${cardId}?include=members,labels,checklists,comments`,
       );
       setCurrentCardId(cardId || null);
@@ -115,7 +93,7 @@ export function CardDetail() {
     if (!inputValue.trim() || !card) return;
     try {
       setIsAddingChecklistItem(true); // Bật loading
-      const response = await apiClient.post(`/checklists/${checklistId}`, {
+      const response = await apiClient.post<ChecklistItem>(`/checklists/${checklistId}`, {
         title: inputValue,
       });
 
@@ -199,12 +177,13 @@ export function CardDetail() {
         setComments("");
         setEditingCommentId(null);
       } else {
-        const response = await apiClient.post(`/cards/${cardId}/comments`, {
+        const response = await apiClient.post<Omit<Comment, "id"> & { commentId: string }>(`/cards/${cardId}/comments`, {
           content: newComments,
         });
 
         const newCommentData = {
           id: response.data.commentId,
+          cardId: response.data.cardId,
           content: response.data.content,
           createdAt: response.data.createdAt,
           updatedAt: response.data.updatedAt,
@@ -241,7 +220,7 @@ export function CardDetail() {
       updateCard(updatedCard);
 
       await apiClient.delete(`/checklists/${checklistId}`);
-    } catch (error) {
+    } catch {
       updateCard(previousCard);
       alert("Xóa thất bại, vui lòng thử lại!");
     } finally {
@@ -312,9 +291,6 @@ export function CardDetail() {
                 <Textarea
                   id="description"
                   name="description"
-                  onChange={(e) => {
-                    setNewDescription(e.target.value);
-                  }}
                 />
               </div>
               <div className="flex items-center flex-wrap pr-4 gap-2">
@@ -563,11 +539,9 @@ export function CardDetail() {
                             }
                           />
                           <AvatarFallback>
-                            {comment.userName || comment.user?.name
-                              ? (comment.userName || comment.user?.name)
-                                  .charAt(0)
-                                  .toUpperCase()
-                              : "?"}
+                            {(comment.userName || comment.user?.name || "?")
+                              .charAt(0)
+                              .toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
 

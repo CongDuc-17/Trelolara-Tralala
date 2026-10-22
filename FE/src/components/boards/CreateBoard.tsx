@@ -13,6 +13,7 @@ import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBoards } from "@/hooks/useBoards";
+import { getErrorMessage } from "@/lib/errors";
 
 import { Plus } from "lucide-react";
 import { useState } from "react";
@@ -39,7 +40,7 @@ export function CreateBoard({ projectId }: { projectId: string }) {
       setOpen(false);
     } catch (error) {
       setLoading(false);
-      const message = error?.response?.data?.message || "Error creating board";
+      const message = getErrorMessage(error, "Error creating board");
       toast.error(message);
     }
   }

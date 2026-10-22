@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -15,33 +15,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/apiClient";
+import { getApiError } from "@/lib/errors";
+import { useSession } from "@/features/auth/session-context";
+import { useResendCooldown } from "@/features/auth/useResendCooldown";
+import { authLink, safeReturnTo } from "@/features/auth/redirect";
 
 const SAVED_EMAIL_KEY = "forgot-password-email";
 const SAVED_EMAIL_TTL_MS = 15 * 60 * 1000;
-const RESEND_SECONDS = 60;
 
 type SavedEmail = {
   email: string;
   expiresAt: number;
 };
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof error.response === "object" &&
-    error.response !== null &&
-    "data" in error.response &&
-    typeof error.response.data === "object" &&
-    error.response.data !== null &&
-    "message" in error.response.data
-  ) {
-    return String(error.response.data.message);
-  }
-
-  return fallback;
-}
 
 function readSavedEmail() {
   const raw = localStorage.getItem(SAVED_EMAIL_KEY);
@@ -50,8 +35,10 @@ function readSavedEmail() {
   }
 
   try {
-    const saved = JSON.parse(raw) as SavedEmail;
-    if (!saved.email || saved.expiresAt < Date.now()) {
+    const saved: unknown = JSON.parse(raw);
+    if (typeof saved !== "object" || saved === null || !("email" in saved) ||
+      typeof saved.email !== "string" || !saved.email || !("expiresAt" in saved) ||
+      typeof saved.expiresAt !== "number" || !Number.isFinite(saved.expiresAt) || saved.expiresAt <= Date.now()) {
       localStorage.removeItem(SAVED_EMAIL_KEY);
       return "";
     }
@@ -74,14 +61,19 @@ function saveEmail(email: string) {
 
 export function ForgotPassword() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const session = useSession();
+  const [params] = useSearchParams();
+  const returnTo = safeReturnTo(params.get("returnTo"));
+  const [savedEmail] = useState(readSavedEmail);
+  const [email, setEmail] = useState(savedEmail);
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [step, setStep] = useState<"email" | "reset">("email");
-  const [resendIn, setResendIn] = useState(0);
+  const [step, setStep] = useState<"email" | "reset">(savedEmail ? "reset" : "email");
+  const { resendIn, startCooldown } = useResendCooldown();
+  const pending = useRef(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -94,27 +86,8 @@ export function ForgotPassword() {
     [confirmPassword, newPassword, otp],
   );
 
-  useEffect(() => {
-    const savedEmail = readSavedEmail();
-    if (savedEmail) {
-      setEmail(savedEmail);
-      setStep("reset");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (resendIn <= 0) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setResendIn((current) => Math.max(current - 1, 0));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [resendIn]);
-
   async function sendOtp(targetEmail = email) {
+    if (pending.current || resendIn > 0) return;
     const normalizedEmail = targetEmail.trim();
     if (!normalizedEmail) {
       setError("Email is required");
@@ -122,6 +95,7 @@ export function ForgotPassword() {
     }
 
     setError("");
+    pending.current = true;
     setIsLoading(true);
 
     try {
@@ -134,14 +108,16 @@ export function ForgotPassword() {
       saveEmail(normalizedEmail);
       setEmail(normalizedEmail);
       setStep("reset");
-      setResendIn(RESEND_SECONDS);
+      startCooldown();
       toast.success("OTP sent to your email");
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to send OTP");
+      const issue = getApiError(error);
+      if (issue.kind === "canceled") return;
+      const message = issue.message;
       setError(message);
       toast.error(message);
-      console.error("Failed to send OTP", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   }
@@ -153,6 +129,7 @@ export function ForgotPassword() {
 
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault();
+    if (pending.current) return;
     setError("");
 
     if (otp.trim().length !== 6) {
@@ -170,6 +147,7 @@ export function ForgotPassword() {
       return;
     }
 
+    pending.current = true;
     setIsLoading(true);
 
     try {
@@ -184,14 +162,17 @@ export function ForgotPassword() {
       );
 
       localStorage.removeItem(SAVED_EMAIL_KEY);
+      session.startSession();
       toast.success("Password reset successfully");
-      navigate("/login", { replace: true });
+      navigate(authLink("/login", returnTo), { replace: true });
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to reset password");
+      const issue = getApiError(error);
+      if (issue.kind === "canceled") return;
+      const message = issue.message;
       setError(message);
       toast.error(message);
-      console.error("Failed to reset password", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   }
@@ -211,14 +192,14 @@ export function ForgotPassword() {
       <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>Reset Password</CardTitle>
+            <CardTitle><h1>Reset Password</h1></CardTitle>
             <CardDescription>
               {step === "email"
                 ? "Enter your email to receive a verification code"
                 : `Enter the OTP sent to ${email}`}
             </CardDescription>
             <CardAction>
-              <Link to="/login">
+              <Link to={authLink("/login", returnTo)}>
                 <Button variant="link">Back to Login</Button>
               </Link>
             </CardAction>
@@ -244,7 +225,7 @@ export function ForgotPassword() {
                     />
                   </div>
 
-                  {error && <p className="text-sm text-red-600">{error}</p>}
+                  {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Sending OTP..." : "Send OTP"}
@@ -300,6 +281,7 @@ export function ForgotPassword() {
                       />
                       <button
                         type="button"
+                        aria-label={showNewPassword ? "Hide new password" : "Show new password"}
                         onClick={() => setShowNewPassword((current) => !current)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-900"
                       >
@@ -330,6 +312,7 @@ export function ForgotPassword() {
                       />
                       <button
                         type="button"
+                        aria-label={showConfirmPassword ? "Hide password confirmation" : "Show password confirmation"}
                         onClick={() =>
                           setShowConfirmPassword((current) => !current)
                         }
@@ -344,7 +327,7 @@ export function ForgotPassword() {
                     </div>
                   </div>
 
-                  {error && <p className="text-sm text-red-600">{error}</p>}
+                  {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
                   <div className="flex flex-col gap-2">
                     <Button

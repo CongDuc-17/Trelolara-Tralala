@@ -18,6 +18,17 @@ import { Badge } from "@/components/ui/badge";
 let ws: WebSocket | null = null;
 let isMountedGlobal = true;
 
+type Notification = {
+  id: string;
+  isRead: boolean;
+  entityType: string;
+  entityId: string;
+  metadata?: { boardId?: string };
+  type: string;
+  content: string;
+  createdAt: string;
+};
+
 const initWebSocket = async (
   onNotification: (notification: any) => void,
   onUnreadCount: (count: number) => void,
@@ -94,12 +105,14 @@ export function Notifications() {
   const getNotifications = useCallback(async (page = 1, append = false) => {
     try {
       setIsLoading(true);
-      const response = await apiClient.get("/notifications", {
+      const response = await apiClient.get<Notification[]>("/notifications", {
         params: { page, limit: 10 },
       });
 
-      const data: any[] = response.data ?? [];
-      const more: boolean = response.data?.hasMore ?? data.length === 10;
+      const data = response.data ?? [];
+      const more = response.pagination
+        ? response.pagination.currentPage < response.pagination.totalPages
+        : data.length === 10;
 
       setNotifications((prev) => (append ? [...prev, ...data] : data));
       setHasMore(more);
@@ -112,7 +125,7 @@ export function Notifications() {
 
   const getUnreadCount = useCallback(async () => {
     try {
-      const response = await apiClient.get("/notifications/unread-count");
+      const response = await apiClient.get<{ count: number }>("/notifications/unread-count");
       setUnreadCount(response?.data?.count ?? 0);
     } catch (error) {
       console.error("Error fetching unread count:", error);

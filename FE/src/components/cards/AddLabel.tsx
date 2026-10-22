@@ -12,7 +12,7 @@ import { Plus, SquarePen } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
-import { useCardsStore } from "@/stores/cards.store";
+import { useCardsStore, type Label as BoardLabel } from "@/stores/cards.store";
 
 export function AddLabel({
   labelsBoard,
@@ -63,7 +63,7 @@ export function AddLabel({
   ];
 
   // 3. Logic xử lý Tick/Bỏ tick checkbox
-  const handleLabelToggle = async (labelColor: string, labelId: string) => {
+  const handleLabelToggle = async (labelId: string) => {
     try {
       if (!cardId) {
         console.error("⚠️ cardId is undefined!");
@@ -121,7 +121,7 @@ export function AddLabel({
         });
       } else {
         // Tạo label mới trên Board
-        const response = await apiClient.post(`/boards/${boardId}/labels`, {
+        const response = await apiClient.post<BoardLabel>(`/boards/${boardId}/labels`, {
           name: labelName,
           color: selectedColor,
         });
@@ -226,14 +226,14 @@ export function AddLabel({
                         // Tự động Tick nếu ID của label này nằm trong selectedLabelIds
                         checked={selectedLabelIds.includes(label.id)}
                         onCheckedChange={() =>
-                          handleLabelToggle(label.color, label.id)
+                          handleLabelToggle(label.id)
                         }
                         disabled={pendingLabelIds.has(label.id)}
                       />
                       <Card
                         className={`p-3 w-full flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80`}
                         style={{ backgroundColor: label.color }}
-                        onClick={() => handleLabelToggle(label.color, label.id)}
+                        onClick={() => handleLabelToggle(label.id)}
                       >
                         <CardTitle className="text-sm text-white m-0">
                           {label.name}

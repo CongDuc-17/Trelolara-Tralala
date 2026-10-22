@@ -3,12 +3,6 @@ import { apiClient } from "@/lib/apiClient";
 import { useProjectsStore } from "@/stores/projects.store";
 import { useParams } from "react-router-dom";
 
-type ApiResponse<T> = {
-  success: boolean;
-  data: T;
-  pagination?: unknown;
-};
-
 type Board = {
   id: string;
   projectId: string;
@@ -55,10 +49,10 @@ export const useBoards = () => {
   ) {
     try {
       setLoading(true);
-      const response = (await apiClient.post(
+      const response = await apiClient.post<Board>(
         `/projects/${projectId}/boards`,
         data,
-      )) as unknown as ApiResponse<Board>;
+      );
 
       createBoardToProject(projectId, {
         id: response.data.id,
@@ -87,9 +81,9 @@ export const useBoards = () => {
 
     try {
       setLoading(true);
-      const response = (await apiClient.get(
+      const response = await apiClient.get<Board>(
         `/boards/${boardId}`,
-      )) as unknown as ApiResponse<Board>;
+      );
 
       setBoard(response.data);
       setError(null);
@@ -107,9 +101,9 @@ export const useBoards = () => {
     }
 
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<BoardMember[]>(
         `/boards/${boardId}/members`,
-      )) as unknown as ApiResponse<BoardMember[]>;
+      );
 
       setBoardMembers(response.data);
     } catch (error) {
@@ -124,9 +118,9 @@ export const useBoards = () => {
     }
 
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<BoardLabel[]>(
         `/boards/${boardId}/labels`,
-      )) as unknown as ApiResponse<BoardLabel[]>;
+      );
 
       setLabelsBoard(response.data);
     } catch (error) {

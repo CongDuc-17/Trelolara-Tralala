@@ -75,7 +75,7 @@ export function MembersProject({ projectId }: { projectId: string }) {
 
   async function fetchRoles() {
     try {
-      const response = await apiClient.get("/roles");
+      const response = await apiClient.get<Role[]>("/roles");
       const projectRoles = response.data.filter((role: Role) =>
         role.name.startsWith("PROJECT_"),
       );
