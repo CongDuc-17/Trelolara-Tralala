@@ -4,7 +4,6 @@ import { useLocation } from "react-router-dom";
 import { CanceledError } from "axios";
 import { apiClient, getSessionVersion, onSessionExpired, resetApiSession } from "@/lib/apiClient";
 import { resetCardsStore } from "@/stores/cards.store";
-import { resetProjectsStore } from "@/stores/projects.store";
 import { SessionContext } from "./session-context";
 import { isUser } from "./types";
 
@@ -16,13 +15,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [isLoggingOut, setLoggingOut] = useState(false);
   const lastUserId = useRef<string | null>(null);
   const logoutPromise = useRef<Promise<void> | null>(null);
-  const requiresSession = /^\/(dashboard|projects|boards|me)(\/|$)/i.test(location.pathname);
+  const requiresSession = /^\/(dashboard|projects|boards|me|invite)(\/|$)/i.test(location.pathname);
 
   const clearClientState = useCallback((isExpired: boolean) => {
     void client.cancelQueries();
     client.clear();
     resetCardsStore();
-    resetProjectsStore();
     lastUserId.current = null;
     logoutPromise.current = null;
     setLoggingOut(false);

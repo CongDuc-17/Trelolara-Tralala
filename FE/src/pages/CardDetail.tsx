@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/avatar";
 
 import { Progress } from "@/components/ui/progress";
-import { useBoards } from "@/hooks/useBoards";
+import { useBoardLabels } from "@/features/catalog/queries";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCardsStore, type Card, type ChecklistItem, type Comment } from "@/stores/cards.store";
@@ -55,15 +55,13 @@ export function CardDetail() {
     string | null
   >(null);
 
-  const { labelsBoard, fetchLabelsBoard } = useBoards();
+  const labels = useBoardLabels(boardId ?? "");
+  const labelsBoard = labels.data ?? [];
+  const fetchLabelsBoard = () => { void labels.refetch(); };
   const { setCurrentCardId, setCards, updateCard } = useCardsStore();
   const card = useCardsStore((state) =>
     state.cards.find((c) => c.id === cardId),
   );
-
-  useEffect(() => {
-    fetchLabelsBoard();
-  }, [boardId]);
 
   const fetchCard = async () => {
     try {

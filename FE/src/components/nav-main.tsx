@@ -1,138 +1,54 @@
+import { useState } from "react";
 import { ChevronRight, FolderKanban, KanbanSquare } from "lucide-react";
-import type { Board, Project } from "@/hooks/useProjects";
-
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from "@/components/ui/sidebar";
+import type { Project } from "@/features/catalog/types";
+import { pageItems, useProjectBoards, useProjects, useUserBoards } from "@/features/catalog/queries";
+import { LoadMore, QueryFeedback } from "@/features/catalog/QueryFeedback";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from "@/components/ui/sidebar";
 import { Link } from "react-router-dom";
-import { Skeleton } from "@/components/ui/skeleton";
 
-type NavMainProps = {
-  projects: Project[];
-  guestBoards: Board[];
-  isLoading?: boolean; // THÊM PROP NÀY
-};
+function ProjectNav({ project }: { project: Project; }) {
+  const [open, setOpen] = useState(false);
+  const boards = useProjectBoards(project.id, open);
+  return <Collapsible open={open} onOpenChange={setOpen} asChild className="group/collapsible">
+    <SidebarMenuItem>
+      <CollapsibleTrigger asChild><SidebarMenuButton tooltip={project.name}>
+        <FolderKanban /><span>{project.name}</span><ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+      </SidebarMenuButton></CollapsibleTrigger>
+      <CollapsibleContent><SidebarMenuSub>
+        <SidebarMenuSubItem><SidebarMenuSubButton asChild><Link to={`/projects/${project.id}`}>Xem dự án</Link></SidebarMenuSubButton></SidebarMenuSubItem>
+        <QueryFeedback query={boards} label="bảng" empty={pageItems(boards.data).length === 0} />
+        {pageItems(boards.data).filter((board) => board.status === "ACTIVE").map((board) => <SidebarMenuSubItem key={board.id}>
+          <SidebarMenuSubButton asChild><Link to={`/boards/${board.id}`}><KanbanSquare /><span>{board.name}</span></Link></SidebarMenuSubButton>
+        </SidebarMenuSubItem>)}
+        <LoadMore query={boards} label="bảng" />
+      </SidebarMenuSub></CollapsibleContent>
+    </SidebarMenuItem>
+  </Collapsible>;
+}
 
-export function NavMain({ projects, guestBoards, isLoading }: NavMainProps) {
-  // NẾU ĐANG LOADING THÌ RENDER SKELETON
-
-  if (isLoading) {
-    return (
-      <>
-        <SidebarGroup>
-          <SidebarGroupLabel>
-            <Skeleton className="h-4 w-16" />
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {/* Tạo mảng giả lập 3 Projects đang load */}
-            {[1, 2, 3].map((i) => (
-              <SidebarMenuItem key={`skeleton-project-${i}`}>
-                <SidebarMenuButton disabled>
-                  <Skeleton className="h-4 w-4 rounded-md" />{" "}
-                  {/* Icon Folder */}
-                  <Skeleton className="h-4 w-32" /> {/* Tên Project */}
-                  <Skeleton className="h-4 w-4 rounded-full ml-auto" />{" "}
-                  {/* Chevron */}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>
-            <Skeleton className="h-4 w-24" />
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {/* Tạo mảng giả lập 2 Guest Boards đang load */}
-            {[1, 2].map((i) => (
-              <SidebarMenuItem key={`skeleton-guest-${i}`}>
-                <SidebarMenuButton disabled>
-                  <Skeleton className="h-4 w-4 rounded-md" /> {/* Icon Board */}
-                  <Skeleton className="h-4 w-24" /> {/* Tên Board */}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-      </>
-    );
-  }
-
-  // RENDER DỮ LIỆU THẬT KHI ĐÃ LOAD XONG
-  return (
-    <>
-      <SidebarGroup>
-        <SidebarGroupLabel>Projects</SidebarGroupLabel>
-        <SidebarMenu>
-          {projects.map(
-            (item) =>
-              item.status === "ACTIVE" && (
-                <Collapsible
-                  key={item.id}
-                  asChild
-                  className="group/collapsible"
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton tooltip={item.name}>
-                        <FolderKanban />
-                        <span>{item.name}</span>
-                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {item.boards
-                          ?.filter((board) => board.status === "ACTIVE")
-                          .map((board) => (
-                            <SidebarMenuSubItem key={board.id}>
-                              <SidebarMenuSubButton asChild>
-                                <Link to={`/boards/${board.id}`}>
-                                  <KanbanSquare />
-                                  <span>{board.name}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-              ),
-          )}
-        </SidebarMenu>
-      </SidebarGroup>
-
-      {guestBoards.length > 0 && (
-        <SidebarGroup>
-          <SidebarGroupLabel>Guest Boards</SidebarGroupLabel>
-          <SidebarMenu>
-            {guestBoards.map((board) => (
-              <SidebarMenuItem key={board.id}>
-                <SidebarMenuButton asChild tooltip={board.name}>
-                  <Link to={`/boards/${board.id}`}>
-                    <KanbanSquare />
-                    <span>{board.name}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-      )}
-    </>
-  );
+export function NavMain() {
+  const projects = useProjects();
+  const boards = useUserBoards();
+  const items = pageItems(projects.data);
+  const memberIds = new Set(items.map((project) => project.id));
+  const complete = projects.isSuccess && !projects.hasNextPage;
+  const guests = complete ? pageItems(boards.data).filter((board) => !memberIds.has(board.projectId ?? "") && board.status === "ACTIVE") : [];
+  return <>
+    <SidebarGroup>
+      <SidebarGroupLabel>Dự án</SidebarGroupLabel>
+      <div className="px-2"><QueryFeedback query={projects} label="dự án" empty={items.length === 0} /></div>
+      <SidebarMenu>{items.filter((project) => project.status === "ACTIVE").map((project) => <ProjectNav key={project.id} project={project} />)}</SidebarMenu>
+      <div className="px-2"><LoadMore query={projects} label="dự án" /></div>
+    </SidebarGroup>
+    <SidebarGroup>
+      <SidebarGroupLabel>Bảng khách</SidebarGroupLabel>
+      {!complete && !projects.isError && <p className="px-2 text-xs text-muted-foreground">Cần tải hết dự án để phân loại.</p>}
+      <div className="px-2"><QueryFeedback query={boards} label={boards.hasNextPage ? "bảng khách trong các trang đã tải" : "bảng khách"} empty={complete && guests.length === 0} /></div>
+      <SidebarMenu>{guests.map((board) => <SidebarMenuItem key={board.id}><SidebarMenuButton asChild tooltip={board.name}>
+        <Link to={`/boards/${board.id}`}><KanbanSquare /><span>{board.name}</span></Link>
+      </SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>
+      <div className="px-2"><LoadMore query={boards} label="bảng trong danh mục" /></div>
+    </SidebarGroup>
+  </>;
 }

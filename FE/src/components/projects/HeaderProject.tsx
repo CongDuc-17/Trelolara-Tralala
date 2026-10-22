@@ -1,10 +1,11 @@
 import { EllipsisVertical } from "lucide-react";
 
 import { MembersProject } from "./MembersProject";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { Input } from "../ui/input";
-import { useProjectsStore } from "@/stores/projects.store";
+import { useInvalidateCatalog } from "@/features/catalog/queries";
+import { getApiError } from "@/lib/errors";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -32,39 +33,43 @@ import { toast } from "sonner";
 export function HeaderProject({
   projectId,
   projectName,
+  membersCount,
   isLoading, // Thêm prop isLoading
 }: {
   projectId: string;
   projectName?: string;
+  membersCount?: number;
   isLoading?: boolean;
 }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState(projectName || "");
 
-  const updateProjectName = useProjectsStore(
-    (state) => state.updateProjectName,
-  );
+  const invalidate = useInvalidateCatalog();
+  const busy = useRef(false);
 
   async function handleUpdateProjectName(name: string) {
+    if (busy.current) return;
     if (!name.trim()) {
-      alert("Project name cannot be empty");
+      toast.error("Tên dự án không được để trống.");
       return;
     }
+    busy.current = true;
     try {
-      updateProjectName(projectId, name);
-      await apiClient.patch(`/projects/${projectId}`, { name: name });
-    } catch (error) {
-      console.error("Failed to update project name", error);
-      updateProjectName(projectId, projectName || "");
-    } finally {
+      await apiClient.patch(`/projects/${projectId}`, { name: name.trim() });
+      await invalidate();
       setEditing(false);
+    } catch (error) {
+      toast.error(getApiError(error).message);
+    } finally {
+      busy.current = false;
     }
   }
 
   async function handleArchiveProject() {
     try {
       await apiClient.patch(`/projects/${projectId}/archive`);
+      await invalidate();
       toast.success("Project archived successfully");
       navigate("/dashboard", { replace: true });
     } catch (error) {
@@ -98,12 +103,10 @@ export function HeaderProject({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onBlur={() => {
-              setEditing(false);
               handleUpdateProjectName(newName);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                setEditing(false);
                 handleUpdateProjectName(newName);
               }
             }}
@@ -111,7 +114,7 @@ export function HeaderProject({
             className="text-2xl font-bold p-4"
           />
         ) : (
-          <div
+          <h1
             className="text-2xl font-bold cursor-text hover:bg-gray-100 rounded px-2 py-1 transition-colors"
             onDoubleClick={() => {
               setEditing(true);
@@ -119,17 +122,17 @@ export function HeaderProject({
             }}
           >
             {projectName}
-          </div>
+          </h1>
         )}
       </div>
       <div className="flex items-center gap-4">
         {/* avatars */}
-        <MembersProject projectId={projectId} />
+        <MembersProject projectId={projectId} count={membersCount} />
 
         <AlertDialog>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <EllipsisVertical className="size-5 cursor-pointer" />
+              <button type="button" aria-label="Tùy chọn dự án"><EllipsisVertical className="size-5 cursor-pointer" /></button>
             </DropdownMenuTrigger>
 
             <DropdownMenuContent className="w-50" align="start">

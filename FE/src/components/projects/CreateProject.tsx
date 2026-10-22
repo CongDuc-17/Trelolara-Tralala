@@ -12,26 +12,34 @@ import {
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useProjects } from "@/hooks/useProjects";
+import { useCreateProject } from "@/features/catalog/queries";
+import { getApiError } from "@/lib/errors";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Spinner } from "../ui/spinner";
 
 export function CreateProject() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { createProject } = useProjects();
+  const create = useCreateProject();
+  const loading = create.isPending;
+  const busy = useRef(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    await createProject({ name, description });
-    setLoading(false);
-    setName("");
-    setDescription("");
-    setOpen(false);
+    if (busy.current) return;
+    if (!name.trim()) { setError("Tên dự án không được để trống."); return; }
+    busy.current = true;
+    setError("");
+    try {
+      await create.mutateAsync({ name: name.trim(), description });
+      setName("");
+      setDescription("");
+      setOpen(false);
+    } catch (error) { setError(getApiError(error).message); }
+    finally { busy.current = false; }
   }
 
   return (
@@ -72,6 +80,7 @@ export function CreateProject() {
               />
             </Field>
           </FieldGroup>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { MessageSquareText, SquareCheck } from "lucide-react";
@@ -19,7 +19,8 @@ import {
 
 import { apiClient } from "@/lib/apiClient";
 import { getErrorMessage } from "@/lib/errors";
-import { useBoards } from "@/hooks/useBoards";
+import { useBoard } from "@/features/catalog/queries";
+import { QueryFeedback } from "@/features/catalog/QueryFeedback";
 import { useLists } from "@/hooks/useLists";
 import { useCardsStore, type Card as BoardCard } from "@/stores/cards.store";
 
@@ -59,8 +60,8 @@ export function Board() {
   const boardId = useParams().boardId as string;
   const navigate = useNavigate();
 
-  const { board, boardMembers, fetchBoard, fetchBoardMembers, loading, error } =
-    useBoards();
+  const boardQuery = useBoard(boardId);
+  const { data: board, isPending: loading, error } = boardQuery;
 
   const isActiveBoard = board?.status?.toUpperCase() === "ACTIVE";
 
@@ -84,27 +85,9 @@ export function Board() {
   const [archivedLists, setArchivedLists] = useState<ArchivedList[]>([]);
   const [isDragOverArchive, setIsDragOverArchive] = useState(false);
 
-  const [previewBackground, setPreviewBackground] = useState<string | null>(
-    null,
-  );
-  const prevPreviewRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (
-      prevPreviewRef.current &&
-      prevPreviewRef.current !== previewBackground
-    ) {
-      URL.revokeObjectURL(prevPreviewRef.current);
-    }
-    prevPreviewRef.current = previewBackground;
-
-    return () => {
-      if (prevPreviewRef.current) {
-        URL.revokeObjectURL(prevPreviewRef.current);
-      }
-    };
-  }, [previewBackground]);
-  const displayBackground = previewBackground || board?.background;
+  const [previewBackground, setPreviewBackground] = useState<{ boardId: string; url: string | null } | null>(null);
+  const preview = useCallback((url: string | null) => setPreviewBackground({ boardId, url }), [boardId]);
+  const displayBackground = (previewBackground?.boardId === boardId && previewBackground.url) || board?.background;
 
   const listIds = useMemo(() => lists.map((list) => list.id), [lists]);
   // const listIdsKey = listIds.join(",");
@@ -865,7 +848,7 @@ export function Board() {
 
   if (error) {
     return (
-      <div>You do not have access to this board or it has been archived.</div>
+      <div className="p-4"><QueryFeedback query={boardQuery} label="bảng" /></div>
     );
   }
 
@@ -891,12 +874,11 @@ export function Board() {
         }
       >
         <HeaderBoard
+          key={boardId}
           boardId={boardId}
           boardName={board?.name}
-          boardMembers={boardMembers}
-          fetchBoard={fetchBoard}
-          fetchBoardMembers={fetchBoardMembers}
-          onPreviewBackground={setPreviewBackground}
+          membersCount={board?.memberCount}
+          onPreviewBackground={preview}
         />
 
         <KanbanBoardProvider>

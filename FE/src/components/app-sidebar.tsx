@@ -14,33 +14,14 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/features/auth/session-context";
-import { useProjects, type Board } from "@/hooks/useProjects";
+
 
 import { GiSharkFin } from "react-icons/gi";
 import { Link } from "react-router";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user } = useSession();
-  // LẤY THÊM TRẠNG THÁI LOADING TỪ HOOK
-  const { projects, userBoards, loading } = useProjects({
-    includeBoards: true,
-  });
   const { open, setOpen } = useSidebar();
-
-  const guestBoardsList: Board[] = [];
-  const memberProjectIds = new Set(projects.map((project) => project.id));
-
-  for (const board of userBoards) {
-    if (memberProjectIds.has(board.projectId ?? "")) {
-      continue;
-    }
-
-    if (board.status === "ARCHIVED") {
-      continue;
-    } else if (board.status === "ACTIVE") {
-      guestBoardsList.push(board);
-    }
-  }
 
   return (
     <Sidebar collapsible="icon" {...props} className="relative">
@@ -76,11 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarContent>
         {/* TRUYỀN isLoading XUỐNG NAVMAIN */}
-        <NavMain
-          projects={projects}
-          guestBoards={guestBoardsList}
-          isLoading={loading}
-        />
+        <NavMain />
       </SidebarContent>
 
       <SidebarFooter>

@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { useState } from "react";
-import type { Board, Project } from "@/hooks/useProjects";
+import type { Board, Project } from "@/features/catalog/types";
 
 type ArchivedProps = {
   projects: Project[];

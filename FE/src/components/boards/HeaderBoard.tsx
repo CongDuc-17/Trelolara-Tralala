@@ -1,7 +1,7 @@
 import { EllipsisVertical } from "lucide-react";
 
 import { MembersBoard } from "./MembersBoard";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { Input } from "../ui/input";
 
@@ -26,50 +26,58 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import type { BoardMember } from "@/hooks/useBoards";
+import { useInvalidateCatalog } from "@/features/catalog/queries";
+import { getApiError } from "@/lib/errors";
 import { useNavigate } from "react-router-dom";
 
 export function HeaderBoard({
   boardId,
   boardName,
-  boardMembers,
-
-  fetchBoard,
-  fetchBoardMembers,
+  membersCount,
   onPreviewBackground,
 }: {
   boardId: string;
   boardName?: string;
-  boardMembers: BoardMember[];
-
-  fetchBoard: () => Promise<void>;
-  fetchBoardMembers: () => Promise<void>;
+  membersCount?: number;
   onPreviewBackground?: (url: string | null) => void;
 }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState(boardName || "");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const invalidate = useInvalidateCatalog();
+  const busy = useRef(false);
+  const upload = useRef<AbortController | null>(null);
+  const preview = useRef<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  useEffect(() => () => {
+    upload.current?.abort();
+    if (preview.current) URL.revokeObjectURL(preview.current);
+    preview.current = null;
+  }, []);
+
   async function handleUpdateBoardName(name: string) {
+    if (busy.current) return;
     if (!name.trim()) {
       toast.error("Board name cannot be empty");
       return;
     }
+    busy.current = true;
     try {
-      await apiClient.patch(`/boards/${boardId}`, { name: name });
-      await fetchBoard();
-    } catch (error) {
-      toast.error("Failed to update board name");
-      console.error("Failed to update board name", error);
-    } finally {
+      await apiClient.patch(`/boards/${boardId}`, { name: name.trim() });
+      await invalidate();
       setEditing(false);
+    } catch (error) {
+      toast.error(getApiError(error).message);
+    } finally {
+      busy.current = false;
     }
   }
 
   async function handleArchiveBoard() {
     try {
       await apiClient.patch(`/boards/${boardId}/archive`);
-      // await fetchBoard();
+      await invalidate();
       toast.success("Board archived successfully");
       navigate("/dashboard", { replace: true });
     } catch (error) {
@@ -82,9 +90,12 @@ export function HeaderBoard({
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
-    if (file) {
-      // Tạo URL tạm thời để hiển thị ảnh ngay lập tức
+    if (file && !upload.current) {
+      const controller = new AbortController();
+      upload.current = controller;
+      setUploading(true);
       const objectUrl = URL.createObjectURL(file);
+      preview.current = objectUrl;
       if (onPreviewBackground) {
         onPreviewBackground(objectUrl);
       }
@@ -92,13 +103,22 @@ export function HeaderBoard({
       formData.append("background", file);
       try {
         toast.info("Uploading background...");
-        await apiClient.post(`/boards/${boardId}/background`, formData);
-        await fetchBoard();
+        await apiClient.post(`/boards/${boardId}/background`, formData, { signal: controller.signal });
+        await invalidate();
+        if (controller.signal.aborted) return;
         toast.success("Background updated successfully");
       } catch (error) {
-        toast.error("Failed to update background");
-        console.error("Failed to update background", error);
+        if (!controller.signal.aborted) toast.error(getApiError(error).message);
       } finally {
+        if (!controller.signal.aborted) {
+          onPreviewBackground?.(null);
+          setUploading(false);
+        }
+        if (preview.current === objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          preview.current = null;
+        }
+        upload.current = null;
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -114,12 +134,10 @@ export function HeaderBoard({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onBlur={() => {
-              setEditing(false);
               handleUpdateBoardName(newName);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                setEditing(false);
                 handleUpdateBoardName(newName);
               }
             }}
@@ -127,7 +145,7 @@ export function HeaderBoard({
             className="text-2xl font-bold p-4"
           />
         ) : (
-          <div
+          <h1
             className="text-2xl font-bold cursor-text hover:bg-gray-100 rounded px-2 py-1 transition-colors"
             onDoubleClick={() => {
               setEditing(true);
@@ -135,35 +153,34 @@ export function HeaderBoard({
             }}
           >
             {boardName}
-          </div>
+          </h1>
         )}
       </div>
 
       <div className="flex items-center gap-4">
-        <MembersBoard
-          boardMembers={boardMembers}
-          fetchBoardMembers={fetchBoardMembers}
-        />
+        <MembersBoard boardId={boardId} count={membersCount} />
 
         <AlertDialog>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <EllipsisVertical className="size-5 cursor-pointer" />
+              <button type="button" aria-label="Tùy chọn bảng"><EllipsisVertical className="size-5 cursor-pointer" /></button>
             </DropdownMenuTrigger>
 
             <DropdownMenuContent className="w-50" align="start">
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Menu</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <DropdownMenuItem disabled={uploading} onSelect={(e) => e.preventDefault()}>
                   <div onClick={() => fileInputRef.current?.click()}>
                     Change background
                   </div>
                   <input
                     type="file"
+                    aria-label="Ảnh nền bảng"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     accept="image/*"
                     className="hidden"
+                    disabled={uploading}
                   />
                 </DropdownMenuItem>
               </DropdownMenuGroup>

@@ -8,16 +8,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useBoards } from "@/hooks/useBoards";
-import { useEffect } from "react";
+import { pageItems, useMembers } from "@/features/catalog/queries";
+import { QueryFeedback } from "@/features/catalog/QueryFeedback";
+import { useState } from "react";
 
 import { useParams } from "react-router-dom";
 import { apiClient } from "@/lib/apiClient";
 import { Plus, X } from "lucide-react";
 import { useCardsStore } from "@/stores/cards.store";
 export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
-  const cardId = useParams().cardId as string;
-  const { boardMembers, fetchBoardMembers } = useBoards();
+  const { cardId = "", boardId = "" } = useParams();
+  const [open, setOpen] = useState(false);
+  const members = useMembers("boards", boardId, open);
+  const boardMembers = pageItems(members.data);
   const { addMember, removeMember } = useCardsStore();
   // Lấy list userId đã có trên card
   const cardMemberIds = membersCard.map(
@@ -58,11 +61,8 @@ export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
     }
   }
 
-  useEffect(() => {
-    fetchBoardMembers();
-  }, []);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Avatar>
           <AvatarImage src="" alt="@shadcn" className="" />
@@ -120,6 +120,7 @@ export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
               </Button>
             ))}
             <div className="text-sm text-muted-foreground">Member of board</div>
+            <QueryFeedback query={members} label="thành viên bảng" empty={boardMembers.length === 0} />
             {boardMembers
               .filter((member) => !cardMemberIds.includes(member.userId))
               .map((member, index) => (
@@ -131,7 +132,7 @@ export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
                 >
                   <div className="flex items-center gap-2">
                     <Avatar key={index}>
-                      <AvatarImage src={member.avatar} alt={member.name} />
+                      <AvatarImage src={member.avatar ?? ""} alt={member.name} />
                       <AvatarFallback>
                         {member.name.charAt(0).toUpperCase()}
                       </AvatarFallback>

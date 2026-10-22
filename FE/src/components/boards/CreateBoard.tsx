@@ -12,11 +12,11 @@ import {
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useBoards } from "@/hooks/useBoards";
+import { useCreateBoard } from "@/features/catalog/queries";
 import { getErrorMessage } from "@/lib/errors";
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card } from "../ui/card";
 import { Spinner } from "../ui/spinner";
 import { toast } from "sonner";
@@ -25,34 +25,38 @@ export function CreateBoard({ projectId }: { projectId: string }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const { createBoard } = useBoards();
+  const create = useCreateBoard(projectId);
+  const loading = create.isPending;
+  const busy = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy.current) return;
+    if (!name.trim()) { toast.error("Tên bảng không được để trống."); return; }
+    busy.current = true;
     try {
-      e.preventDefault();
-      setLoading(true);
-      await createBoard(projectId, { name, description });
-      setLoading(false);
+      await create.mutateAsync({ name: name.trim(), description });
       setName("");
       setDescription("");
       setOpen(false);
     } catch (error) {
-      setLoading(false);
       const message = getErrorMessage(error, "Error creating board");
       toast.error(message);
+    } finally {
+      busy.current = false;
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
+        <button type="button" className="w-full text-left">
         <Card className="h-36 cursor-pointer hover:shadow-lg transition-shadow flex justify-center items-center border-dashed border-2 border-gray-300">
           <div className="flex h-full justify-center items-center gap-2">
             <Plus></Plus> Add New Board
           </div>
         </Card>
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleSubmit}>

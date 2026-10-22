@@ -15,6 +15,7 @@ import { VerifyEmail } from "./components/VerifyEmail";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Home } from "./pages/Home";
 import { RequireSession } from "./features/auth/RequireSession";
+import { InvitationPage } from "./pages/InvitationPage";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
       <Route path="/verify" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route element={<RequireSession />}>
+      <Route path="/invite/:scope/:token" element={<InvitationPage />} />
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects/:projectId" element={<ProjectDetail />} />
