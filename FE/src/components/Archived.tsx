@@ -33,25 +33,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { useState } from "react";
-
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  roleName: string;
-  boardsCount: number;
-  membersCount: number;
-  boards?: Board[];
-}
-
-interface Board {
-  id: string;
-  name: string;
-  status: string;
-  background?: string;
-  projectId: string;
-}
+import type { Board, Project } from "@/hooks/useProjects";
 
 type ArchivedProps = {
   projects: Project[];

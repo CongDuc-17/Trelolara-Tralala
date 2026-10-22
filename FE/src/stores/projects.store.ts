@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
+import { getSessionVersion } from "@/lib/apiClient";
 interface Project {
   id: string;
   name: string;
@@ -53,7 +54,12 @@ interface ProjectsStore {
   setError: (error: Error | null | string) => void;
 }
 
-export const useProjectsStore = create<ProjectsStore>((set) => ({
+const createProjectsState: StateCreator<ProjectsStore> = (rawSet) => {
+  const version = getSessionVersion();
+  const set = (partial: Partial<ProjectsStore> | ((state: ProjectsStore) => Partial<ProjectsStore>)) => {
+    if (version === getSessionVersion()) rawSet(partial);
+  };
+  return ({
   projects: [],
   loading: false,
   error: null,
@@ -161,4 +167,10 @@ export const useProjectsStore = create<ProjectsStore>((set) => ({
 
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
-}));
+  });
+};
+
+export const useProjectsStore = create<ProjectsStore>(createProjectsState);
+export function resetProjectsStore() {
+  useProjectsStore.setState(createProjectsState(useProjectsStore.setState, useProjectsStore.getState, useProjectsStore), true);
+}

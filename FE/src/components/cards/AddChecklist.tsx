@@ -9,7 +9,7 @@ import {
 import { apiClient } from "@/lib/apiClient";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useCardsStore } from "@/stores/cards.store";
+import { useCardsStore, type Checklist } from "@/stores/cards.store";
 import { Spinner } from "../ui/spinner";
 
 export function AddChecklist() {
@@ -24,7 +24,7 @@ export function AddChecklist() {
 
     try {
       setIsAdding(true);
-      const response = await apiClient.post(`/cards/${cardId}/checklists`, {
+      const response = await apiClient.post<Checklist>(`/cards/${cardId}/checklists`, {
         title,
       });
       setTitle("");

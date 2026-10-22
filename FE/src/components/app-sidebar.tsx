@@ -13,14 +13,14 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useUserStore } from "@/stores/user.store";
+import { useSession } from "@/features/auth/session-context";
 import { useProjects, type Board } from "@/hooks/useProjects";
 
 import { GiSharkFin } from "react-icons/gi";
 import { Link } from "react-router";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user } = useUserStore();
+  const { user } = useSession();
   // LẤY THÊM TRẠNG THÁI LOADING TỪ HOOK
   const { projects, userBoards, loading } = useProjects({
     includeBoards: true,

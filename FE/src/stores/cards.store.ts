@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
+import { getSessionVersion } from "@/lib/apiClient";
 
 export interface Label {
   id: string;
@@ -96,7 +97,12 @@ interface CardsStore {
   removeChecklist: (cardId: string, checklistId: string) => void;
 }
 
-export const useCardsStore = create<CardsStore>((set, get) => ({
+const createCardsState: StateCreator<CardsStore> = (rawSet, get) => {
+  const version = getSessionVersion();
+  const set = (partial: Partial<CardsStore> | ((state: CardsStore) => Partial<CardsStore>)) => {
+    if (version === getSessionVersion()) rawSet(partial);
+  };
+  return ({
   cards: [],
   currentCardId: null,
   loading: false,
@@ -250,4 +256,10 @@ export const useCardsStore = create<CardsStore>((set, get) => ({
           : card,
       ),
     })),
-}));
+  });
+};
+
+export const useCardsStore = create<CardsStore>(createCardsState);
+export function resetCardsStore() {
+  useCardsStore.setState(createCardsState(useCardsStore.setState, useCardsStore.getState, useCardsStore), true);
+}

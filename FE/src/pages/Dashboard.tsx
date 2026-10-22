@@ -3,7 +3,7 @@ import { CreateProject } from "@/components/projects/CreateProject";
 import { Card } from "@/components/ui/card";
 import { useProjects } from "@/hooks/useProjects";
 import type { Board, Project } from "@/hooks/useProjects";
-import { Trello, EllipsisVertical } from "lucide-react";
+import { Trello } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CreateBoard } from "@/components/boards/CreateBoard";
 import { Notifications } from "@/components/Notifications";

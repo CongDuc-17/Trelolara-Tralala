@@ -18,6 +18,7 @@ import {
 } from "@/components/kanban";
 
 import { apiClient } from "@/lib/apiClient";
+import { getErrorMessage } from "@/lib/errors";
 import { useBoards } from "@/hooks/useBoards";
 import { useLists } from "@/hooks/useLists";
 import { useCardsStore, type Card as BoardCard } from "@/stores/cards.store";
@@ -590,7 +591,7 @@ export function Board() {
 
       await fetchActiveCards(listIds);
       await fetchArchivedCards(allListsForArchivedCards);
-    } catch (error) {
+    } catch {
       setCards(currentCards); // Rollback nếu lỗi
       setArchivedCards((prev) => prev.filter((c) => c.id !== card.id));
       toast.error("Failed to archive card");
@@ -637,7 +638,7 @@ export function Board() {
       toast.success(`Archived list "${list.name}"`);
       await fetchLists(boardId);
       await fetchArchivedLists();
-    } catch (error) {
+    } catch {
       setListOrder((prev) => {
         const currentOrder = prev ?? baseLists.map((baseList) => baseList.id);
         return [...currentOrder, list.id];
@@ -751,7 +752,7 @@ export function Board() {
     });
 
     try {
-      const res = await apiClient.patch(`/cards/${card.id}/restore`);
+      await apiClient.patch(`/cards/${card.id}/restore`);
 
       await fetchActiveCards(listIds);
       await fetchArchivedCards(allListsForArchivedCards);
@@ -759,10 +760,10 @@ export function Board() {
     } catch (error) {
       setArchivedCards((prev) => [...prev, card]);
       updateCards((current) => current.filter((c) => c.id !== card.id));
-      const errorMessage =
-        error?.response?.data?.message || // Lấy message từ JSON của backend
-        error?.message || // Lấy message của trình duyệt nếu sập mạng
-        "Failed to restore card";
+      const errorMessage = getErrorMessage(
+        error,
+        error instanceof Error && error.message ? error.message : "Failed to restore card",
+      );
 
       // 3. Hiển thị lên Toast
       toast.error(errorMessage);

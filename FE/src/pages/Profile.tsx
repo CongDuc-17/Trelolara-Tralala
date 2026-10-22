@@ -16,16 +16,16 @@ import { Switch } from "@/components/ui/switch";
 
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
+import { getErrorMessage } from "@/lib/errors";
 import { Spinner } from "@/components/ui/spinner";
-import { useUserStore } from "@/stores/user.store";
+import { useSession } from "@/features/auth/session-context";
 import { ChangePassword } from "@/components/user/ChangePassword";
 
 export function Profile() {
-  const { user, getMyInformation } = useUserStore();
+  const { user, getMyInformation } = useSession();
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [bio, setBio] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -37,7 +37,6 @@ export function Profile() {
   useEffect(() => {
     if (user) {
       setName(user.name);
-      setEmail(user.email);
       setAddress(user.address || "");
       setBio(user.bio || "");
     }
@@ -80,17 +79,20 @@ export function Profile() {
         formData.append("avatar", avatarFile);
       }
 
-      const response = await apiClient.put("/users/me", formData);
+      await apiClient.put("/users/me", formData);
 
       await getMyInformation();
       setEditing(false);
       setAvatarFile(null);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error(
         "Error updating profile:",
-        error.response?.data?.message || error.message,
+        getErrorMessage(
+          error,
+          error instanceof Error ? error.message : "Error updating profile",
+        ),
       );
     } finally {
       setIsLoading(false);

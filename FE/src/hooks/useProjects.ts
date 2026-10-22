@@ -2,12 +2,6 @@ import { apiClient } from "@/lib/apiClient";
 import { useProjectsStore } from "@/stores/projects.store";
 import { useEffect, useState } from "react";
 
-type ApiResponse<T> = {
-  success: boolean;
-  data: T;
-  pagination?: unknown;
-};
-
 export type Project = {
   id: string;
   name: string;
@@ -73,9 +67,9 @@ export const useProjects = ({
 
   async function fetchProjects() {
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<Project[]>(
         "/projects",
-      )) as unknown as ApiResponse<Project[]>;
+      );
 
     
       setProjects(
@@ -94,9 +88,9 @@ export const useProjects = ({
 
   async function fetchProjectById(projectId: string) {
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<Project>(
         `/projects/${projectId}`,
-      )) as unknown as ApiResponse<Project>;
+      );
 
       updateProject(response.data);
 
@@ -111,9 +105,9 @@ export const useProjects = ({
 
   async function fetchProjectBoards(projectId: string) {
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<Board[]>(
         `/projects/${projectId}/boards`,
-      )) as unknown as ApiResponse<Board[]>;
+      );
 
       updateProjectBoards(projectId, response.data);
 
@@ -128,9 +122,9 @@ export const useProjects = ({
 
   async function fetchUserBoards() {
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<Board[]>(
         "/boards",
-      )) as unknown as ApiResponse<Board[]>;
+      );
 
       setUserBoards(response.data);
       setError(null);
@@ -144,9 +138,9 @@ export const useProjects = ({
 
   async function fetchProjectMembers(projectId: string) {
     try {
-      const response = (await apiClient.get(
+      const response = await apiClient.get<ProjectMember[]>(
         `/projects/${projectId}/members`,
-      )) as unknown as ApiResponse<ProjectMember[]>;
+      );
 
       updateProjectMembers(projectId, response.data);
 
@@ -163,21 +157,21 @@ export const useProjects = ({
     try {
       setLoading(true);
 
-      const projectsResponse = (await apiClient.get(
+      const projectsResponse = await apiClient.get<Project[]>(
         "/projects",
-      )) as unknown as ApiResponse<Project[]>;
+      );
       const projects = projectsResponse.data;
       const [boardResults, userBoardsResult] = await Promise.all([
         Promise.allSettled(
           projects.map(
             async (project: Project) =>
-              (await apiClient.get(
+              await apiClient.get<Board[]>(
                 `/projects/${project.id}/boards`,
-              )) as unknown as ApiResponse<Board[]>,
+              ),
           ),
         ),
         Promise.allSettled([
-          apiClient.get("/boards") as unknown as Promise<ApiResponse<Board[]>>,
+          apiClient.get<Board[]>("/boards"),
         ]),
       ]);
       setUserBoards(

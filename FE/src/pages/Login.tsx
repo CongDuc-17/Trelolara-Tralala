@@ -10,33 +10,22 @@ import {
 import { Field, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient } from "@/lib/apiClient";
+import { getApiError } from "@/lib/errors";
+import { getApiBaseUrl } from "@/lib/env";
+import { useSession } from "@/features/auth/session-context";
+import { authLink, safeReturnTo, saveOAuthReturnTo, takeOAuthReturnTo } from "@/features/auth/redirect";
 
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast, Toaster } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "response" in error &&
-    typeof error.response === "object" &&
-    error.response !== null &&
-    "data" in error.response &&
-    typeof error.response.data === "object" &&
-    error.response.data !== null &&
-    "message" in error.response.data
-  ) {
-    return String(error.response.data.message);
-  }
-
-  return fallback;
-}
-
 export function Login() {
   const navigate = useNavigate();
+  const session = useSession();
+  const [params] = useSearchParams();
+  const returnTo = safeReturnTo(params.get("returnTo"));
+  const pending = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -45,35 +34,49 @@ export function Login() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending.current) return;
+    if (!email.trim() || password.length < 8) {
+      setError("Enter an email and a password with at least 8 characters");
+      return;
+    }
+    pending.current = true;
+    takeOAuthReturnTo();
     setError(""); // Clear previous error
     setIsLoading(true);
 
     try {
-      await apiClient.post(
-        "/auth/login",
-        {
-          email: email,
-          password: password,
-        },
-        { withCredentials: true },
-      );
+      await session.login({ email: email.trim(), password });
 
       toast.success("Login successful");
-      navigate("/dashboard", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (error) {
-      const message = getErrorMessage(error, "Login failed");
+      const issue = getApiError(error);
+      if (issue.kind === "canceled") return;
+      const message = issue.message;
       setError(message);
       toast.error(message, {
         duration: 5000, // Hiển thị 5 giây
       });
-      console.error("Login failed", error);
     } finally {
+      pending.current = false;
       setIsLoading(false);
     }
   }
 
   function handleLoginGoogle() {
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/auth/google/login`;
+    if (pending.current) return;
+    try {
+      const url = `${getApiBaseUrl()}/auth/google/login`;
+      saveOAuthReturnTo(returnTo);
+      session.startSession();
+      pending.current = true;
+      setIsLoading(true);
+      window.location.assign(url);
+    } catch (error) {
+      pending.current = false;
+      setIsLoading(false);
+      setError(getApiError(error).message);
+    }
   }
 
   return (
@@ -82,24 +85,25 @@ export function Login() {
       <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <Card className="w-full max-w-sm">
           <CardHeader>
-            <CardTitle>Login to your account</CardTitle>
+            <CardTitle><h1>Login to your account</h1></CardTitle>
             <CardDescription>
               Enter your email below to login to your account
             </CardDescription>
             <CardAction>
-              <Link to="/register">
+              <Link to={authLink("/register", returnTo)}>
                 <Button variant="link">Sign Up</Button>
               </Link>
             </CardAction>
           </CardHeader>
           <CardContent>
-            <form>
+            <form onSubmit={handleSubmit}>
               <div className="flex flex-col gap-6">
                 <div className="grid gap-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
+                    autoComplete="email"
                     placeholder="Email"
                     required
                     disabled={isLoading}
@@ -114,7 +118,7 @@ export function Login() {
                   <div className="flex items-center">
                     <Label htmlFor="password">Password</Label>
                     <Link
-                      to="/forgot-password"
+                      to={authLink("/forgot-password", returnTo)}
                       className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                     >
                       Forgot your password?
@@ -126,6 +130,8 @@ export function Login() {
                       type={showNewPassword ? "text" : "password"}
                       placeholder="Password"
                       required
+                      minLength={8}
+                      autoComplete="current-password"
                       disabled={isLoading}
                       value={password}
                       onChange={(e) => {
@@ -135,6 +141,7 @@ export function Login() {
                     />
                     <button
                       type="button"
+                      aria-label={showNewPassword ? "Hide password" : "Show password"}
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 transition-colors"
                     >
@@ -150,11 +157,15 @@ export function Login() {
                   type="submit"
                   className="w-full"
                   disabled={isLoading}
-                  onClick={handleSubmit}
                 >
                   {isLoading ? "Logging in..." : "Login"}
                 </Button>
-                {error && <p className="text-sm text-red-600">{error}</p>}
+                {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+                {/* shortcut: BE exposes unverified accounts only through this message; use an error code when available. */}
+                {error.includes("has not been verified") && <Button type="button" variant="link" onClick={() => {
+                  localStorage.setItem("emailForVerification", email.trim());
+                  navigate(authLink("/verify", returnTo));
+                }}>Verify email</Button>}
               </div>
               <div className="relative mt-6">
                 <FieldSeparator className="mb-4">

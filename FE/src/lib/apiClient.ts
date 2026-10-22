@@ -1,144 +1,145 @@
-import axios, {
-  AxiosError,
-  type AxiosRequestConfig,
-  type AxiosResponse,
-  type InternalAxiosRequestConfig,
-} from "axios";
+import axios, { AxiosError, CanceledError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
+import { getApiBaseUrl } from "./env";
 
-export const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-  withCredentials: true,
-});
+export type Pagination = {
+  totalItems: number;
+  itemsPerPage: number;
+  currentPage: number;
+  totalPages: number;
+};
+export type ApiEnvelope<T> = { success: true; data: T; pagination?: Pagination };
+type RequestConfig = Omit<AxiosRequestConfig, "signal"> & { signal?: AbortSignal };
+type SessionRequest = InternalAxiosRequestConfig & { _session?: number; _retried?: boolean; _refreshVersion?: number };
 
-axiosClient.interceptors.request.use((config) => {
-  const accessToken = cookieStore.get("accessToken");
+const options = { timeout: 10_000, withCredentials: true };
+export const axiosClient = axios.create(options);
+export const refreshClient = axios.create(options);
+let sessionVersion = 0;
+let sessionController = new AbortController();
+// shortcut: refresh sharing is per tab; verify cross-tab token rotation before release in G03.
+let refreshPromise: Promise<void> | null = null;
+let refreshVersion = 0;
+const expiredListeners = new Set<() => void>();
 
-  if (accessToken) {
-    config.headers["Authorization"] = `Bearer ${accessToken}`;
+export function getSessionVersion() { return sessionVersion; }
+
+export function resetApiSession() {
+  sessionVersion += 1;
+  sessionController.abort();
+  sessionController = new AbortController();
+  refreshPromise = null;
+  refreshVersion = 0;
+}
+
+export function onSessionExpired(listener: () => void) {
+  expiredListeners.add(listener);
+  return () => { expiredListeners.delete(listener); };
+}
+
+function expireSession(version: number) {
+  if (version !== sessionVersion) return;
+  resetApiSession();
+  expiredListeners.forEach((listener) => listener());
+}
+
+function assertCurrent(config: SessionRequest) {
+  if (config._session !== sessionVersion || config.signal?.aborted) {
+    throw new CanceledError("Request belongs to an ended session");
   }
-  if (config.data instanceof FormData) {
-    delete config.headers["Content-Type"];
-  }
+}
+
+function waitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener("abort", abort);
+      reject(signal.reason instanceof AxiosError ? signal.reason : new CanceledError());
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener("abort", abort); resolve(value); },
+      (error: unknown) => { signal.removeEventListener("abort", abort); reject(error); },
+    );
+  });
+}
+
+function refreshSession() {
+  if (refreshPromise) return refreshPromise;
+  const version = sessionVersion;
+  const timeoutController = new AbortController();
+  const signal = AbortSignal.any([sessionController.signal, timeoutController.signal]);
+  const timer = setTimeout(() => timeoutController.abort(
+    new AxiosError("Session refresh timed out", "ECONNABORTED"),
+  ), options.timeout);
+  const pending = waitWithSignal(refreshClient.post(
+    `${getApiBaseUrl()}/auth/refresh-token`, {}, { signal },
+  ), signal).then(() => {
+    if (version !== sessionVersion) throw new CanceledError();
+    refreshVersion += 1;
+  }).finally(() => {
+    clearTimeout(timer);
+    if (refreshPromise === pending) refreshPromise = null;
+  });
+  refreshPromise = pending;
+  return pending;
+}
+
+const publicEndpoints = new Set([
+  "/auth/login", "/auth/register", "/auth/verify", "/auth/send-otp",
+  "/auth/forgot-password", "/auth/refresh-token",
+]);
+
+axiosClient.interceptors.request.use((config: SessionRequest) => {
+  config.baseURL = getApiBaseUrl();
+  config._session ??= sessionVersion;
+  config._refreshVersion ??= refreshVersion;
+  if (config.signal) {
+    // All FE callers, including Query, supply native AbortSignal; Axios types it more broadly.
+    config.signal = AbortSignal.any([sessionController.signal, config.signal as AbortSignal]);
+  } else config.signal = sessionController.signal;
+  assertCurrent(config);
+  if (config.data instanceof FormData) config.headers.delete("Content-Type");
   return config;
 });
 
-// Biến để tránh việc gọi refresh token nhiều lần cùng lúc
-let isRefreshing = false;
-let failedQueue: any[] = [];
-
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
 axiosClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
-
-    // Skip refresh token nếu đang ở auth pages
-    const authPages = ["/login", "/register", "/verify", "/forgot-password"];
-    const isAuthPage = authPages.some((page) =>
-      window.location.pathname.includes(page),
-    );
-
-    // Kiểm tra nếu lỗi 401 và chưa được retry (và không phải auth page)
-    if (
-      error.response?.status === 401 &&
-      !originalRequest._retry &&
-      !isAuthPage
-    ) {
-      if (isRefreshing) {
-        // Nếu đang trong quá trình refresh, đẩy request này vào hàng đợi
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers["Authorization"] = `Bearer ${token}`;
-            return axiosClient(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
+  (response) => { assertCurrent(response.config); return response; },
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error) || !error.config) throw error;
+    const config = error.config as SessionRequest;
+    assertCurrent(config);
+    if (error.response?.status !== 401 || publicEndpoints.has(config.url?.split("?")[0] ?? "")) throw error;
+    const version = config._session!;
+    if (config._retried) { expireSession(version); throw error; }
+    config._retried = true;
+    try {
+      if ((config._refreshVersion ?? 0) === refreshVersion) {
+        await waitWithSignal(refreshSession(), config.signal as AbortSignal);
       }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        // Gọi API lấy token mới - dùng axios gốc để tránh interceptor này lặp vô tận
-        const res = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/auth/refresh-token`,
-          {},
-          {
-            withCredentials: true, // Để gửi kèm HttpOnly Cookie chứa refreshToken
-          },
-        );
-
-        const { accessToken } = res.data;
-
-        cookieStore.set("accessToken", accessToken);
-
-        processQueue(null, accessToken);
-
-        // Thực hiện lại request ban đầu với token mới
-        originalRequest.headers["Authorization"] = `Bearer ${accessToken}`;
-        return axiosClient(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        // Nếu refresh cũng lỗi (hết hạn cả refreshToken), cho đăng xuất
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
+    } catch (refreshError) {
+      if (axios.isAxiosError(refreshError) && [401, 403].includes(refreshError.response?.status ?? 0)) {
+        expireSession(version);
       }
+      throw refreshError;
     }
-
-    return Promise.reject(error);
+    assertCurrent(config);
+    config._refreshVersion = refreshVersion;
+    return axiosClient(config);
   },
 );
 
+function request<T>(method: string, url: string, data?: unknown, config?: RequestConfig): Promise<ApiEnvelope<T>> {
+  const scopedConfig = { ...config, method, url, data, _session: sessionVersion };
+  return axiosClient.request<ApiEnvelope<T>>(scopedConfig).then((response) => {
+    assertCurrent(response.config);
+    return response.data;
+  });
+}
+
 export const apiClient = {
-  get(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse> {
-    return axiosClient.get(url, config).then((res) => res.data);
-    // .then(res => res.data) giúp bên ngoài nhận data luôn, đỡ phải .data lần nữa
-  },
-
-  post(
-    url: string,
-    data?: unknown,
-    config?: AxiosRequestConfig,
-  ): Promise<AxiosResponse> {
-    return axiosClient.post(url, data, config).then((res) => res.data);
-  },
-
-  put(
-    url: string,
-    data?: unknown,
-    config?: AxiosRequestConfig,
-  ): Promise<AxiosResponse> {
-    return axiosClient.put(url, data, config).then((res) => res.data);
-  },
-
-  patch(
-    url: string,
-    data?: unknown,
-    config?: AxiosRequestConfig,
-  ): Promise<AxiosResponse> {
-    return axiosClient.patch(url, data, config).then((res) => res.data);
-  },
-
-  delete(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse> {
-    return axiosClient.delete(url, config).then((res) => res.data);
-  },
+  get<T = unknown>(url: string, config?: RequestConfig) { return request<T>("get", url, undefined, config); },
+  post<T = unknown>(url: string, data?: unknown, config?: RequestConfig) { return request<T>("post", url, data, config); },
+  put<T = unknown>(url: string, data?: unknown, config?: RequestConfig) { return request<T>("put", url, data, config); },
+  patch<T = unknown>(url: string, data?: unknown, config?: RequestConfig) { return request<T>("patch", url, data, config); },
+  delete<T = unknown>(url: string, config?: RequestConfig) { return request<T>("delete", url, config?.data, config); },
 };

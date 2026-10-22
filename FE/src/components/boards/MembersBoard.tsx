@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { Card } from "../ui/card";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/apiClient";
+import { getErrorMessage } from "@/lib/errors";
 import { useParams } from "react-router";
 import { X } from "lucide-react";
 import type { BoardMember } from "@/hooks/useBoards";
@@ -72,9 +73,9 @@ export function MembersBoard({
 
   async function fetchRoles() {
     try {
-      const response = await apiClient.get("/roles");
+      const response = await apiClient.get<Role[]>("/roles");
 
-      const projectRoles = response.data.filter((role: any) =>
+      const projectRoles = response.data.filter((role: Role) =>
         role.name.startsWith("BOARD_"),
       );
       setRoles(projectRoles);
@@ -97,8 +98,7 @@ export function MembersBoard({
       setMemberRoles((prev) => ({ ...prev, [userId]: newRoleId }));
       await fetchBoardMembers();
     } catch (error) {
-      const message =
-        (error as any)?.response?.data?.message || "Error updating member role";
+      const message = getErrorMessage(error, "Error updating member role");
       toast.error(message);
       console.error("Error changing role:", error);
     }
@@ -115,7 +115,7 @@ export function MembersBoard({
     }
 
     try {
-      const response = await apiClient.post(`/invitations/boards/${boardId}`, {
+      await apiClient.post(`/invitations/boards/${boardId}`, {
         email,
         roleId: selectedRoleId,
       });
@@ -124,8 +124,7 @@ export function MembersBoard({
       setSelectedRoleId("");
       await fetchBoardMembers();
     } catch (error) {
-      const message =
-        (error as any)?.response?.data?.message || "Error inviting member";
+      const message = getErrorMessage(error, "Error inviting member");
       toast.error(message);
     }
   }
@@ -137,8 +136,7 @@ export function MembersBoard({
       });
       await fetchBoardMembers();
     } catch (error) {
-      const message =
-        (error as any)?.response?.data?.message || "Error removing member";
+      const message = getErrorMessage(error, "Error removing member");
       toast.error(message);
     }
   }
