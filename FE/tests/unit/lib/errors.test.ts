@@ -49,3 +49,16 @@ it("translates transport fallbacks while preserving the backend's actual message
   expect(getApiError(new AxiosError("offline", "ERR_NETWORK")).message).toBe("Could not connect to the server. Please try again.");
   expect(getApiError(httpError({ headers: new AxiosHeaders() }, 409, "Tên đã tồn tại")).message).toBe("Tên đã tồn tại");
 });
+
+it("reads safe auth codes and the exact server cooldown", async () => {
+  await i18n.changeLanguage("en");
+  const error = httpError({ headers: new AxiosHeaders() }, 409, "Server message");
+  Object.assign(error.response!.data, { code: "OTP_COOLDOWN", retryAfterSeconds: 240 });
+  expect(getApiError(error)).toMatchObject({ code: "OTP_COOLDOWN", retryAfterSeconds: 240, message: "A code is still valid. You can request another in 240 seconds." });
+});
+
+it.each([null, "240", -1, 0, 1.5, Infinity, NaN])("rejects an invalid server cooldown %s", (retryAfterSeconds) => {
+  const error = httpError({ headers: new AxiosHeaders() }, 409, "Server message");
+  Object.assign(error.response!.data, { code: "OTP_COOLDOWN", retryAfterSeconds });
+  expect(getApiError(error).retryAfterSeconds).toBeUndefined();
+});

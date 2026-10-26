@@ -20,4 +20,13 @@ describe('Invitation token redaction in URL and referrer logs', () => {
 			'/invitations/[redacted]/accept?next=board',
 		);
 	});
+	it.each([
+		'/auth/google/check-login?code=private-code&state=private-state&scope=email',
+		'https://api.example/auth/google/check-login?scope=email&code=private-code',
+		'/callback?access_token=private-code&refresh_token=private-state&id_token=private-id',
+	])('redacts OAuth secrets in URL and referrer %s', (value) => {
+		const output = redactInvitationTokens(value);
+		expect(output).not.toContain('private-');
+		expect(output).toContain('[redacted]');
+	});
 });

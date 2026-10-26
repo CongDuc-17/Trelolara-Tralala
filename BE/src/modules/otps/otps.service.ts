@@ -6,9 +6,10 @@ import { otpsConfig } from '@/configs/otps.config';
 
 export class OtpCooldownError extends Error {
 	readonly status = 409;
+	readonly code = 'OTP_COOLDOWN';
 
-	constructor(seconds: number) {
-		super(`OTP sẽ được cấp lại sau ${seconds} giây`);
+	constructor(readonly retryAfterSeconds: number) {
+		super(`OTP sẽ được cấp lại sau ${retryAfterSeconds} giây`);
 		this.name = 'OtpCooldownError';
 	}
 }

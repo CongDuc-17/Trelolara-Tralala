@@ -116,7 +116,11 @@ export class AuthRepository {
 			} else {
 				await repository.lockUser(user.id);
 				user = await repository.findUser({ userId: user.id });
-				if (!user || user.status !== UserStatusEnum.ACTIVE) {
+				if (
+					!user ||
+					user.status !== UserStatusEnum.ACTIVE ||
+					user.email !== input.email
+				) {
 					throw new OptionalException(
 						StatusCodes.FORBIDDEN,
 						'Your account is unavailable',
@@ -141,7 +145,17 @@ export class AuthRepository {
 						update: {},
 					});
 				}
-				if (!user.verify) await repository.markVerified(user.id);
+				if (!user.verify) {
+					// A password set before email ownership was proved must not survive Google verification.
+					await repository.client.accounts.deleteMany({
+						where: { userId: user.id },
+					});
+					await repository.client.otps.deleteMany({
+						where: { userId: user.id },
+					});
+					await repository.revokeSessions(user.id);
+					await repository.markVerified(user.id);
+				}
 			}
 			const existing = await repository.client.socialAccounts.findUnique({
 				where: { userId: user.id },
@@ -183,7 +197,7 @@ export class AuthRepository {
 		});
 	}
 
-	updatePassword({
+	async updatePassword({
 		userId,
 		password,
 		salt,
@@ -192,10 +206,12 @@ export class AuthRepository {
 		password: string;
 		salt: string;
 	}): Promise<AuthAccount> {
-		return this.client.accounts.update({
+		await this.markVerified(userId);
+		return this.client.accounts.upsert({
 			include: { user: true },
 			where: { userId },
-			data: { password, salt, user: { update: { verify: true } } },
+			create: { userId, password, salt },
+			update: { password, salt },
 		});
 	}
 
