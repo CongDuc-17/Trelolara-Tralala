@@ -41,7 +41,9 @@ function setup() {
 		accounts: {
 			create: jest.fn(async () => ({ id: 'account-1' })),
 			upsert: jest.fn(async () => undefined),
+			deleteMany: jest.fn(),
 		},
+		otps: { deleteMany: jest.fn() },
 		tokens: {
 			deleteMany: jest.fn(async () => ({ count: 1 })),
 			create: jest.fn(),
@@ -281,6 +283,81 @@ describe('AuthRepository query and transaction boundaries', () => {
 		expect(transaction.users.update).toHaveBeenCalledWith({
 			where: { id: 'user-1' },
 			data: { verify: true },
+		});
+	});
+
+	it('disables unverified local credentials and clears OTP and sessions before Google verifies the user', async () => {
+		const { repository, transaction } = setup();
+		transaction.users.findFirst.mockResolvedValue({
+			id: 'user-1',
+			email: google.email,
+			verify: false,
+			status: 'ACTIVE',
+		});
+		await repository.connectGoogleAccount(google);
+		expect(transaction.accounts.deleteMany).toHaveBeenCalledWith({
+			where: { userId: 'user-1' },
+		});
+		expect(transaction.otps.deleteMany).toHaveBeenCalledWith({
+			where: { userId: 'user-1' },
+		});
+		expect(transaction.tokens.deleteMany).toHaveBeenCalledWith({
+			where: { userId: 'user-1' },
+		});
+		expect(transaction.accounts.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+			transaction.users.update.mock.invocationCallOrder[0],
+		);
+	});
+
+	it('preserves verified local credentials when linking Google', async () => {
+		const { repository, transaction } = setup();
+		transaction.users.findFirst.mockResolvedValue({
+			id: 'user-1',
+			email: google.email,
+			verify: true,
+			status: 'ACTIVE',
+		});
+		await repository.connectGoogleAccount(google);
+		expect(transaction.accounts.deleteMany).not.toHaveBeenCalled();
+		expect(transaction.tokens.deleteMany).not.toHaveBeenCalled();
+	});
+
+	it('rejects a Google link if the email changed while waiting for its lock', async () => {
+		const { repository, transaction } = setup();
+		transaction.users.findFirst
+			.mockResolvedValueOnce({
+				id: 'user-1',
+				email: google.email,
+				verify: false,
+				status: 'ACTIVE',
+			})
+			.mockResolvedValueOnce({
+				id: 'user-1',
+				email: 'changed@example.test',
+				verify: false,
+				status: 'ACTIVE',
+			});
+		await expect(repository.connectGoogleAccount(google)).rejects.toMatchObject({
+			status: 403,
+		});
+		expect(transaction.accounts.deleteMany).not.toHaveBeenCalled();
+		expect(transaction.socialAccounts.upsert).not.toHaveBeenCalled();
+	});
+
+	it('password recovery verifies ownership and creates missing local credentials on the transaction client', async () => {
+		const { transaction } = setup();
+		await new AuthRepository(transaction as unknown as DatabaseClient).updatePassword(
+			{ userId: 'user-1', password: 'hash', salt: 'salt' },
+		);
+		expect(transaction.users.update).toHaveBeenCalledWith({
+			where: { id: 'user-1' },
+			data: { verify: true },
+		});
+		expect(transaction.accounts.upsert).toHaveBeenCalledWith({
+			include: { user: true },
+			where: { userId: 'user-1' },
+			create: { userId: 'user-1', password: 'hash', salt: 'salt' },
+			update: { password: 'hash', salt: 'salt' },
 		});
 	});
 

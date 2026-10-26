@@ -25,6 +25,11 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 
 export function getApiError(error: unknown) {
   const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+  const body: unknown = axios.isAxiosError(error) ? error.response?.data : undefined;
+  const details = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const code = typeof details.code === "string" ? details.code : undefined;
+  const retryAfterSeconds = typeof details.retryAfterSeconds === "number" && Number.isInteger(details.retryAfterSeconds) && details.retryAfterSeconds > 0
+    ? details.retryAfterSeconds : undefined;
   const kind = axios.isCancel(error) ? "canceled"
     : error instanceof ConfigurationError ? "configuration"
     : status === 401 ? "unauthorized"
@@ -37,5 +42,14 @@ export function getApiError(error: unknown) {
     : "unknown";
   const fallback = kind === "configuration" && error instanceof Error ? error.message
     : i18n.t(`errors.${["network", "timeout", "forbidden", "unauthorized"].includes(kind) ? kind : "fallback"}`);
-  return { kind, status, message: getErrorMessage(error, fallback) };
+  const messages: Record<string, string> = {
+    MAIL_DELIVERY_FAILED: "auth.mailDeliveryFailed",
+    REGISTRATION_PENDING: "auth.registrationPending",
+    EMAIL_EXISTS: "auth.emailExists",
+    ACCOUNT_UNVERIFIED: "auth.unverified",
+    OTP_COOLDOWN: "auth.otpCooldown",
+  };
+  const message = code && messages[code] && (code !== "OTP_COOLDOWN" || retryAfterSeconds !== undefined)
+    ? i18n.t(messages[code], { seconds: retryAfterSeconds }) : getErrorMessage(error, fallback);
+  return { kind, status, code, retryAfterSeconds, message };
 }

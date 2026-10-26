@@ -31,6 +31,9 @@ const router = express.Router({ mergeParams: true });
 autoBindUtil(authController);
 
 new GoogleOauthStrategy();
+const otpDeliveryResponse = z.object({
+	retryAfterSeconds: z.number().int().nonnegative(),
+});
 
 authRegistry.registerPath({
 	method: 'post',
@@ -38,7 +41,7 @@ authRegistry.registerPath({
 	tags: ['Auth'],
 	request: registerRequestSchema,
 	responses: createApiResponse(
-		accountResponseDtoSchema,
+		accountResponseDtoSchema.extend(otpDeliveryResponse.shape),
 		'Success',
 		StatusCodes.CREATED,
 	),
@@ -99,7 +102,7 @@ authRegistry.registerPath({
 	path: '/auth/send-otp',
 	tags: ['Auth'],
 	request: sendOtpRequestSchema,
-	responses: createApiResponse(z.null(), 'Success'),
+	responses: createApiResponse(otpDeliveryResponse, 'Success'),
 });
 router.post(
 	'/send-otp',

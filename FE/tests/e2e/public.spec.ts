@@ -120,3 +120,42 @@ test("public pages remain usable when WebGL is unavailable", async ({ page, api 
   }
 });
 
+test("auth recovery handles registration delivery failure, existing OTP and reload", async ({ page, api }, info) => {
+  api.authenticated = false;
+  let resetBody: unknown;
+  await page.route("http://api.e2e.test/auth/register", (route) => route.request().method() === "OPTIONS" ? send(route, null) : route.fulfill({ status: 503, headers, json: { success: false, code: "REGISTRATION_PENDING", message: "Email delivery failed" } }));
+  await page.route("http://api.e2e.test/auth/send-otp", (route) => route.request().method() === "OPTIONS" ? send(route, null) : route.fulfill({ status: 409, headers, json: { success: false, code: "OTP_COOLDOWN", retryAfterSeconds: 240, message: "Existing code" } }));
+  await page.route("http://api.e2e.test/auth/forgot-password", (route) => {
+    if (route.request().method() !== "OPTIONS") resetBody = route.request().postDataJSON();
+    return send(route, {});
+  });
+  await page.goto("/register?returnTo=%2Fmy-work");
+  await page.locator("#name").fill("Nguyễn An");
+  await page.locator("#email").fill("an@example.test");
+  await page.locator("#password").fill("first-password");
+  await page.locator("#confirm-password").fill("first-password");
+  await page.getByRole("button", { name: "Đăng ký", exact: true }).click();
+  const recover = page.getByRole("button", { name: "Xác minh email và đặt mật khẩu" });
+  await expect(recover).toBeVisible();
+  await page.screenshot({ path: info.outputPath("auth-pending.jpg"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(info.project.use.viewport!.width);
+  await recover.click();
+  await expect(page.locator("#email")).toHaveValue("an@example.test");
+  await page.getByRole("button", { name: "Gửi mã xác minh", exact: true }).click();
+  await expect(page.locator("#new-password")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Gửi lại sau \d+ giây/ })).toBeDisabled();
+  await page.reload();
+  await expect(page.locator("#new-password")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Gửi lại sau \d+ giây/ })).toBeDisabled();
+  await page.screenshot({ path: info.outputPath("auth-existing-code.jpg"), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(info.project.use.viewport!.width);
+  await page.locator("#otp").fill("123456");
+  await page.locator("#new-password").fill("owner-password");
+  await page.locator("#confirm-password").fill("owner-password");
+  await page.getByRole("button", { name: "Đặt lại mật khẩu", exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Fmy-work$/);
+  expect(resetBody).toEqual({ email: "an@example.test", otp: "123456", newPassword: "owner-password" });
+  await page.goto("/login?error=oauth_failed");
+  await expect(page.getByRole("alert")).toContainText("Hãy đăng nhập lại bằng Google.");
+});
+

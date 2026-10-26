@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,13 +61,15 @@ export function ForgotPassword() {
   const session = useSession();
   const [params] = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
+  const routeState: unknown = useLocation().state;
+  const requestedEmail = routeState && typeof routeState === "object" && "email" in routeState && typeof routeState.email === "string" ? routeState.email : "";
   const [savedEmail] = useState(readSavedEmail);
-  const [email, setEmail] = useState(savedEmail);
+  const [email, setEmail] = useState(requestedEmail || savedEmail);
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [step, setStep] = useState<"email" | "reset">(savedEmail ? "reset" : "email");
-  const { resendIn, startCooldown } = useResendCooldown();
+  const [step, setStep] = useState<"email" | "reset">(savedEmail && (!requestedEmail || requestedEmail === savedEmail) ? "reset" : "email");
+  const { resendIn, startCooldown } = useResendCooldown(email);
   const pending = useRef(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -82,7 +84,7 @@ export function ForgotPassword() {
   );
 
   async function sendOtp(targetEmail = email) {
-    if (pending.current || resendIn > 0) return;
+    if (pending.current || (step === "reset" && resendIn > 0)) return;
     const normalizedEmail = targetEmail.trim();
     if (!normalizedEmail) {
       setError(t("auth.emailRequired"));
@@ -94,16 +96,24 @@ export function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      await requestOtp.mutateAsync({ email: normalizedEmail });
+      const result = await requestOtp.mutateAsync({ email: normalizedEmail });
 
       saveEmail(normalizedEmail);
       setEmail(normalizedEmail);
       setStep("reset");
-      startCooldown();
+      startCooldown(result.data?.retryAfterSeconds);
       toast.success(t("auth.codeSuccess"));
     } catch (error) {
       const issue = getApiError(error);
       if (issue.kind === "canceled") return;
+      if (issue.code === "OTP_COOLDOWN" && issue.retryAfterSeconds !== undefined) {
+        saveEmail(normalizedEmail);
+        setEmail(normalizedEmail);
+        setStep("reset");
+        startCooldown(issue.retryAfterSeconds);
+        toast.success(t("auth.existingCode"));
+        return;
+      }
       const message = issue.message;
       setError(message);
     } finally {

@@ -21,7 +21,8 @@ export function Login() {
   const pending = useRef(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(params.get("error") === "oauth_failed" ? t("auth.googleFailed") : "");
+  const [unverified, setUnverified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -34,6 +35,7 @@ export function Login() {
     pending.current = true;
     takeOAuthReturnTo();
     setError("");
+    setUnverified(false);
     setIsLoading(true);
 
     try {
@@ -46,6 +48,7 @@ export function Login() {
       if (issue.kind === "canceled") return;
       const message = issue.message;
       setError(message);
+      setUnverified(issue.code === "ACCOUNT_UNVERIFIED");
     } finally {
       pending.current = false;
       setIsLoading(false);
@@ -73,8 +76,7 @@ export function Login() {
       <div className="space-y-2"><Label htmlFor="email">{t("profile.email")}</Label><Input id="email" name="email" type="email" autoComplete="email" required className="h-11" disabled={isLoading} value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} /></div>
       <div className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><Label htmlFor="password">{t("auth.password")}</Label><Link to={authLink("/forgot-password", returnTo)} className="rounded-sm text-sm text-muted-foreground underline-offset-4 hover:underline">{t("auth.forgot")}</Link></div><PasswordInput id="password" name="password" required minLength={8} autoComplete="current-password" disabled={isLoading} value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} /></div>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
-      {/* shortcut: BE exposes unverified accounts only through this message; use an error code when available. */}
-      {error.includes("has not been verified") && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { localStorage.setItem("emailForVerification", email.trim()); navigate(authLink("/verify", returnTo)); }}>{t("auth.verifyEmail")}</Button>}
+      {unverified && error && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { localStorage.setItem("emailForVerification", email.trim()); navigate(authLink("/verify", returnTo)); }}>{t("auth.verifyEmail")}</Button>}
       <Button type="submit" className="h-11 w-full" disabled={isLoading}>{t(isLoading ? "auth.loggingIn" : "auth.login")}</Button>
       <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" /><span>{t("auth.or")}</span><span className="h-px flex-1 bg-border" /></div>
       <Button variant="outline" type="button" className="h-11 w-full" disabled={isLoading} onClick={handleLoginGoogle}>{t("auth.google")}</Button>

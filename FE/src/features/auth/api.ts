@@ -6,6 +6,7 @@ type RegisterInput = LoginInput & { name: string };
 type VerifyEmailInput = { email: string; otp: string };
 type ResetPasswordInput = VerifyEmailInput & { newPassword: string };
 type SessionTokens = { accessToken: string; refreshToken: string };
+type OtpDelivery = { retryAfterSeconds: number };
 type AccountSummary = {
   id: string;
   userId: string;
@@ -18,8 +19,8 @@ type AccountSummary = {
 
 export const login = (input: LoginInput) => apiClient.post<SessionTokens>("/auth/login", input);
 export const logout = () => apiClient.post<null>("/auth/logout");
-export const register = (input: RegisterInput) => apiClient.post<AccountSummary>("/auth/register", input, { withCredentials: true });
+export const register = (input: RegisterInput) => apiClient.post<AccountSummary & OtpDelivery>("/auth/register", input, { withCredentials: true });
 export const verifyEmail = (input: VerifyEmailInput) => apiClient.post<AccountSummary>("/auth/verify", input);
-export const sendOtp = (input: { email: string }) => apiClient.post<null>("/auth/send-otp", input);
+export const sendOtp = (input: { email: string }) => apiClient.post<OtpDelivery>("/auth/send-otp", input);
 export const resetPassword = (input: ResetPasswordInput) => apiClient.post<AccountSummary>("/auth/forgot-password", input, { withCredentials: true });
 export const googleLoginUrl = () => `${getApiBaseUrl()}/auth/google/login`;

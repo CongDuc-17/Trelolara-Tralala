@@ -33,6 +33,10 @@ export function getMailTransporter(): Transporter<SMTPTransport.SentMessageInfo>
 		host: 'smtp.gmail.com',
 		port: 465,
 		secure: true,
+		dnsTimeout: 3000,
+		connectionTimeout: 3000,
+		greetingTimeout: 3000,
+		socketTimeout: 3000,
 		auth: {
 			user,
 			pass,
@@ -45,4 +49,3 @@ export function getMailTransporter(): Transporter<SMTPTransport.SentMessageInfo>
 export function resetMailTransporter(): void {
 	cachedTransporter = null;
 }
-

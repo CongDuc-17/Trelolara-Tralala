@@ -21,6 +21,12 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster:
 const returnTo = "/boards/test/cards/card?filter=mine#comments";
 const query = `?returnTo=${encodeURIComponent(returnTo)}`;
 
+function authError(status: number, code: string, retryAfterSeconds?: number) {
+  const error = httpError({ headers: new AxiosHeaders() }, status, "Server message");
+  Object.assign(error.response!.data, { code, retryAfterSeconds });
+  return error;
+}
+
 beforeEach(() => {
   void i18n.changeLanguage("en");
   localStorage.clear(); sessionStorage.clear();
@@ -82,8 +88,7 @@ it("keeps login drafts and displays rejected credentials without navigation", as
 });
 
 it("offers verification for an unverified login while preserving its destination", async () => {
-  session.login.mockRejectedValue(httpError({ headers: new AxiosHeaders() }, 403,
-    "Your account has not been verified. Please verify your account before logging in."));
+  session.login.mockRejectedValue(authError(403, "ACCOUNT_UNVERIFIED"));
   renderAuth("/login" + query);
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Email"), "member@example.test");
@@ -132,15 +137,108 @@ it("verifies the OTP with Enter and carries the destination back to login", asyn
 
 it("resends verification OTP, blocks duplicates and re-enables it after the cooldown", async () => {
   vi.useFakeTimers();
+  vi.mocked(apiClient.post).mockResolvedValue({ success: true, data: { retryAfterSeconds: 300 } });
   localStorage.setItem("emailForVerification", "member@example.test");
   renderAuth("/verify" + query);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Resend code" })); });
-  const blocked = screen.getByRole("button", { name: "Resend in 60s" }) as HTMLButtonElement;
+  const blocked = screen.getByRole("button", { name: "Resend in 300s" }) as HTMLButtonElement;
   expect(blocked.disabled).toBe(true);
   fireEvent.click(blocked);
   expect(apiClient.post).toHaveBeenCalledExactlyOnceWith("/auth/send-otp", { email: "member@example.test" });
   await act(async () => vi.advanceTimersByTimeAsync(60_000));
+  expect((screen.getByRole("button", { name: "Resend in 240s" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => vi.advanceTimersByTimeAsync(240_000));
   expect((screen.getByRole("button", { name: "Resend code" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it.each([503, 409])("recovers a pending registration after HTTP %s through OTP and a new password", async (status) => {
+  vi.mocked(apiClient.post).mockRejectedValueOnce(authError(status, "REGISTRATION_PENDING"));
+  renderAuth("/register" + query);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Name"), "Member");
+  await user.type(screen.getByLabelText("Email"), "member@example.test");
+  await user.type(screen.getByLabelText("Password", { exact: true }), "test-password");
+  await user.type(screen.getByLabelText("Confirm password"), "test-password{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Verify email and set password" }));
+  expect(screen.getByTestId("location").textContent).toBe("/forgot-password" + query);
+  expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("member@example.test");
+  expect(apiClient.post).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("button", { name: "Send code" }));
+  await user.type(await screen.findByLabelText("OTP"), "123456");
+  await user.type(screen.getByLabelText("New password"), "owner-password");
+  await user.type(screen.getByLabelText("Confirm password"), "owner-password{Enter}");
+  await screen.findByRole("heading", { name: "Sign in" });
+  expect(apiClient.post).toHaveBeenLastCalledWith("/auth/forgot-password", { email: "member@example.test", otp: "123456", newPassword: "owner-password" }, { withCredentials: true });
+});
+
+it("lets a pending registration switch to a different email", async () => {
+  vi.mocked(apiClient.post).mockRejectedValueOnce(authError(409, "REGISTRATION_PENDING"));
+  renderAuth("/register" + query);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Name"), "Member");
+  await user.type(screen.getByLabelText("Email"), "member@example.test");
+  await user.type(screen.getByLabelText("Password", { exact: true }), "test-password");
+  await user.type(screen.getByLabelText("Confirm password"), "test-password{Enter}");
+  await screen.findByRole("button", { name: "Verify email and set password" });
+  expect(screen.queryByRole("button", { name: "Register" })).toBeNull();
+  await user.clear(screen.getByLabelText("Email"));
+  await user.type(screen.getByLabelText("Email"), "other@example.test");
+  expect(screen.queryByRole("button", { name: "Verify email and set password" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Register" })).toBeTruthy();
+});
+
+it("uses the server's remaining cooldown and accepts an existing recovery code from another tab", async () => {
+  vi.mocked(apiClient.post).mockRejectedValueOnce(authError(409, "OTP_COOLDOWN", 240));
+  renderAuth("/forgot-password" + query);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Email"), "member@example.test{Enter}");
+  expect(await screen.findByLabelText("New password")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Resend in 240s" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("alert")).toBeNull();
+  await user.type(screen.getByLabelText("OTP"), "123456");
+  await user.type(screen.getByLabelText("New password"), "new-password");
+  await user.type(screen.getByLabelText("Confirm password"), "new-password{Enter}");
+  expect(await screen.findByRole("heading", { name: "Sign in" })).toBeTruthy();
+});
+
+it("handles verification cooldown conflicts without discarding the OTP", async () => {
+  localStorage.setItem("emailForVerification", "member@example.test");
+  vi.mocked(apiClient.post).mockRejectedValueOnce(authError(409, "OTP_COOLDOWN", 180));
+  renderAuth("/verify" + query);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Verification code"), "123456");
+  await user.click(screen.getByRole("button", { name: "Resend code" }));
+  expect(await screen.findByRole("button", { name: "Resend in 180s" })).toBeTruthy();
+  expect((screen.getByLabelText("Verification code") as HTMLInputElement).value).toBe("123456");
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("carries the registration cooldown into verification", async () => {
+  vi.mocked(apiClient.post).mockResolvedValueOnce({ success: true, data: { retryAfterSeconds: 295 } });
+  renderAuth("/register" + query);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Name"), "Member");
+  await user.type(screen.getByLabelText("Email"), "member@example.test");
+  await user.type(screen.getByLabelText("Password", { exact: true }), "test-password");
+  await user.type(screen.getByLabelText("Confirm password"), "test-password{Enter}");
+  expect(await screen.findByRole("button", { name: "Resend in 295s" })).toBeTruthy();
+});
+
+it("restores the cooldown after reload and measures elapsed wall time", async () => {
+  vi.useFakeTimers();
+  localStorage.setItem("emailForVerification", "member@example.test");
+  sessionStorage.setItem("otp-retry-at:member@example.test", String(Date.now() + 240_000));
+  renderAuth("/verify" + query);
+  expect((screen.getByRole("button", { name: "Resend in 240s" }) as HTMLButtonElement).disabled).toBe(true);
+  vi.setSystemTime(Date.now() + 60_000);
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect((screen.getByRole("button", { name: "Resend in 179s" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("offers a fresh Google sign-in after an expired or replayed callback", () => {
+  renderAuth("/login?error=oauth_failed");
+  expect(screen.getByRole("alert").textContent).toBe("This Google sign-in link is no longer valid. Please sign in with Google again.");
+  expect((screen.getByRole("button", { name: "Continue with Google" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it("keeps OTP input and allows retry when verification or resend fails", async () => {

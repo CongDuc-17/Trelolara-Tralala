@@ -20,6 +20,7 @@ function setup() {
 		refreshSession: jest.fn(async () => tokens),
 		logout: jest.fn(async () => undefined),
 		forgotPassword: jest.fn(async () => ({ id: 'account-1', userId: 'user-1' })),
+		sendOtp: jest.fn(async () => ({ retryAfterSeconds: 287 })),
 	};
 	const response = {
 		status: jest.fn(),
@@ -152,5 +153,30 @@ describe('Auth HTTP contracts with isolated service', () => {
 		expect(response.redirect).toHaveBeenCalledWith(
 			`${process.env.FRONTEND_URL}/dashboard`,
 		);
+	});
+
+	it('redirects an already-used Google code to a fresh login without setting cookies', async () => {
+		const { controller, request, response } = setup();
+		(passport.authenticate as jest.Mock).mockReturnValue(jest.fn());
+		const next = jest.fn();
+		controller.googleCallback(request, response as unknown as Response, next);
+		const callback = (passport.authenticate as jest.Mock).mock.calls[0][2];
+		await callback(
+			Object.assign(new Error('Bad Request'), { code: 'invalid_grant' }),
+		);
+		expect(response.redirect).toHaveBeenCalledWith(
+			`${process.env.FRONTEND_URL}/login?error=oauth_failed`,
+		);
+		expect(response.cookie).not.toHaveBeenCalled();
+		expect(next).not.toHaveBeenCalled();
+	});
+
+	it('returns the server OTP cooldown in its existing response envelope', async () => {
+		const { controller, request, response } = setup();
+		await controller.sendOtp(request, response as unknown as Response);
+		expect(response.json).toHaveBeenCalledWith({
+			success: true,
+			data: { retryAfterSeconds: 287 },
+		});
 	});
 });

@@ -1,8 +1,8 @@
 import { compare, genSalt, hash } from 'bcrypt';
 import { StatusCodes } from 'http-status-codes';
 
-import { MailsService } from '../mails/mail.service';
-import { OtpsService } from '../otps/otps.service';
+import { MailDeliveryError, MailsService } from '../mails/mail.service';
+import { OtpCooldownError, OtpsService } from '../otps/otps.service';
 
 import { AuthRepository } from './auth.repository';
 import { AccountSummary, AuthAccount, AuthUser, SessionTokens } from './auth.types';
@@ -33,9 +33,15 @@ export class AuthService {
 		email: string;
 		password: string;
 		name: string;
-	}): Promise<AccountSummary> {
-		if (await this.authRepository.findUser({ email: input.email }))
-			throw new ConflictException('email');
+	}): Promise<AccountSummary & { retryAfterSeconds: number }> {
+		const existing = await this.authRepository.findUser({ email: input.email });
+		if (existing)
+			throw Object.assign(new ConflictException('email'), {
+				code:
+					!existing.verify && existing.status === 'ACTIVE'
+						? 'REGISTRATION_PENDING'
+						: 'EMAIL_EXISTS',
+			});
 		const salt = await genSalt(10);
 		const password = await hash(input.password, salt);
 		let account: AuthAccount;
@@ -53,12 +59,32 @@ export class AuthService {
 				typeof error === 'object' &&
 				'code' in error &&
 				error.code === 'P2002'
-			)
-				throw new ConflictException('email');
+			) {
+				const user = await this.authRepository.findUser({ email: input.email });
+				throw Object.assign(new ConflictException('email'), {
+					code:
+						user && !user.verify && user.status === 'ACTIVE'
+							? 'REGISTRATION_PENDING'
+							: 'EMAIL_EXISTS',
+				});
+			}
 			throw error;
 		}
-		await this.sendOtp({ email: input.email });
-		return this.summarizeAccount(account);
+		try {
+			const delivery = await this.sendOtp({ email: input.email });
+			return { ...this.summarizeAccount(account), ...delivery };
+		} catch (error) {
+			if (error instanceof MailDeliveryError || error instanceof OtpCooldownError) {
+				throw Object.assign(
+					new OptionalException(
+						error.status,
+						'Your account is awaiting email verification.',
+					),
+					{ code: 'REGISTRATION_PENDING' },
+				);
+			}
+			throw error;
+		}
 	}
 
 	async login(input: { email: string; password: string }): Promise<SessionTokens> {
@@ -68,9 +94,9 @@ export class AuthService {
 			await repository.lockUser(account.userId);
 			const current = await repository.findAccount({ email: input.email });
 			if (!current) throw new NotFoundException('email');
-			this.assertActiveUser(current.user);
 			if (!(await compare(input.password, current.password)))
 				throw new OptionalException(StatusCodes.UNAUTHORIZED, 'Invalid password');
+			this.assertActiveUser(current.user);
 			return this.issueTokens(repository, current.userId);
 		});
 	}
@@ -125,7 +151,7 @@ export class AuthService {
 		});
 	}
 
-	async sendOtp({ email }: { email: string }): Promise<void> {
+	async sendOtp({ email }: { email: string }): Promise<{ retryAfterSeconds: number }> {
 		const user = await this.authRepository.findUser({ email });
 		if (!user) throw new NotFoundException('email');
 		const otp = await this.authRepository.inTransaction(
@@ -158,6 +184,12 @@ export class AuthService {
 				text,
 				html,
 			});
+			return {
+				retryAfterSeconds: Math.max(
+					0,
+					Math.ceil((otp.expiresAt.getTime() - Date.now()) / 1000),
+				),
+			};
 		} catch (error) {
 			await this.otpsService.invalidateOtp({
 				userId: user.id,
@@ -206,20 +238,14 @@ export class AuthService {
 		newPassword: string;
 		otp: string;
 	}): Promise<AccountSummary> {
-		const account = await this.authRepository.findAccount({
-			email: input.email,
-			userStatus: 'ACTIVE',
-		});
+		const account = await this.authRepository.findVerificationAccount(input.email);
 		if (!account) throw new NotFoundException('account');
 		const salt = await genSalt(10);
 		const password = await hash(input.newPassword, salt);
 		const result = await this.authRepository.inTransaction(
 			async (repository, client) => {
 				await repository.lockUser(account.userId);
-				const current = await repository.findAccount({
-					email: input.email,
-					userStatus: 'ACTIVE',
-				});
+				const current = await repository.findVerificationAccount(input.email);
 				if (!current) throw new NotFoundException('account');
 				if (
 					!(await this.otpsService.verifyOtp(
@@ -268,9 +294,12 @@ export class AuthService {
 				'Your account has been locked',
 			);
 		if (!user.verify)
-			throw new OptionalException(
-				StatusCodes.FORBIDDEN,
-				'Your account has not been verified. Please verify your account before logging in.',
+			throw Object.assign(
+				new OptionalException(
+					StatusCodes.FORBIDDEN,
+					'Your account has not been verified. Please verify your account before logging in.',
+				),
+				{ code: 'ACCOUNT_UNVERIFIED' },
 			);
 	}
 

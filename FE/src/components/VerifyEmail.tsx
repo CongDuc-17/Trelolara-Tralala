@@ -20,11 +20,11 @@ export function VerifyEmail() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const pending = useRef(false);
-  const { resendIn, startCooldown } = useResendCooldown();
   const [params] = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
   const navigate = useNavigate();
   const [email] = useState(() => localStorage.getItem("emailForVerification") || "");
+  const { resendIn, startCooldown } = useResendCooldown(email);
 
   if (!email) return <Navigate to={authLink("/register", returnTo)} replace />;
 
@@ -61,18 +61,23 @@ export function VerifyEmail() {
     setLoading(true);
     setError("");
     try {
-      await resend.mutateAsync({ email });
-      startCooldown();
+      const result = await resend.mutateAsync({ email });
+      startCooldown(result.data?.retryAfterSeconds);
       toast.success(t("auth.codeSuccess"));
     } catch (error) {
       const issue = getApiError(error);
+      if (issue.code === "OTP_COOLDOWN" && issue.retryAfterSeconds !== undefined) {
+        startCooldown(issue.retryAfterSeconds);
+        toast.success(t("auth.existingCode"));
+        return;
+      }
       if (issue.kind !== "canceled") { setError(issue.message); }
     } finally {
       pending.current = false;
       setLoading(false);
     }
   }
-  return <AccessLayout backdrop title={t("auth.verifyTitle")} description={<>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
+  return <AccessLayout backdrop title={t("auth.verifyTitle")} description={<>{t("auth.verifyDescription")} <span className="font-medium text-foreground">{email}</span></>}>
     <form id="verify-form" onSubmit={handleVerify} className="space-y-5" aria-busy={loading}>
       <div className="space-y-3"><Label htmlFor="otp-verification">{t("auth.code")}</Label><InputOTP id="otp-verification" maxLength={6} minLength={6} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric" autoComplete="one-time-code" value={otp} disabled={loading} required onChange={setOtp} containerClassName="w-full"><InputOTPGroup className="w-full">{[0, 1, 2, 3, 4, 5].map((index) => <InputOTPSlot key={index} index={index} className="h-12 min-w-0 flex-1 text-xl" />)}</InputOTPGroup></InputOTP><p className="text-xs text-muted-foreground">{t("auth.codeHint")}</p></div>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}

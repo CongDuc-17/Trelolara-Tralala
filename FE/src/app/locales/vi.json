@@ -516,6 +516,15 @@
     "scheduled": "Đến hạn"
   },
   "auth": {
+    "mailDeliveryFailed": "Chưa gửi được email xác thực. Vui lòng thử lại sau.",
+    "registrationPending": "Email này đang chờ xác minh. Hãy dùng mã xác thực để đặt mật khẩu và hoàn tất tài khoản.",
+    "completeRegistration": "Xác minh email và đặt mật khẩu",
+    "emailExists": "Email này đã có tài khoản. Hãy đăng nhập hoặc đặt lại mật khẩu.",
+    "unverified": "Hãy xác minh email trước khi đăng nhập.",
+    "otpCooldown": "Mã hiện tại vẫn còn hiệu lực. Bạn có thể yêu cầu mã khác sau {{seconds}} giây.",
+    "existingCode": "Hãy nhập mã đã được gửi đến email của bạn.",
+    "verifyDescription": "Nhập mã xác thực cho",
+    "googleFailed": "Liên kết đăng nhập Google không còn hiệu lực. Hãy đăng nhập lại bằng Google.",
     "loginTitle": "Đăng nhập",
     "loginDescription": "Tiếp tục công việc trong không gian của bạn.",
     "login": "Đăng nhập",

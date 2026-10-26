@@ -15,7 +15,7 @@ import {
 } from '@/common/exceptions';
 
 export class AuthController {
-	constructor(private readonly authService = new AuthService()) { }
+	constructor(private readonly authService = new AuthService()) {}
 
 	async register(req: Request, res: Response): Promise<Response> {
 		const data = await this.authService.register(req.body);
@@ -45,6 +45,15 @@ export class AuthController {
 			},
 			async (error: Error | null, user: GoogleLoginPrincipal) => {
 				try {
+					if (
+						(error && 'code' in error && error.code === 'invalid_grant') ||
+						(!error && !user)
+					) {
+						res.redirect(
+							`${process.env.FRONTEND_URL}/login?error=oauth_failed`,
+						);
+						return;
+					}
 					if (error) return next(error);
 					if (!user) throw new NotFoundException('user for google login');
 					const tokens = await this.authService.loginWithGoogle(
@@ -72,8 +81,8 @@ export class AuthController {
 	}
 
 	async sendOtp(req: Request, res: Response): Promise<Response> {
-		await this.authService.sendOtp(req.body);
-		return res.status(StatusCodes.OK).json({ success: true, data: null });
+		const data = await this.authService.sendOtp(req.body);
+		return res.status(StatusCodes.OK).json({ success: true, data });
 	}
 
 	async verify(req: Request, res: Response): Promise<Response> {

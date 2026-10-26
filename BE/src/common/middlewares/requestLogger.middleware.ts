@@ -5,6 +5,10 @@ import { appEnv } from '@/configs/app.config';
 export function redactInvitationTokens(url: string): string {
 	return url
 		.replace(
+			/([?&](?:code|state|access_token|refresh_token|id_token)=)[^&#\s]*/gi,
+			'$1[redacted]',
+		)
+		.replace(
 			/(\/invitations\/)[^/?#]+(\/(?:accept|reject))(?=[?#]|$)/gi,
 			'$1[redacted]$2',
 		)

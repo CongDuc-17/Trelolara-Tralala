@@ -11,5 +11,7 @@ process.env.GOOGLE_CLIENT_ID = '';
 process.env.GOOGLE_CLIENT_SECRET = '';
 process.env.GMAIL_USER = '';
 process.env.GMAIL_APP_PASSWORD = '';
+process.env.BREVO_API_KEY = '';
+process.env.RENDER = '';
 
 

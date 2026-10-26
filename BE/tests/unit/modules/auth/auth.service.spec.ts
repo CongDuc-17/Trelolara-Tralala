@@ -4,7 +4,7 @@ import { AuthRepository } from '@/modules/auth/auth.repository';
 import { AuthService } from '@/modules/auth/auth.service';
 import { AuthAccount, AuthUser } from '@/modules/auth/auth.types';
 import { DatabaseClient } from '@/modules/database';
-import { MailsService } from '@/modules/mails/mail.service';
+import { MailDeliveryError, MailsService } from '@/modules/mails/mail.service';
 import { OtpsService } from '@/modules/otps/otps.service';
 import { getTokenExpiry, signJWT } from '@/common/utils/jwt.utils';
 
@@ -147,19 +147,19 @@ describe('AuthService with isolated adapters', () => {
 	it('keeps a created registration recoverable through resend when email delivery fails', async () => {
 		const { service, repository, mail, otps } = setup();
 		repository.findUser.mockResolvedValueOnce(null);
-		mail.sendEmail.mockRejectedValueOnce(
-			Object.assign(new Error('Email delivery failed'), { status: 503 }),
-		);
+		mail.sendEmail.mockRejectedValueOnce(new MailDeliveryError());
 		await expect(
 			service.register({
 				email: user.email,
 				name: user.name,
 				password: 'password123',
 			}),
-		).rejects.toMatchObject({ status: 503 });
+		).rejects.toMatchObject({ status: 503, code: 'REGISTRATION_PENDING' });
 		expect(repository.createRegisteredAccount).toHaveBeenCalledTimes(1);
 		expect(otps.invalidateOtp).toHaveBeenCalledTimes(1);
-		await expect(service.sendOtp({ email: user.email })).resolves.toBeUndefined();
+		await expect(service.sendOtp({ email: user.email })).resolves.toMatchObject({
+			retryAfterSeconds: expect.any(Number),
+		});
 		expect(mail.sendEmail).toHaveBeenCalledTimes(2);
 	});
 
@@ -416,5 +416,90 @@ describe('AuthService with isolated adapters', () => {
 			}),
 		).rejects.toThrow('DB failure');
 		expect(commits).toEqual([]);
+	});
+
+	it.each([false, true])(
+		'distinguishes pending registration from an existing verified account (%s)',
+		async (verify) => {
+			const f = setup();
+			f.repository.findUser.mockResolvedValue({ ...user, verify });
+			await expect(
+				f.service.register({
+					email: user.email,
+					name: user.name,
+					password: 'password123',
+				}),
+			).rejects.toMatchObject({
+				status: 409,
+				code: verify ? 'EMAIL_EXISTS' : 'REGISTRATION_PENDING',
+			});
+			expect(f.repository.createRegisteredAccount).not.toHaveBeenCalled();
+			expect(f.mail.sendEmail).not.toHaveBeenCalled();
+		},
+	);
+
+	it('classifies a concurrent unverified registration without replacing its password', async () => {
+		const f = setup();
+		f.repository.findUser
+			.mockResolvedValueOnce(null)
+			.mockResolvedValue({ ...user, verify: false });
+		f.repository.createRegisteredAccount.mockRejectedValueOnce({ code: 'P2002' });
+		await expect(
+			f.service.register({
+				email: user.email,
+				name: user.name,
+				password: 'password123',
+			}),
+		).rejects.toMatchObject({ status: 409, code: 'REGISTRATION_PENDING' });
+		expect(f.repository.updatePassword).not.toHaveBeenCalled();
+	});
+
+	it('returns the remaining server cooldown after delivering registration OTP', async () => {
+		const f = setup();
+		f.repository.findUser.mockResolvedValueOnce(null);
+		const result = await f.service.register({
+			email: user.email,
+			name: user.name,
+			password: 'password123',
+		});
+		expect(result.retryAfterSeconds).toBeGreaterThan(0);
+		expect(result.retryAfterSeconds).toBeLessThanOrEqual(60);
+	});
+
+	it('resets an OAuth-only account after consuming its OTP and revokes sessions', async () => {
+		const f = setup();
+		f.repository.findAccount.mockResolvedValue(null);
+		f.repository.findVerificationAccount.mockResolvedValue({
+			id: 'social-account',
+			userId: user.id,
+			user,
+		});
+		await expect(
+			f.service.forgotPassword({
+				email: user.email,
+				newPassword: 'new-password',
+				otp: '123456',
+			}),
+		).resolves.toMatchObject({ userId: user.id });
+		expect(f.repository.findAccount).not.toHaveBeenCalled();
+		expect(f.repository.updatePassword).toHaveBeenCalledWith(
+			expect.objectContaining({ userId: user.id }),
+		);
+		expect(f.repository.revokeSessions).toHaveBeenCalledWith(user.id);
+	});
+
+	it('requires the correct password before offering email verification', async () => {
+		const f = setup();
+		f.repository.findAccount.mockResolvedValue({
+			...account,
+			user: { ...user, verify: false },
+		});
+		await expect(
+			f.service.login({ email: user.email, password: 'wrong-password' }),
+		).rejects.toMatchObject({ status: 401 });
+		await expect(
+			f.service.login({ email: user.email, password: 'password123' }),
+		).rejects.toMatchObject({ status: 403, code: 'ACCOUNT_UNVERIFIED' });
+		expect(f.repository.createSession).not.toHaveBeenCalled();
 	});
 });

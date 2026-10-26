@@ -1,138 +1,169 @@
 # Trelolara — Frontend
 
-M1–M7 đã triển khai: kiến trúc theo tính năng, Framed sheet, Board/thẻ, kéo thả/đồng bộ revision, My Work, tìm kiếm, hạn/nhắc và các màn hình tài khoản. **370 test/30 tệp, 54 hành trình Chrome, lint/build và tích hợp BE local cốt lõi đều đạt; audit không còn cảnh báo**. M7 chia tải theo tuyến, dọn mã/gói thừa, sửa tiêu đề tablet và reconnect thông báo. Xem [báo cáo M7, ảnh và giới hạn nghiệm thu](../docs/frontend-modernization/17-milestone-m7-results.md).
+React 19, TypeScript strict, Vite 7, React Router, TanStack Query, Tailwind CSS 4, shadcn/ui–Radix và dnd-kit. Mã được tổ chức theo tính năng; toàn bộ test nằm trong `tests/`.
 
-React 19, TypeScript strict, Vite 7, React Router, TanStack Query và Tailwind 4. A–D sửa nền build/test, phiên/API, danh mục và tính đúng đắn của Kanban/thẻ. M2 dùng khung xám xanh, bề mặt trắng/tối, chữ trung tính và xanh cho hành động. M7 đã gỡ Zustand và các gói không dùng; dữ liệu server chỉ do Query quản lý.
+Tài liệu cập nhật **26/10/2026**. Xem [README dự án](../README.md) để biết tính năng và cách sử dụng; [đối chiếu BE–FE](INTEGRATION.md) ghi hợp đồng API và kết quả kiểm tra gần nhất.
 
-## Ngôn ngữ, giao diện và điều hướng
+## Chạy phát triển
 
-Menu Tùy chọn hiển thị trên thanh công cụ đổi Việt–Anh và sáng/tối/theo hệ thống. Mặc định tiếng Việt, giao diện theo hệ thống. `app/i18n.ts` và `app/locales/` giữ từ điển; `AppProviders` cung cấp i18n, next-themes, Query, phiên và một Toaster chung. Không dùng theme/ngôn ngữ làm key của page/provider để giữ bản nháp. Preference lưu riêng bằng `trelolara-language` và `trelolara-theme`; không lưu thông tin xác thực vào đó.
+Dùng Node **22.22.2+ trong nhánh 22**, **24.15.0+ trong nhánh 24**, hoặc bản đáp ứng `engines` của công cụ trong lockfile. Môi trường đã xác minh: Node 24.16.0/npm 11.13.0; nên dùng Node 24.
 
-`/dashboard` là tổng quan; `/projects` là danh mục có phân trang; `/projects/:projectId`, `/boards/:boardId/cards/:cardId` và `/me` giữ các luồng hiện có. Sidebar có nhãn và đóng sau khi chọn tuyến trên điện thoại. `/my-work` là Công việc của tôi; `/boards/:boardId/search` tìm thẻ trong bảng. Các tuyến con chi tiết giữ bộ lọc, focus và vị trí cuộn khi đóng. M5 bổ sung hạn/hoàn thành/nhắc trong chi tiết, huy hiệu hạn trên Kanban và bộ lọc có con trỏ từ API hiện có. M2 đã dịch shell, dashboard, danh mục, tạo dự án/bảng, lưu trữ, thông báo và hồ sơ; M3 bổ sung Board, chi tiết thẻ và hộp thành viên. M6 hoàn thiện auth/OTP/khôi phục, lời mời, hồ sơ/mật khẩu, trang vào/404/cổng phiên và tiêu đề dự án theo cùng hệ hiển thị.
-
-## Cài đặt và chạy
-
-Dùng Node **22.22.2+ trong nhánh 22**, **24.15.0+ trong nhánh 24**, hoặc bản đáp ứng `engines` của Vitest/jsdom trong lockfile. Đã xác minh với Node 24.16.0 và npm 11.13.0. Nên dùng Node 24 cho môi trường phát triển này.
-
-Chạy các lệnh sau trong thư mục `FE/`:
+Chạy trong `FE/`:
 
 ```powershell
 npm ci
 if (-not (Test-Path -LiteralPath .env)) {
   Copy-Item -LiteralPath .env.example -Destination .env
 }
+```
+
+Giữ cấu hình local nếu đã có. Điền [`.env.example`](.env.example) theo BE được chỉ định:
+
+| Biến | Giá trị |
+| --- | --- |
+| `VITE_ENV` | Môi trường đang dùng, ví dụ `development` |
+| `VITE_APP_NAME` | Tên ứng dụng, mặc định trong mẫu là `Trelolara` |
+| `VITE_API_BASE_URL` | URL gốc BE, không thêm `/api` hoặc dấu `/` cuối; ví dụ `http://localhost:3000` |
+| `VITE_WS_URL` | WebSocket của cùng BE, gồm `/ws`; ví dụ `ws://localhost:3000/ws` |
+
+Mọi biến `VITE_*` có thể xuất hiện trong bundle, không chứa bí mật. FE dùng cookie HttpOnly nên BE cần cho phép đúng origin cùng credentials; đối chiếu cấu hình trong [tệp mẫu BE](../BE/.env.example).
+
+```powershell
 npm run dev
 ```
 
-Chỉ sao chép `.env.example` khi chưa có `.env`; giữ cấu hình local đang dùng. Điền `VITE_API_BASE_URL` bằng URL BE local/test và `VITE_WS_URL` bằng URL WebSocket của cùng BE, có đường dẫn `/ws`. Cổng lấy từ cấu hình BE được chỉ định, không có cổng mặc định trong file mẫu. `VITE_APP_NAME` là tên ứng dụng; giữ `VITE_ENV` phù hợp môi trường đang dùng. Mọi biến `VITE_*` có thể xuất hiện trong bundle trình duyệt, nên không chứa bí mật.
+Vite cấu hình cổng 5173 và tự mở `/dashboard`. Truy cập `/` để xem landing. Các tuyến workspace yêu cầu phiên đăng nhập.
 
-Vite chạy tại `http://localhost:5173` và mở `/dashboard`. Các trang riêng cần phiên đăng nhập cùng cấu hình cookie/CORS của BE. README này không yêu cầu chạy build, migration hoặc test BE.
-
-## Kiểm tra
-
-```powershell
-npm test
-npm run build
-npm run lint
-npm run check
-```
-
-- `npm test`: Vitest chạy một lần; `npm run test:watch` dành cho phát triển. Không cần BE, tài khoản hoặc cơ sở dữ liệu.
-- `npm run build`: kiểm tra TypeScript cho mã ứng dụng, test và cấu hình, rồi tạo `dist/` bằng Vite. Giữ các tùy chọn strict/unused hiện có.
-- `npm run lint`: kiểm tra toàn FE; M7 đã xử lý toàn bộ nợ lint. UI không được import trực tiếp transport `apiClient`.
-- `npm run check`: lint, TypeScript/build, đồ thị import/bundle và toàn bộ Vitest với hai worker. `scripts/check-frontend.mjs` chặn module TS không được dùng, vòng import runtime, dependency chưa khai báo, Board/nội dung thẻ tải sẵn hoặc chunk JS vượt 500 kB. Số đo ở `node_modules/.tmp/frontend-check.json`.
-- `npm run preview`: xem bundle đã build; đây không phải xác minh đầy đủ luồng đăng nhập/nghiệp vụ.
-
-## Ranh giới kiểm thử
-
-Toàn bộ mã kiểm thử nằm trong `tests/`, tách khỏi mã ứng dụng ở `src/`:
+## Cấu trúc và trách nhiệm
 
 ```text
+src/
+├── app/           # Providers, i18n/locales, CSS public/landing/workspace
+├── components/    # UI primitive, layout và thành phần dùng chung
+├── features/      # auth, catalog, boards, cards, discovery, notifications…
+├── pages/         # Ranh giới tuyến
+└── lib/           # API transport, môi trường và tiện ích
+public/
+└── illustrations/dither-burn.webp
 tests/
-├── unit/          # Vitest: unit/component, giữ cây app/, components/, features/, lib/, pages/ tương ứng src/
-│   └── setup.test.ts
-├── e2e/           # Playwright: *.spec.ts và fixture trình duyệt
-└── support/       # setup.ts, helpers.ts, fixtures.ts dùng chung cho Vitest
+├── unit/          # *.test.ts/tsx, phản chiếu các miền trong src/
+├── support/       # setup.ts, helpers.ts, fixtures.ts cho Vitest
+└── e2e/           # *.spec.ts và fixture trình duyệt
 ```
 
-Test Vitest mới dùng tên `*.test.ts` hoặc `*.test.tsx` dưới `tests/unit/`; import mã ứng dụng qua alias `@/` và helper/fixture bằng đường dẫn tương đối tới `tests/support/`. Test Playwright dùng tên `*.spec.ts` dưới `tests/e2e/`; thêm kịch bản vào `testMatch` trong cấu hình Playwright phù hợp. `tsconfig.test.json` kiểm tra Vitest và support với cùng quy tắc strict của ứng dụng; `tsconfig.e2e.json` kiểm tra riêng E2E. Cả hai được chạy trong `npm run build`.
+API/DTO/adapter/query và mutation nằm trong tính năng tương ứng. UI gọi API theo tính năng, không import trực tiếp `apiClient`. Dữ liệu server do TanStack Query quản lý; không còn Zustand hoặc store thứ hai cho thứ tự thẻ/danh mục.
 
-`vitest.config.ts` dùng lại plugin và alias Vite, tắt đọc file `.env`, dùng jsdom và các URL `api.test`. `tests/support/setup.ts` chặn Axios adapter mặc định, `fetch`, `XMLHttpRequest` và `WebSocket` chưa được mock. Test cần API phải khai báo mock hoặc adapter cụ thể; không bỏ chặn để gọi dịch vụ thật. Các test riêng kiểm chứng ranh giới này và các giá trị môi trường.
+Các trang và form xác thực dùng `React.lazy`; `Board` và `CardDialogBody` không nằm trong chunk vào đầu. Suspense/lỗi tải nằm trong khung điều hướng hoặc hộp thoại, giữ Board và nút đóng khi tải chậm. Không dùng key theo theme/ngôn ngữ để dựng lại page/provider và làm mất bản nháp.
 
-Fixture bình luận ở `tests/support/fixtures.ts` bám hợp đồng BE hiện tại: body `{ success: true, data: ... }`, `commentId`, `cardId`, tác giả và ngày ISO. Test component dùng Query, Router và primitive thật; dữ liệu đi qua Axios adapter giả theo từng projection của BE.
+## Các tuyến chính
 
-jsdom không đo layout. `ResizeObserver` và `elementFromPoint` chỉ là stub cho vòng đời primitive, không chứng minh kích thước, hit testing hay hành vi trình duyệt thật. Kiểm thử Chrome và BE thật được tách riêng bên dưới; các kết quả A–M6 giữ làm lịch sử.
+| Tuyến | Nội dung |
+| --- | --- |
+| `/` | Landing một màn hình |
+| `/login`, `/register`, `/verify`, `/forgot-password` | Xác thực, OTP và khôi phục |
+| `/dashboard`, `/projects`, `/projects/:projectId` | Tổng quan và danh mục dự án/bảng |
+| `/boards/:boardId` | Kanban |
+| `/boards/:boardId/cards/:cardId` | Chi tiết thẻ trong Board |
+| `/my-work` | Công việc được giao |
+| `/boards/:boardId/search` | Tìm thẻ trong bảng |
+| `/archived`, `/me` | Lưu trữ và hồ sơ |
+| `/invite/projects/:token`, `/invite/boards/:token` | Xác nhận lời mời sau đăng nhập |
 
-## Kiểm thử trình duyệt sau M7
+My Work và tìm kiếm có tuyến con mở thẻ; đóng hộp giữ bộ lọc, focus và vị trí cuộn. Đường `returnTo` được kiểm tra để tránh URL ngoài ứng dụng/vòng lặp auth, được giữ qua login/register/verify/recovery. Google dùng endpoint/callback BE hiện có và lưu tạm đường quay lại trong sessionStorage.
 
-`@playwright/test` là dev dependency; dùng Chrome đã cài qua `channel: "chrome"`. Không cần tải thêm trình duyệt để chạy bộ này.
+## Quy ước giao diện
+
+Workspace giữ thanh điều hướng biểu tượng, nội dung giữa và panel lịch bên phải; trên màn hình nhỏ, điều hướng/panel dùng cơ chế thu gọn hiện có. `src/app/workspace.css` dùng token sáng/tối chung cho bề mặt, khoảng cách, chữ, focus và điều khiển. `app-page` chỉ đánh dấu trang nội dung, không áp vào canvas Kanban.
+
+Số liệu chia thành các ô bằng nhau và căn giữa trong từng ô; tìm kiếm giãn theo phần còn lại, bộ lọc/tab cùng chiều cao và xuống hàng khi thiếu chỗ. Hồ sơ/cài đặt có giới hạn chiều rộng và căn giữa. Nút, checkbox và icon giữ vùng bấm/căn chỉnh nhất quán; trên điện thoại phần tổng kết gọn để danh sách xuất hiện sớm. Cột/thẻ và thao tác kéo thả Kanban được giữ; thẻ có thêm huy hiệu số tệp theo yêu cầu.
+
+Việt/Anh và sáng/tối/theo hệ thống dùng i18n, next-themes và `AppProviders`. Mặc định tiếng Việt, theme theo hệ thống. Preference lưu tại `trelolara-language`/`trelolara-theme`, không lưu token. Mỗi thay đổi cần giữ nhãn, bàn phím, focus, bản nháp, dữ liệu thật và `prefers-reduced-motion`.
+
+### Landing và auth
+
+- `src/app/landing.css` bố trí `/` trong một viewport, không có nội dung phía dưới hoặc liên kết cuộn.
+- `DitherBurnBackground` là lớp nền cố định dưới nội dung, dùng chung cho landing, Login/Register, quên mật khẩu và xác minh. `src/app/public.css` giữ thương hiệu, nền và kiểu form thống nhất; auth dùng `AccessLayout`.
+- SVG Particle và ảnh cũ đã bỏ. `DitherBurnCanvas` dùng hai shader Dither Burn — Originkit do người dùng cung cấp; không thêm thư viện đồ họa. Canvas tải theo nhu cầu, giới hạn 30 fps, DPR 1.5 và khoảng 1.5 triệu pixel; ngừng khi tab ẩn, có nút tạm dừng.
+- Giảm chuyển động, thiết bị không hover, viewport dưới 768 px hoặc WebGL không khả dụng/mất context dùng poster `public/illustrations/dither-burn.webp`; nhánh tĩnh không tải module GPU.
+- Login/Register dùng chung độ rộng, trường, nút và chuyển động. Form dài được cuộn tự nhiên trên màn hình thấp để không che trường/lỗi/bàn phím. Các cổng phiên, lời mời và trang lỗi dùng layout cơ bản.
+- Chuyển động xuất hiện/hover/nhấn/hộp thoại dùng CSS; giảm chuyển động tắt hiệu ứng không cần thiết. Không thay validation, autocomplete, OAuth hoặc cách giữ nháp khi đổi giao diện.
+
+## Dữ liệu, phiên và nghiệp vụ
+
+### Phiên đăng nhập
+
+`apiClient.get<T>()` và các phương thức ghi trả body `ApiEnvelope<T>`, không phải `AxiosResponse`. Cookie do BE quản lý và gửi bằng `withCredentials`; FE không đọc/ghi token trong storage. Nhiều 401 trong một tab dùng chung một refresh có hạn 10 giây, mỗi request gửi lại tối đa một lần. Mất mạng/timeout không tự coi là đăng xuất; URL API thiếu/sai được báo trước khi gửi request.
+
+`AppProviders` nằm trong Router, cung cấp Query, phiên, theme/i18n và một Toaster. `/users/me` là nguồn dữ liệu người dùng, khóa theo thế hệ phiên. Route riêng chờ xác minh danh tính và cho thử lại khi lỗi tạm. Đăng nhập mới, hết phiên hoặc đăng xuất thành công hủy request/xóa Query; action cũ không được ghi vào phiên mới. Đăng xuất lỗi giữ phiên và cho thử lại.
+
+### Danh mục và cộng tác
+
+Query được phân phạm vi theo phiên/người dùng/tài nguyên. Dự án, bảng và thành viên dự án tải thêm theo trang 10 hàng; thành viên bảng dùng danh sách BE đầy đủ. Chưa tải hết dự án thì chưa kết luận một bảng là bảng khách. Tạo/sửa/lưu trữ/thay đổi thành viên cập nhật cùng cache.
+
+Hộp thành viên cho phép tra cứu người dùng để điền email, hoặc tạo liên kết mời với vai trò/hạn. Chọn một người không tự gửi lời mời. Trang lời mời gọi POST accept/reject sau khi người dùng quyết định; không có màn inbox dựng từ endpoint không tồn tại. UI phân biệt lời mời đã lưu với lỗi gửi email/thông báo, không tự gửi lại.
+
+### Kanban và thẻ
+
+`features/boards/` quản lý danh sách, summary và thứ tự; `features/cards/` quản lý chi tiết thẻ. Summary và detail không ghi vào cùng tập thẻ. `boardQueue` tuần tự hóa ý định ghi theo phiên/người dùng/bảng trong tab, cập nhật sau thả rồi đối soát server; đọc nền chờ hàng ghi để tránh ghi đè. `useBoardRealtime` đọc revision chuỗi bằng BigInt, tải lại sau ack/reconnect/revision mới, xử lý sự kiện trong lúc đọc và thu quyền. Socket thông báo cá nhân tách khỏi đăng ký board.
+
+Kéo thả dùng Mouse/Touch/KeyboardSensor, Sortable và DragOverlay. Enter mở thẻ; Space/mũi tên/Space hoặc Enter/Escape phục vụ kéo bàn phím. Tay nắm danh sách và menu chuyển/lưu trữ cung cấp cách thao tác khác. Reduced motion tắt chuyển động kéo thả.
+
+Hộp thẻ trên điện thoại dùng một cột/một vùng cuộn. Refetch/đổi locale/theme không dựng lại form. Lỗi ghi giữ nháp; đóng hộp vẫn bỏ nháp như trước và chưa có cảnh báo rời trang. Tiêu đề/mô tả gửi PATCH thật; mô tả trống dùng null. Form tạo danh sách chỉ có tên vì API không lưu mô tả.
+
+Tệp đính kèm, lịch sử, checklist, nhãn và số tệp sử dụng API BE hiện có; xem [hợp đồng và giới hạn](INTEGRATION.md). FE yêu cầu `_count.attachments` ở danh sách/tìm kiếm và `attachmentCount` ở chi tiết: cập nhật BE trước hoặc cùng FE, không suy số lượng giả khi thiếu trường.
+
+### Hồ sơ và thông báo
+
+Hồ sơ hỗ trợ multipart, đổi mật khẩu và tùy chọn hiển thị. Ảnh phải thuộc loại ảnh, tối đa 5 MB; lỗi lưu giữ nháp. BE bỏ qua địa chỉ/giới thiệu trống nên UI giải thích khi xóa trắng giá trị đã lưu. Không dựng nút xóa tài khoản hoặc công tắc email chưa có xử lý. Đổi mật khẩu gửi `{ newPassword }`, giữ hộp khi lỗi/đang ghi và xóa trường bí mật khi đóng. BE hiện phân biệt tài khoản chưa xác minh qua thông báo lỗi; cần thay cách nhận diện khi có mã lỗi riêng.
+
+Thông báo dùng bộ lọc `isRead`, phân trang/cache theo phiên/người dùng. Metadata thiếu không tạo liên kết lời mời giả. Đánh dấu tất cả đã đọc làm mới trang/count từ BE. Socket cá nhân dùng một kết nối theo phiên/người dùng, backoff tối đa tám lỗi liên tiếp; online/quay lại tab/làm mới có thể nối lại. Callback cũ không tạo kết nối mới và refresh cookie được dùng chung.
+
+## Lệnh kiểm tra
+
+| Lệnh | Phạm vi |
+| --- | --- |
+| `npm test` | Vitest một lần; `npm run test:watch` để theo dõi |
+| `npm run lint` | ESLint toàn FE, không tự sửa |
+| `npm run build` | TypeScript ứng dụng/test/cấu hình rồi Vite tạo `dist/` |
+| `npm run check` | Lint → build → graph/import/bundle → Vitest với hai worker |
+| `npm run preview` | Xem bundle đã build |
+| `npm run test:e2e` | Build cô lập rồi kiểm thử Chrome với API/WebSocket giả |
+| `npm run test:e2e:live` | Build cô lập và kiểm thử với BE test thật |
+
+`check` chặn module TS bỏ quên, vòng import runtime, dependency chưa khai báo, Board/nội dung thẻ tải sẵn và chunk JS vượt 500 kB. Số đo lưu tại `node_modules/.tmp/frontend-check.json`.
+
+### Unit/component
+
+Test mới đặt dưới `tests/unit/`, import mã ứng dụng bằng `@/` và helper bằng đường dẫn tương đối tới `tests/support/`. `tsconfig.test.json` và `tsconfig.e2e.json` kiểm tra kiểu test trong `npm run build`.
+
+Vitest dùng jsdom, tắt đọc `.env`, URL `api.test` và mặc định giảm chuyển động. Harness chặn Axios adapter mặc định, fetch, XMLHttpRequest và WebSocket chưa mock; không cần BE, tài khoản hoặc DB. Fixture bám envelope/DTO thật của BE. Không bỏ chặn mạng để gọi dịch vụ thật từ unit test.
+
+jsdom không đo bố cục; stub ResizeObserver/elementFromPoint chỉ phục vụ vòng đời primitive. Kích thước, focus, kéo thả và WebGL phải kiểm tra bằng trình duyệt.
+
+### Chrome với API giả
 
 ```powershell
 npm run test:e2e
 ```
 
-Lệnh build bản cô lập bằng `.env.e2e`, chạy 54 hành trình trên desktop 1440×900, tablet 768×1024 và điện thoại 390×844, sáng/tối. HTTP và WebSocket dùng fixture; địa chỉ ngoài preview/API giả bị chặn. Kiểm tra đăng nhập/returnTo, giữ nháp, hạn UTC, thông báo/lời mời, mất kết nối, tải module chậm/lỗi, focus, kéo bàn phím/chuột và bố cục. Chrome mô phỏng điện thoại không thay thế thiết bị thật. Báo cáo/ảnh/trace nằm trong `node_modules/.tmp/e2e-*` được Git bỏ qua.
+Dùng Chrome đã cài (`channel: "chrome"`), không cần tải browser riêng. Cấu hình 6 tổ hợp: desktop 1440×900, tablet 768×1024, phone 390×844 × sáng/tối. Public tests thêm màn hình nhỏ/ngang và Việt/Anh; kiểm tra WebGL bằng pixel, khung hình, tạm dừng, mất context và ảnh chụp. Tham số software WebGL chỉ thuộc môi trường test, không yêu cầu người dùng bật cờ trình duyệt.
 
-Để chạy với backend test riêng, cần API/search/reminder/revision đã migrate, worker nhắc hoạt động và hai tài khoản đã xác minh. Tạo cấu hình riêng khi chưa có:
+`.env.e2e` và preview cổng 4173 tách khỏi server phát triển. Fixture HTTP/WebSocket chặn mạng ngoài test; `testMatch` gồm `app.spec.ts`, `project.spec.ts`, `features.spec.ts`, `public.spec.ts`. Public tests tắt trace screencast liên tục để tránh ảnh hưởng render GPU; bộ khác giữ trace khi lỗi. Báo cáo/ảnh/trace trong `node_modules/.tmp/e2e-*`, được Git bỏ qua.
+
+### Với BE test thật
+
+Cần BE đã migrate, worker nhắc hoạt động và hai tài khoản **khác nhau, đã xác minh** trên môi trường test được chỉ định:
 
 ```powershell
 if (-not (Test-Path -LiteralPath .env.e2e-live.local)) {
   Copy-Item -LiteralPath .env.e2e-live.example -Destination .env.e2e-live.local
 }
-# Điền tài khoản trong tệp .local, rồi lưu trước khi chạy.
+# Điền cấu hình/tài khoản trong .local rồi lưu.
 npm run test:e2e:live
 ```
 
-Chỉ điền bí mật vào `E2E_*` trong `.env.e2e-live.local`, không dùng `VITE_*` hoặc tệp mẫu. `.local` được Git bỏ qua. Luồng thật dùng `localhost:5173` cho cookie/CORS; chỉ dùng lại dev server khi nhận diện đúng mã M7 và URL API. Nếu cổng trống, bộ kiểm thử tự phục vụ bản build riêng; không dừng server của người dùng.
+Chỉ điền bí mật vào `E2E_*` trong tệp `.local`, không vào `VITE_*` hoặc tệp mẫu. Bộ thật dùng `localhost:5173` cho cookie/CORS; chỉ dùng lại server nếu xác minh đúng mã/URL API, nếu cổng trống sẽ phục vụ preview riêng. Không dừng server của người dùng.
 
-Kịch bản thật đăng nhập hai phiên, tạo tài nguyên có tiền tố `M7-E2E-`, chấp nhận LINK qua UI mà không gửi email, kiểm tra revision, di chuyển, My Work, tìm kiếm và nhận nhắc từ worker/socket. Bước kết thúc có ngữ cảnh HTTP riêng để dọn đúng tài nguyên của lần chạy kể cả khi phần UI hết thời gian. Bảng và dữ liệu con được xóa; dự án dùng chính sách xóa mềm của BE. Không chạy migration, truy cập DB trực tiếp hoặc sửa tài khoản. Trace/ảnh/video tắt cho bộ thật; nhật ký lỗi cục bộ có thể chứa dữ liệu tài khoản nên không đưa vào Git hay báo cáo công khai.
+Kịch bản tạo tài nguyên có tiền tố `M7-E2E-`, kiểm tra hai phiên, LINK không gửi email, revision, kéo bàn phím, My Work/tìm kiếm, sửa mô tả, tệp/lịch sử/số lượng và nhắc qua worker/socket. Dọn qua API bằng ngữ cảnh riêng kể cả khi UI hết thời gian: xóa bảng/dữ liệu con, dự án xóa mềm theo BE. Không chạy migration, truy cập DB trực tiếp hoặc sửa tài khoản; có ghi dữ liệu test vào DB qua API.
 
-## Tải theo nhu cầu
-
-Các trang riêng và form xác thực dùng `React.lazy`; React/Router dùng chung một chunk. Khung hộp thẻ mở ngay, còn `CardDialogBody` tải khi cần. Suspense nằm trong khung điều hướng/hộp thoại, giữ Board và nút đóng khi tải chậm. Đổi tuyến bình thường không dựng lại toàn bộ cây bằng key mới. Lỗi tải có thông báo Việt–Anh, quay về Tổng quan hoặc tải lại; nút tải lại giải thích việc mất nháp chưa lưu.
-
-## API và phiên đăng nhập
-
-`apiClient.get<T>()` và các phương thức ghi trả đúng body `ApiEnvelope<T>`, không phải `AxiosResponse`. Cookie HttpOnly do BE quản lý, gửi bằng `withCredentials`; FE không đọc/ghi token bằng CookieStore hoặc storage. Nhiều 401 trong cùng tab dùng một refresh có thời hạn 10 giây, mỗi request gửi lại tối đa một lần. Mất mạng/timeout không tự coi là đăng xuất. URL API thiếu/sai được báo lỗi trước khi gửi request.
-
-`AppProviders` nằm trong Router, cung cấp Query và phiên. `/users/me` có khóa theo thế hệ phiên và là nơi giữ dữ liệu người dùng duy nhất. Route riêng chờ kiểm tra danh tính; lỗi tạm có nút thử lại. Đăng nhập mới, hết phiên hoặc đăng xuất thành công hủy request, xóa Query; action cũ không được ghi vào phiên mới. Đăng xuất lỗi giữ phiên/dữ liệu và cho thử lại. Store dự án đã gỡ ở C; store thẻ và hai hook cũ đã gỡ ở D.
-
-Đường `returnTo` được giữ qua login/register/verify/recovery, kiểm tra để tránh URL ngoài ứng dụng và vòng lặp về trang auth. Google vẫn dùng endpoint/callback BE hiện có; FE giữ đường quay lại tạm trong sessionStorage. BE hiện chỉ phân biệt tài khoản chưa xác minh bằng thông báo lỗi; khi có mã lỗi riêng cần thay cách nhận diện này.
-
-## Danh mục, thành viên và lời mời
-
-`src/features/catalog/` giữ DTO và query theo thế hệ phiên/userId/phạm vi. Danh mục dự án/bảng và thành viên dự án có nút tải thêm theo trang 10 hàng; thành viên bảng dùng danh sách đầy đủ từ BE. Sidebar tải bảng con khi mở dự án; hộp thành viên tải thành viên/role khi mở. Tạo, đổi tên, lưu trữ và thay đổi thành viên cập nhật cùng cache, không ghi song song vào store cũ. Chưa tải đủ dự án thì chưa kết luận một bảng là bảng khách.
-
-Liên kết BE `/invite/projects/:token` và `/invite/boards/:token` đi qua cổng đăng nhập, giữ returnTo và cho người dùng chọn chấp nhận/từ chối. FE chỉ gọi POST accept/reject, không có GET invitation/inbox. Kết quả gửi phân biệt lời mời đã lưu với trạng thái gửi email/thông báo; không tự gửi lại khi email lỗi.
-
-## Kanban và chi tiết thẻ
-
-`src/features/boards/` giữ danh sách, query summary theo board/list và helper thứ tự; `src/features/cards/` giữ DTO/adapter, API và query/mutation chi tiết thẻ. Summary board và detail không ghi vào cùng tập thẻ. Ghi cùng bảng đi qua hàng ghi theo phiên/người dùng/bảng trong tab; thứ tự đối soát với server sau ghi, không giữ store thứ tự lâu dài thứ hai. Lưu trữ/quan hệ cập nhật sau xác nhận; lỗi giữ nháp hoặc mục lưu trữ. Tiêu đề/mô tả gửi PATCH thật; mô tả trống dùng null.
-
-M3 tách `BoardScreen`/`BoardColumn`/`BoardCard` và `CardDialog`/`CardEditor`/`CardChecklist`/`CardComments`; page chỉ giữ ranh giới tuyến. Menu danh sách có đổi tên/chuyển/lưu trữ. Dialog điện thoại toàn màn hình, một cột/một vùng cuộn; đổi locale/theme hoặc refetch không dựng lại biểu mẫu hay mất nháp. Đóng hộp vẫn bỏ nháp như trước, chưa có cảnh báo rời trang. Form tạo danh sách chỉ giữ tên vì ô mô tả cũ không được API lưu.
-
-M4 dùng dnd-kit với Mouse/Touch/KeyboardSensor, Sortable và DragOverlay; gỡ engine HTML và parser DataTransfer. Thẻ bên cạnh dịch chuyển 180 ms, danh sách 220 ms, hiệu ứng hạ thẻ 200 ms; reduced motion tắt chuyển động. Tay nắm danh sách và menu chuyển/lưu trữ thẻ hỗ trợ cách thao tác khác. Enter mở thẻ; Space/mũi tên/Space hoặc Enter/Escape dùng cho kéo bàn phím.
-
-`boardQueue` giữ ý định chưa xác nhận theo phiên/người dùng/bảng, cập nhật cache ngay khi thả, tuần tự hóa ghi và đối soát thứ tự server trước khi áp lại ý định còn chờ. Đọc nền chờ hàng ghi để không ghi đè phản hồi tức thời. `useBoardRealtime` đăng ký bảng đang xem, đọc revision chuỗi bằng BigInt, tải lại sau ack/reconnect/revision mới, xử lý sự kiện trong lúc đọc và thu quyền. Luồng refresh cookie được dùng chung; socket thông báo cá nhân giữ riêng như trước.
-
-Đã kiểm tra ảnh 1440/768/390 px sáng/tối, nội suy chuyển động và 27 tình huống chuột/bàn phím/chạm qua CDP với API/socket giả cục bộ. Chưa kiểm chứng BE/WebSocket, nhiều người dùng hoặc cảm ứng trên thiết bị thật. Xem [ảnh, kết quả và giới hạn M4](../docs/frontend-modernization/14-milestone-m4-results.md).
-
-## Hồ sơ và thông báo sau M6
-
-Hồ sơ chỉ có các chức năng được API hỗ trợ: cập nhật multipart, đổi mật khẩu và tùy chọn hiển thị. Ảnh phải thuộc loại ảnh và không quá 5 MB; bản nháp giữ khi lưu lỗi. BE bỏ qua địa chỉ/giới thiệu trống nên FE giải thích khi xóa trắng giá trị đã lưu. Không hiển thị trạng thái tài khoản suy đoán, nút xóa tài khoản hoặc công tắc email chưa có xử lý. Đổi mật khẩu gửi `{ newPassword }`, giữ hộp khi lỗi/đang ghi và xóa trường bí mật khi đóng.
-
-Thông báo dùng bộ lọc `isRead` của server, mỗi bộ lọc có cache/phân trang riêng theo phiên/người dùng. Token lời mời hợp lệ dẫn tới trang xác nhận; metadata thiếu không tạo liên kết giả. Tải thêm/làm mới/lỗi/thử lại nằm trong popover vừa điện thoại. Nội dung BE được giữ, nhãn và thời gian theo Việt–Anh. Xem [ảnh, 32 tình huống trình duyệt và giới hạn M6](../docs/frontend-modernization/16-milestone-m6-results.md).
-
-Sau M7, socket thông báo chỉ có một kết nối theo phiên/người dùng, backoff tối đa tám lần lỗi liên tiếp và lấy lại trang đầu/count sau reconnect. Online/quay lại tab/làm mới nối lại khi cần; refresh cookie dùng chung và callback cũ không tạo thêm kết nối. Khởi động lại dev server hiện có để nạp Vite đã vá; các lệnh build/test mới dùng lockfile đã cập nhật.
-
-## Lịch sử dashboard trước M2 — 23/10/2026
-
-Đợt trước M2 dùng điều hướng trên và sidebar gọn. M2 đã thay bằng Framed sheet có sidebar nhãn và thanh công cụ 48 px. Dashboard tiếp tục dùng danh mục dự án/bảng thật, tải thêm và lỗi/thử lại; không suy tiến độ hoàn thành hay số việc từ dữ liệu chưa đủ. Báo cáo cũ được giữ làm lịch sử.
-
-## Trạng thái sau Mốc D và dashboard — 23/10/2026
-
-Build đạt; 200 test trong 15 file đạt với `npm test -- --maxWorkers=2`. Lint còn 19 lỗi cũ và 0 cảnh báo, không có chẩn đoán mới. Vite còn cảnh báo bundle JS lớn hơn 500 kB; tối ưu/chia bundle thuộc G04. A/B đã ghi nhận 38 cảnh báo phụ thuộc; đợt này không thay dependency hoặc chạy lại audit.
-
-Xem [kết quả dashboard và ảnh kiểm tra](../docs/frontend-modernization/10-dashboard-redesign-results.md) để biết phạm vi UI, hệ màu và giới hạn xác minh.
-
-Xem [báo cáo Mốc A](../docs/frontend-modernization/06-milestone-a-results.md), [báo cáo Mốc B](../docs/frontend-modernization/07-milestone-b-results.md), [báo cáo Mốc C](../docs/frontend-modernization/08-milestone-c-results.md) và [báo cáo Mốc D](../docs/frontend-modernization/09-milestone-d-results.md) để biết thay đổi, lệnh, nợ lint và giới hạn. Build/test đạt không thay thế xác minh cookie/CORS với BE hoặc sửa các lỗi dữ liệu/Kanban còn lại ở E–G.
+Trace/ảnh/video tắt cho bộ thật. Nhật ký lỗi local có thể chứa dữ liệu tài khoản, không đưa vào Git/báo cáo công khai. Chrome mô phỏng điện thoại không thay thế thiết bị thật. [Kết quả hiện tại và phần chưa kiểm tra](INTEGRATION.md#kết-quả-ngày-26102026) là nguồn tổng hợp, thay cho các kết quả mốc cũ.

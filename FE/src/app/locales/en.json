@@ -516,6 +516,15 @@
     "scheduled": "Due"
   },
   "auth": {
+    "mailDeliveryFailed": "Could not send the verification email. Please try again later.",
+    "registrationPending": "This email is awaiting verification. Use a verification code to set your password and finish your account.",
+    "completeRegistration": "Verify email and set password",
+    "emailExists": "This email already has an account. Sign in or reset your password.",
+    "unverified": "Verify your email before signing in.",
+    "otpCooldown": "A code is still valid. You can request another in {{seconds}} seconds.",
+    "existingCode": "Enter the code already sent to your email.",
+    "verifyDescription": "Enter a verification code for",
+    "googleFailed": "This Google sign-in link is no longer valid. Please sign in with Google again.",
     "loginTitle": "Sign in",
     "loginDescription": "Continue your work in your workspace.",
     "login": "Sign in",
