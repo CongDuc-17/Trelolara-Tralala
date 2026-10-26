@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +20,7 @@ import { useRef, useState } from "react";
 import { Spinner } from "../ui/spinner";
 
 export function CreateProject() {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [open, setOpen] = useState(false);
@@ -30,7 +32,7 @@ export function CreateProject() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (busy.current) return;
-    if (!name.trim()) { setError("Tên dự án không được để trống."); return; }
+    if (!name.trim()) { setError(t("projects.requiredName")); return; }
     busy.current = true;
     setError("");
     try {
@@ -46,36 +48,36 @@ export function CreateProject() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus color="white"></Plus>Create New Project
+          <Plus />{t("projects.create")}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+            <DialogTitle>{t("projects.createTitle")}</DialogTitle>
             <DialogDescription>
-              Fill in the details below to create a new project.
+              {t("projects.createDescription")}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <Label htmlFor="name-1">Name</Label>
+              <Label htmlFor="name-1">{t("projects.name")}</Label>
               <Input
                 id="name-1"
                 name="name"
                 value={name}
-                placeholder="Project name"
+                placeholder={t("projects.namePlaceholder")}
                 required
                 onChange={(e) => setName(e.target.value)}
               />
             </Field>
             <Field>
-              <Label htmlFor="description-1">Description</Label>
+              <Label htmlFor="description-1">{t("common.description")}</Label>
               <Input
                 id="description-1"
                 name="description"
                 value={description}
-                placeholder="Project description"
+                placeholder={t("projects.descriptionPlaceholder")}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </Field>
@@ -84,12 +86,12 @@ export function CreateProject() {
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline">
-                Cancel
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button type="submit" disabled={loading}>
               {loading && <Spinner data-icon="inline-start" />}
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("projects.create")}
             </Button>
           </DialogFooter>
         </form>

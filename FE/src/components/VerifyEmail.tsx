@@ -1,32 +1,21 @@
-import { RefreshCwIcon } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Field, FieldLabel } from "@/components/ui/field";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
-import { apiClient } from "@/lib/apiClient";
 import { useRef, useState } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
-import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { AccessLayout } from "@/components/layout/AccessLayout";
 import { getApiError } from "@/lib/errors";
+import { useSendOtp, useVerifyEmail } from "@/features/auth/queries";
 import { authLink, safeReturnTo } from "@/features/auth/redirect";
 import { useResendCooldown } from "@/features/auth/useResendCooldown";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 export function VerifyEmail() {
+  const { t } = useTranslation();
+  const verification = useVerifyEmail();
+  const resend = useSendOtp();
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,23 +32,23 @@ export function VerifyEmail() {
     event.preventDefault();
     if (pending.current) return;
     if (otp.length !== 6) {
-      toast.error("Please enter the 6-digit code");
+      setError(t("auth.codeRequired"));
       return;
     }
     try {
       pending.current = true;
       setLoading(true);
       setError("");
-      await apiClient.post("/auth/verify", {
+      await verification.mutateAsync({
         email,
         otp,
       });
       localStorage.removeItem("emailForVerification");
-      toast.success("Email verified successfully. You can now log in.");
+      toast.success(t("auth.verified"));
       navigate(authLink("/login", returnTo), { replace: true });
     } catch (error) {
       const issue = getApiError(error);
-      if (issue.kind !== "canceled") { setError(issue.message); toast.error(issue.message); }
+      if (issue.kind !== "canceled") { setError(issue.message); }
     } finally {
       pending.current = false;
       setLoading(false);
@@ -72,83 +61,24 @@ export function VerifyEmail() {
     setLoading(true);
     setError("");
     try {
-      await apiClient.post("/auth/send-otp", { email });
+      await resend.mutateAsync({ email });
       startCooldown();
-      toast.success("OTP sent to your email");
+      toast.success(t("auth.codeSuccess"));
     } catch (error) {
       const issue = getApiError(error);
-      if (issue.kind !== "canceled") { setError(issue.message); toast.error(issue.message); }
+      if (issue.kind !== "canceled") { setError(issue.message); }
     } finally {
       pending.current = false;
       setLoading(false);
     }
   }
-  return (
-    <>
-      <Toaster position="top-right" />
-      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
-        <form id="verify-form" className="max-w-md" onSubmit={handleVerify}>
-        <Card className="mx-auto max-w-md">
-          <CardHeader>
-            <CardTitle><h1>Verify your login</h1></CardTitle>
-            <CardDescription>
-              Enter the verification code we sent to your email address:{" "}
-              <span className="font-medium">{email}</span>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel htmlFor="otp-verification">
-                  Verification code
-                </FieldLabel>
-                <Button type="button" variant="outline" size="xs" onClick={handleResend} disabled={loading || resendIn > 0}>
-                  <RefreshCwIcon />
-                  {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend Code"}
-                </Button>
-              </div>
-              <InputOTP
-                maxLength={6}
-                minLength={6}
-                pattern={REGEXP_ONLY_DIGITS}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={otp}
-                disabled={loading}
-                id="otp-verification"
-                required
-                onChange={setOtp}
-              >
-                <InputOTPGroup className="*:data-[slot=input-otp-slot]:h-12 *:data-[slot=input-otp-slot]:w-11 *:data-[slot=input-otp-slot]:text-xl">
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                </InputOTPGroup>
-                <InputOTPSeparator className="mx-2" />
-                <InputOTPGroup className="*:data-[slot=input-otp-slot]:h-12 *:data-[slot=input-otp-slot]:w-11 *:data-[slot=input-otp-slot]:text-xl">
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-            </Field>
-            {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-          </CardContent>
-          <CardFooter>
-            <Field>
-              <Button
-                type="submit"
-                form="verify-form"
-                className="w-full"
-                disabled={loading}
-              >
-                Verify
-              </Button>
-            </Field>
-          </CardFooter>
-        </Card>
-        </form>
-      </div>
-    </>
-  );
+  return <AccessLayout title={t("auth.verifyTitle")} description={<>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
+    <form id="verify-form" onSubmit={handleVerify} className="space-y-5" aria-busy={loading}>
+      <div className="space-y-3"><Label htmlFor="otp-verification">{t("auth.code")}</Label><InputOTP id="otp-verification" maxLength={6} minLength={6} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric" autoComplete="one-time-code" value={otp} disabled={loading} required onChange={setOtp} containerClassName="w-full"><InputOTPGroup className="w-full">{[0, 1, 2, 3, 4, 5].map((index) => <InputOTPSlot key={index} index={index} className="h-12 min-w-0 flex-1 text-xl" />)}</InputOTPGroup></InputOTP><p className="text-xs text-muted-foreground">{t("auth.codeHint")}</p></div>
+      {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="h-11 w-full" disabled={loading || otp.length !== 6}>{t(loading ? "auth.verifying" : "auth.verify")}</Button>
+      <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { void handleResend(); }} disabled={loading || resendIn > 0}>{resendIn > 0 ? t("auth.resendIn", { seconds: resendIn }) : t("auth.resendCode")}</Button>
+    </form>
+    <p className="text-center text-sm"><Link to={authLink("/login", returnTo)} className="rounded-sm text-muted-foreground underline underline-offset-4">{t("auth.backToLogin")}</Link></p>
+  </AccessLayout>;
 }

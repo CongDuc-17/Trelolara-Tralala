@@ -1,16 +1,11 @@
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { AccessLayout } from "@/components/layout/AccessLayout";
 import { Button } from "@/components/ui/button";
 
 export function NotFound() {
-  return (
-    <>
-      <div className="flex flex-col justify-center items-center h-screen text-center gap-6">
-        <div className="flex justify-center items-center text-9xl font-bold">
-          404 - Page Not Found
-        </div>
-        <Button className="mx-auto mb-8" asChild>
-          <a href="/dashboard">Go to Dashboard</a>
-        </Button>
-      </div>
-    </>
-  );
+  const { t } = useTranslation();
+  return <AccessLayout title={t("entry.notFound")} description={t("entry.notFoundDescription")}>
+    <p className="text-sm tabular-nums text-muted-foreground">404</p><Button className="h-11 w-full" asChild><Link to="/dashboard">{t("invitation.back")}</Link></Button><p className="text-center text-sm"><Link to="/" className="rounded-sm text-muted-foreground underline underline-offset-4">{t("entry.home")}</Link></p>
+  </AccessLayout>;
 }

@@ -1,324 +1,41 @@
-import { Label } from "@/components/ui/label";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Bell, CircleArrowDown } from "lucide-react";
-import { Switch } from "./ui/switch";
-import { apiClient } from "@/lib/apiClient";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RiTrelloFill } from "react-icons/ri";
-import { PiCardsThreeBold } from "react-icons/pi";
-import { VscProject } from "react-icons/vsc";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { Bell, RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-
-let ws: WebSocket | null = null;
-let isMountedGlobal = true;
-
-type Notification = {
-  id: string;
-  isRead: boolean;
-  entityType: string;
-  entityId: string;
-  metadata?: { boardId?: string };
-  type: string;
-  content: string;
-  createdAt: string;
-};
-
-const initWebSocket = async (
-  onNotification: (notification: any) => void,
-  onUnreadCount: (count: number) => void,
-) => {
-  // Kiểm tra xem component còn mounted hay không
-  if (!isMountedGlobal) return;
-
-  // Đóng connection cũ nếu đang tồn tại
-  if (ws && ws.readyState !== WebSocket.CLOSED) {
-    ws.close();
-  }
-
-  if (!isMountedGlobal) return;
-
-  try {
-    ws = new WebSocket(import.meta.env.VITE_WS_URL);
-
-    ws.onopen = () => {
-      if (!isMountedGlobal) return;
-      console.log("[WS] Connected");
-    };
-
-    ws.onmessage = (event) => {
-      if (!isMountedGlobal) return;
-      try {
-        const message = JSON.parse(event.data);
-        console.log("[WS] Message received:", message);
-
-        if (message.event === "notification:new") {
-          onNotification(message.data);
-        } else if (message.event === "notification:unread-count") {
-          onUnreadCount(message.data.count);
-        }
-      } catch (error) {
-        console.error("[WS] Error parsing message:", error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      if (!isMountedGlobal) return;
-      console.error("[WS] Error:", error);
-    };
-
-    ws.onclose = () => {
-      if (!isMountedGlobal) return;
-      console.log("[WS] Disconnected");
-    };
-  } catch (error) {
-    console.error("[WS] Connection error:", error);
-  }
-};
-
-const disconnectWebSocket = () => {
-  if (ws && ws.readyState !== WebSocket.CLOSED) {
-    ws.close();
-    ws = null;
-  }
-};
+import { useNotifications } from "@/features/notifications/queries";
+import { isRecord } from "@/features/notifications/types";
+import { notificationTarget } from "@/features/notifications/target";
+import { getApiError } from "@/lib/errors";
 
 export function Notifications() {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { t, i18n } = useTranslation();
   const [showRead, setShowRead] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-
-  const wsInitializedRef = useRef(false);
-  // Lưu callback mới nhất vào ref để WS listener không bao giờ stale
-  const onNotificationRef = useRef<(n: any) => void>(() => {});
-  const onUnreadCountRef = useRef<(c: number) => void>(() => {});
-
-  const getNotifications = useCallback(async (page = 1, append = false) => {
-    try {
-      setIsLoading(true);
-      const response = await apiClient.get<Notification[]>("/notifications", {
-        params: { page, limit: 10 },
-      });
-
-      const data = response.data ?? [];
-      const more = response.pagination
-        ? response.pagination.currentPage < response.pagination.totalPages
-        : data.length === 10;
-
-      setNotifications((prev) => (append ? [...prev, ...data] : data));
-      setHasMore(more);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const getUnreadCount = useCallback(async () => {
-    try {
-      const response = await apiClient.get<{ count: number }>("/notifications/unread-count");
-      setUnreadCount(response?.data?.count ?? 0);
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
-    }
-  }, []);
-
-  const handleNewNotification = useCallback((notification: any) => {
-    // Thêm notification mới lên đầu, tránh trùng lặp
-    setNotifications((prev) => {
-      if (prev.some((n) => n.id === notification.id)) return prev;
-      return [notification, ...prev];
-    });
-
-    setUnreadCount((prev) => prev + 1);
-  }, []);
-
-  const handleUnreadCountUpdate = useCallback((count: number) => {
-    setUnreadCount(count);
-  }, []);
-
-  // Giữ ref đồng bộ với callback mới nhất
-  useEffect(() => {
-    onNotificationRef.current = handleNewNotification;
-  }, [handleNewNotification]);
-
-  useEffect(() => {
-    onUnreadCountRef.current = handleUnreadCountUpdate;
-  }, [handleUnreadCountUpdate]);
-
-  useEffect(() => {
-    isMountedGlobal = true;
-    initWebSocket(
-      (n) => onNotificationRef.current(n),
-      (c) => onUnreadCountRef.current(c),
-    );
-    wsInitializedRef.current = true;
-
-    getNotifications(1);
-    getUnreadCount();
-
-    return () => {
-      isMountedGlobal = false;
-      disconnectWebSocket();
-    };
-  }, [getNotifications, getUnreadCount]);
-
-  const handlePopoverOpenChange = useCallback(
-    (open: boolean) => {
-      setIsPopoverOpen(open);
-      if (open) {
-        // Reset về trang 1 và fetch mới nhất
-        setCurrentPage(1);
-        getNotifications(1, false);
-      }
-    },
-    [getNotifications],
-  );
-
-  const loadNextPage = useCallback(async () => {
-    const nextPage = currentPage + 1;
-    setCurrentPage(nextPage);
-    await getNotifications(nextPage, true);
-  }, [currentPage, getNotifications]);
-
-  const handleReadNoti = useCallback(
-    async (notificationId: string, isRead: boolean) => {
-      if (isRead) return; // Đã đọc rồi, không làm gì
-
-      try {
-        await apiClient.patch(`/notifications/${notificationId}/read`);
-
-        // Cập nhật local state ngay lập tức, không fetch lại toàn bộ
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === notificationId ? { ...n, isRead: true } : n,
-          ),
-        );
-
-        // Giảm badge count
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch (error) {
-        console.error("Error marking notification as read:", error);
-      }
-    },
-    [],
-  );
-
-  const getNotificationLink = useCallback((notification: any) => {
-    const { entityType, entityId, metadata } = notification;
-    console.log("Generating link for notification:", notification);
-    switch (entityType) {
-      case "BOARD":
-        return `/boards/${entityId}`;
-      case "CARD":
-        return `/boards/${metadata?.boardId}/cards/${entityId}`;
-      case "PROJECT":
-        return `/projects/${entityId}`;
-      default:
-        return "#";
-    }
-  }, []);
-
-  const filtered = notifications.filter((n) => n.isRead === showRead);
-
-  return (
-    <Popover open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
-      <PopoverTrigger asChild>
-        <div className="relative cursor-pointer">
-          <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <Badge className="absolute -top-2 -right-2 h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs bg-red-500 text-white">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </Badge>
-          )}
-        </div>
-      </PopoverTrigger>
-
-      <PopoverContent className="w-100">
-        <div className="grid gap-1">
-          <div className="flex items-center justify-between">
-            <Label>Notifications</Label>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="show-read"
-                checked={showRead}
-                onCheckedChange={setShowRead}
-              />
-              <Label htmlFor="show-read">{showRead ? "Read" : "Unread"}</Label>
-            </div>
-          </div>
-
-          <div className="max-h-100 overflow-y-auto mt-4">
-            {filtered.length === 0 && !isLoading && (
-              <p className="text-center text-sm text-muted-foreground py-6">
-                {showRead ? "No read notifications" : "No unread notifications"}
-              </p>
-            )}
-
-            {filtered.map((notification) => (
-              <Link
-                key={notification.id}
-                to={getNotificationLink(notification)}
-                onClick={() =>
-                  handleReadNoti(notification.id, notification.isRead)
-                }
-                className="block"
-              >
-                <Card
-                  className={`flex flex-row items-center gap-3 p-3 mb-2 cursor-pointer hover:bg-gray-100 transition-colors ${
-                    !notification.isRead ? "bg-blue-50" : ""
-                  }`}
-                >
-                  <div className="flex-shrink-0">
-                    {notification.entityType === "BOARD" && <RiTrelloFill />}
-                    {notification.entityType === "CARD" && <PiCardsThreeBold />}
-                    {notification.entityType === "PROJECT" && <VscProject />}
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle>
-                      <div className="font-medium text-sm">
-                        {notification.type}
-                      </div>
-                    </CardTitle>
-                    <CardDescription>{notification.content}</CardDescription>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(notification.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0">
-                    <div
-                      className={`h-2 w-2 rounded-full ${
-                        notification.isRead ? "" : "bg-blue-500"
-                      }`}
-                    />
-                  </div>
-                </Card>
-              </Link>
-            ))}
-
-            {hasMore && (
-              <div
-                className="flex items-center justify-center text-sm text-gray-500 cursor-pointer hover:text-gray-700 py-3 transition-colors"
-                onClick={loadNextPage}
-                role="button"
-              >
-                <CircleArrowDown
-                  className={isLoading ? "animate-spin" : undefined}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+  const [open, setOpen] = useState(false);
+  const { notifications, unreadCount, isLoading, hasMore, error, refresh, loadNextPage, markRead, readPending, clearReadError } = useNotifications(showRead);
+  const feedback = error ? getApiError(error) : null;
+  const locale = i18n.resolvedLanguage === "en" ? "en-US" : "vi-VN";
+  return <Popover open={open} onOpenChange={(next) => { setOpen(next); if (next) refresh(); }}>
+    <PopoverTrigger asChild><Button variant="ghost" size="icon" className="relative size-9 text-muted-foreground" aria-label={unreadCount > 0 ? t("notifications.unreadCount", { count: unreadCount }) : t("notifications.title")}><Bell className="size-5" />{unreadCount > 0 && <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 min-w-4 border-0 px-1 py-0 tabular-nums">{unreadCount > 99 ? "99+" : unreadCount}</Badge>}</Button></PopoverTrigger>
+    <PopoverContent align="end" aria-label={t("notifications.title")} className="w-[min(27rem,calc(100vw-2rem))] overflow-hidden p-0">
+      <div className="space-y-3 border-b p-4"><div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">{t("notifications.title")}</h2><Button size="icon" variant="ghost" className="size-11" aria-label={t("notifications.refresh")} disabled={isLoading} onClick={refresh}><RefreshCw className="size-4" /></Button></div><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{t(showRead ? "notifications.readHelp" : "notifications.unreadHelp")}</p><div className="flex items-center gap-2"><Switch id="show-read" checked={showRead} onCheckedChange={(value) => { clearReadError(); setShowRead(value); }} /><Label htmlFor="show-read">{t("notifications.showRead")}</Label></div></div></div>
+      <div className="max-h-[min(30rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain" aria-busy={isLoading}>
+        {feedback && feedback.kind !== "canceled" && <div className="space-y-2 border-b p-4 text-sm"><p role="alert" className="break-words">{feedback.message}</p><Button size="sm" variant="outline" disabled={isLoading} onClick={refresh}>{t("common.retry")}</Button></div>}
+        {isLoading && notifications.length === 0 ? <div role="status" aria-label={t("notifications.loading")} className="space-y-4 p-4">{[1, 2, 3].map((id) => <div key={id} className="space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-full" /></div>)}</div> : notifications.length === 0 && !error && <p className="p-6 text-sm text-muted-foreground">{t(showRead ? "notifications.emptyRead" : "notifications.emptyUnread")}</p>}
+        <ul>{notifications.filter((item) => item.isRead === showRead).map((notification) => {
+          const to = notificationTarget(notification);
+          const metadata = notification.metadata;
+          const content = <><span className="flex items-start justify-between gap-3"><span className="text-sm font-medium">{t("notifications.types." + notification.type, { defaultValue: notification.title })}</span>{!notification.isRead && <span aria-hidden="true" className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />}</span><span className="mt-1 block text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]">{notification.content}</span>{notification.type === "CARD_DUE_SOON" && isRecord(metadata) && typeof metadata.dueDate === "string" && Number.isFinite(Date.parse(metadata.dueDate)) && <span className="mt-1 block text-xs text-muted-foreground">{t("notifications.reminderDue", { date: new Date(metadata.dueDate).toLocaleString(locale) })}</span>}<time dateTime={notification.createdAt} className="mt-2 block text-xs tabular-nums text-muted-foreground">{new Date(notification.createdAt).toLocaleString(locale)}</time></>;
+          const classes = "block w-full min-w-0 p-4 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+          return <li key={notification.id} className="border-b last:border-b-0">{to ? <Link to={to} className={classes} onClick={() => markRead(notification)}>{content}</Link> : <Button type="button" variant="ghost" className={`${classes} h-auto whitespace-normal rounded-none font-normal`} disabled={notification.isRead || readPending} aria-label={t("notifications.markRead") + ": " + notification.title} onClick={() => markRead(notification)}>{content}</Button>}</li>;
+        })}</ul>
+        {hasMore && <div className="border-t p-3"><Button type="button" variant="outline" disabled={isLoading} className="h-11 w-full" onClick={loadNextPage}>{t(isLoading ? "common.loading" : "notifications.more")}</Button></div>}
+      </div>
+    </PopoverContent>
+  </Popover>;
 }

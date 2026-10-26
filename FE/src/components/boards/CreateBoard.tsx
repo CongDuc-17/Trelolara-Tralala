@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,11 +18,11 @@ import { getErrorMessage } from "@/lib/errors";
 
 import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
-import { Card } from "../ui/card";
 import { Spinner } from "../ui/spinner";
 import { toast } from "sonner";
 
-export function CreateBoard({ projectId }: { projectId: string }) {
+export function CreateBoard({ projectId, compact = false }: { projectId: string; compact?: boolean }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [open, setOpen] = useState(false);
@@ -32,7 +33,7 @@ export function CreateBoard({ projectId }: { projectId: string }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (busy.current) return;
-    if (!name.trim()) { toast.error("Tên bảng không được để trống."); return; }
+    if (!name.trim()) { toast.error(t("createBoard.requiredName")); return; }
     busy.current = true;
     try {
       await create.mutateAsync({ name: name.trim(), description });
@@ -40,7 +41,7 @@ export function CreateBoard({ projectId }: { projectId: string }) {
       setDescription("");
       setOpen(false);
     } catch (error) {
-      const message = getErrorMessage(error, "Error creating board");
+      const message = getErrorMessage(error, t("createBoard.failed"));
       toast.error(message);
     } finally {
       busy.current = false;
@@ -50,41 +51,37 @@ export function CreateBoard({ projectId }: { projectId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button type="button" className="w-full text-left">
-        <Card className="h-36 cursor-pointer hover:shadow-lg transition-shadow flex justify-center items-center border-dashed border-2 border-gray-300">
-          <div className="flex h-full justify-center items-center gap-2">
-            <Plus></Plus> Add New Board
-          </div>
-        </Card>
-        </button>
+        {compact ? <Button className="h-11"><Plus className="size-4" />{t("createBoard.create")}</Button> : <Button type="button" variant="outline" className="h-auto min-h-28 w-full rounded-lg border-dashed bg-transparent font-normal text-muted-foreground">
+          <Plus className="size-4" />{t("createBoard.add")}
+        </Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Board</DialogTitle>
+            <DialogTitle>{t("createBoard.title")}</DialogTitle>
             <DialogDescription>
-              Fill in the details below to create a new board.
+              {t("createBoard.description")}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
-              <Label htmlFor="name-1">Name</Label>
+              <Label htmlFor="name-1">{t("createBoard.name")}</Label>
               <Input
                 id="name-1"
                 name="name"
                 value={name}
-                placeholder="Board name"
+                placeholder={t("createBoard.namePlaceholder")}
                 required
                 onChange={(e) => setName(e.target.value)}
               />
             </Field>
             <Field>
-              <Label htmlFor="description-1">Description</Label>
+              <Label htmlFor="description-1">{t("common.description")}</Label>
               <Input
                 id="description-1"
                 name="description"
                 value={description}
-                placeholder="Board description"
+                placeholder={t("createBoard.descriptionPlaceholder")}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </Field>
@@ -92,12 +89,12 @@ export function CreateBoard({ projectId }: { projectId: string }) {
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button type="button" variant="outline">
-                Cancel
+                {t("common.cancel")}
               </Button>
             </DialogClose>
             <Button type="submit" disabled={loading}>
               {loading && <Spinner data-icon="inline-start" />}
-              {loading ? "Creating..." : "Create"}
+              {loading ? t("common.creating") : t("createBoard.create")}
             </Button>
           </DialogFooter>
         </form>

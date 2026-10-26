@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { CanceledError } from "axios";
-import { apiClient, getSessionVersion, onSessionExpired, resetApiSession } from "@/lib/apiClient";
-import { resetCardsStore } from "@/stores/cards.store";
+import { getSessionVersion, onSessionExpired, resetApiSession } from "@/lib/apiClient";
+import { getMyInformation as fetchMyInformation } from "@/features/profile/api";
+import { login as loginRequest, logout as logoutRequest, type LoginInput } from "./api";
 import { SessionContext } from "./session-context";
-import { isUser } from "./types";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
@@ -15,12 +15,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [isLoggingOut, setLoggingOut] = useState(false);
   const lastUserId = useRef<string | null>(null);
   const logoutPromise = useRef<Promise<void> | null>(null);
-  const requiresSession = /^\/(dashboard|projects|boards|me|invite)(\/|$)/i.test(location.pathname);
+  const requiresSession = /^\/(dashboard|projects|boards|my-work|archived|me|invite)(\/|$)/i.test(location.pathname);
 
   const clearClientState = useCallback((isExpired: boolean) => {
     void client.cancelQueries();
     client.clear();
-    resetCardsStore();
     lastUserId.current = null;
     logoutPromise.current = null;
     setLoggingOut(false);
@@ -40,22 +39,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     enabled: requiresSession && !expired,
     retry: false,
     queryFn: async ({ signal }) => {
-      const response = await apiClient.get("/users/me", { signal });
-      if (!isUser(response.data)) throw new Error("Phản hồi thông tin người dùng không hợp lệ.");
+      const user = await fetchMyInformation(signal);
       if (signal.aborted || version !== getSessionVersion()) throw new CanceledError();
-      if (lastUserId.current && lastUserId.current !== response.data.id) {
+      if (lastUserId.current && lastUserId.current !== user.id) {
         startSession();
         throw new CanceledError("Account changed; reload its own scope");
       }
-      lastUserId.current = response.data.id;
-      return response.data;
+      lastUserId.current = user.id;
+      return user;
     },
   });
 
-  async function login(credentials: { email: string; password: string }) {
+  async function login(credentials: LoginInput) {
     startSession();
     const version = getSessionVersion();
-    await apiClient.post("/auth/login", credentials);
+    await loginRequest(credentials);
     if (version !== getSessionVersion()) throw new CanceledError();
   }
 
@@ -63,7 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (logoutPromise.current) return logoutPromise.current;
     setLoggingOut(true);
     const version = getSessionVersion();
-    const pending = apiClient.post("/auth/logout").then(() => {
+    const pending = logoutRequest().then(() => {
       if (version !== getSessionVersion()) throw new CanceledError();
       resetApiSession();
       clearClientState(true);

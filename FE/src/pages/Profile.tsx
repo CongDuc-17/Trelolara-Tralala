@@ -1,324 +1,75 @@
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Camera, Mail } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Calendar, Camera, Mail, MapPin } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-
-import { useEffect, useRef, useState } from "react";
-import { apiClient } from "@/lib/apiClient";
-import { getErrorMessage } from "@/lib/errors";
-import { Spinner } from "@/components/ui/spinner";
-import { useSession } from "@/features/auth/session-context";
+import { DisplayPreferences } from "@/components/layout/DisplayPreferences";
 import { ChangePassword } from "@/components/user/ChangePassword";
+import { useSession } from "@/features/auth/session-context";
+import { useUpdateProfile } from "@/features/profile/queries";
+import type { UpdateProfileInput } from "@/features/profile/api";
+import { getApiError } from "@/lib/errors";
 
 export function Profile() {
-  const { user, getMyInformation } = useSession();
-
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [bio, setBio] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (user) {
-      setName(user.name);
-      setAddress(user.address || "");
-      setBio(user.bio || "");
-    }
-  }, [user]);
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const { t, i18n } = useTranslation();
+  const { user } = useSession();
+  const mutation = useUpdateProfile();
+  const [draft, setDraft] = useState<UpdateProfileInput | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const busy = useRef(false);
+  const editing = draft !== null;
+  const current = draft ?? { name: user?.name ?? "", address: user?.address ?? "", bio: user?.bio ?? "", avatarFile: null };
+  const changed = draft !== null && (draft.name !== user?.name || draft.address !== (user?.address ?? "") || draft.bio !== (user?.bio ?? "") || draft.avatarFile !== null);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(() => { if (editing) nameInput.current?.focus(); }, [editing]);
+  function change(input: Partial<UpdateProfileInput>) { setDraft({ ...current, ...input }); setSaved(false); }
+  function cancel() { setDraft(null); setPreview(null); setError(""); if (fileInput.current) fileInput.current.value = ""; requestAnimationFrame(() => editButton.current?.focus()); }
+  function upload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      // Tạo URL tạm thời để hiển thị ảnh ngay lập tức
-      setPreviewUrl(URL.createObjectURL(file));
-      // Tự động bật chế độ editing khi user chọn ảnh
-      setEditing(true);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditing(false);
-    if (user) {
-      setName(user.name || "");
-      setAddress(user.address || "");
-      setBio(user.bio || "");
-    }
-    setAvatarFile(null);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl); // Giải phóng bộ nhớ
-      setPreviewUrl(null);
-    }
-  };
-
-  const handleEditProfile = async () => {
-    setIsLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("address", address);
-      formData.append("bio", bio);
-      if (avatarFile) {
-        formData.append("avatar", avatarFile);
-      }
-
-      await apiClient.put("/users/me", formData);
-
-      await getMyInformation();
-      setEditing(false);
-      setAvatarFile(null);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    } catch (error) {
-      console.error(
-        "Error updating profile:",
-        getErrorMessage(
-          error,
-          error instanceof Error ? error.message : "Error updating profile",
-        ),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="w-8/12 mx-auto mt-10">
-      <Card className="flex flex-row justify-between items-center p-6">
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <Avatar className="w-30 h-30">
-              <AvatarImage
-                src={
-                  previewUrl ||
-                  user?.avatar ||
-                  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                }
-                alt="User Avatar"
-                className="object-cover "
-              />
-              <AvatarFallback>
-                {user?.name?.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-
-            <Camera
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full p-1 border border-gray-300 hover:bg-gray-100 cursor-pointer"
-              size={24}
-            />
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/*"
-              className="hidden"
-            />
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <div className="font-bold text-3xl">{user?.name}</div>
-
-            <Badge className="bg-green-50 px-8 text-md text-green-700 dark:bg-green-950 dark:text-green-300">
-              Active
-            </Badge>
-            <div className="flex gap-3 text-gray-600">
-              <div className="flex items-center gap-1">
-                <Mail size={16} />
-                {user?.email}
-              </div>
-              <div className="flex items-center gap-1">
-                {" "}
-                <MapPin size={16} />
-                {user?.address}
-              </div>
-              <div className="flex items-center gap-1">
-                <Calendar size={16} />
-                Joined at{" "}
-                {user?.createdAt
-                  ? new Date(user.createdAt).toLocaleDateString()
-                  : "N/A"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <Button
-          onClick={() => {
-            setEditing(true);
-          }}
-        >
-          Edit Profile
-        </Button>
-      </Card>
-
-      <Tabs defaultValue="personal" className="w-full mt-8">
-        <TabsList className="w-full">
-          <TabsTrigger value="personal">Personal</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-        </TabsList>
-        <div className="mt-6">
-          <TabsContent value="personal">
-            <Card>
-              <CardHeader>
-                <CardTitle>Personal Information</CardTitle>
-                <CardDescription>
-                  Update your personal details and profile information
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                <div className="grid grid-cols-2 gap-4 text-black">
-                  <div>
-                    Name
-                    <Input
-                      value={name}
-                      disabled={!editing}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    Email
-                    <Input value={user?.email} disabled={true} />
-                  </div>
-
-                  <div>
-                    Address
-                    <Input
-                      value={address}
-                      disabled={!editing}
-                      onChange={(e) => setAddress(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    Bio
-                    <Textarea
-                      value={bio}
-                      disabled={!editing}
-                      onChange={(e) => setBio(e.target.value)}
-                    />
-                  </div>
-                </div>
-                {editing && (
-                  <div className="flex justify-end gap-2 mt-6">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleCancel()}
-                      disabled={isLoading}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => handleEditProfile()}
-                      disabled={isLoading}
-                    >
-                      {isLoading && <Spinner data-icon="inline-start" />}
-                      {isLoading ? "Submitting..." : "Submit"}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="account" className="flex flex-col gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Account Settings</CardTitle>
-                <CardDescription>
-                  Manage your account preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground flex justify-between items-center">
-                <div>
-                  <div className="text-black">Account Status</div>
-                  <div>Your account is currently active</div>
-                </div>
-
-                <Badge className="bg-green-50 px-10 text-md font-medium text-green-700 dark:bg-green-950 dark:text-green-300">
-                  Active
-                </Badge>
-              </CardContent>
-            </Card>
-            <Card className="border-red-500">
-              <CardHeader>
-                <CardTitle className="text-red-500">Danger Zone</CardTitle>
-                <CardDescription>
-                  Irreversible and destructive actions
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground flex justify-between items-center">
-                <div>
-                  <div className="font-medium">Delete Account</div>
-                  <div>
-                    Once you delete your account, there is no going back.
-                  </div>
-                </div>
-                <Button variant="destructive" className="hover:cursor-pointer">
-                  Delete Account
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="security">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
-                <CardDescription>
-                  Manage your account security and authentication.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground flex justify-between items-center">
-                <div>
-                  <div className=" text-black">Change Password</div>
-                  <div>
-                    Update your password regularly to keep your account secure.
-                  </div>
-                </div>
-                {/* <Button variant="outline" className="hover:cursor-pointer">
-                  Change Password
-                </Button> */}
-                <ChangePassword />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="notifications">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notifications</CardTitle>
-                <CardDescription>
-                  Choose what notifications you want to receive.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground flex justify-between items-center">
-                <div>
-                  <div className=" text-black">Email Notifications</div>
-                  <div>Receive notifications via email</div>
-                </div>
-                <Switch />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </div>
-      </Tabs>
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) { setSaved(false); setError(t("profile.imageLimit")); return; }
+    change({ avatarFile: file }); setError(""); setPreview(URL.createObjectURL(file));
+  }
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (!draft || busy.current) return;
+    if (!draft.name.trim()) { setError(t("profile.nameRequired")); return; }
+    if ((user?.address?.trim() && !draft.address.trim()) || (user?.bio?.trim() && !draft.bio.trim())) { setError(t("profile.clearUnavailable")); return; }
+    busy.current = true; setError("");
+    try { await mutation.mutateAsync(draft); cancel(); setSaved(true); }
+    catch (error) { if (getApiError(error).kind !== "canceled") setError(getApiError(error).message); }
+    finally { busy.current = false; }
+  }
+  return <div className="w-full min-w-0 space-y-6 p-4 md:p-6">
+    <header className="space-y-1"><h1 className="text-2xl font-semibold tracking-tight">{t("nav.profile")}</h1><p className="text-sm text-muted-foreground">{t("profile.personalDescription")}</p></header>
+    <div className="flex min-w-0 items-center gap-4">
+      <Avatar className="size-14 shrink-0"><AvatarImage src={preview || user?.avatar || undefined} alt={t("profile.avatar")} /><AvatarFallback>{user?.name.charAt(0).toUpperCase() || "?"}</AvatarFallback></Avatar><div className="min-w-0 space-y-1"><h2 className="break-words text-base font-semibold">{user?.name}</h2><p className="flex min-w-0 items-start gap-1.5 break-all text-sm text-muted-foreground"><Mail className="mt-0.5 size-4 shrink-0" />{user?.email}</p>{user?.createdAt && Number.isFinite(Date.parse(user.createdAt)) && <p className="text-xs text-muted-foreground">{t("profile.joined")} {new Date(user.createdAt).toLocaleDateString(i18n.resolvedLanguage === "en" ? "en-US" : "vi-VN")}</p>}</div>
     </div>
-  );
+    <Tabs defaultValue="personal" className="w-full gap-5"><TabsList variant="line" className="h-11! w-full justify-start border-b [&_button]:h-11 [&_button]:flex-none [&_button]:px-3 sm:[&_button]:px-4"><TabsTrigger value="personal">{t("profile.personal")}</TabsTrigger><TabsTrigger value="security">{t("profile.security")}</TabsTrigger><TabsTrigger value="display">{t("profile.display")}</TabsTrigger></TabsList>
+      <TabsContent value="personal" className="max-w-2xl"><form onSubmit={save} className="space-y-5" aria-busy={mutation.isPending}>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="space-y-1"><h2 className="text-base font-semibold">{t("profile.personalTitle")}</h2><p className="text-xs text-muted-foreground">{t(editing ? "profile.editingHint" : "profile.viewHint")}</p></div>{!editing && <Button ref={editButton} type="button" className="h-11" disabled={mutation.isPending} onClick={() => change({})}>{t("profile.edit")}</Button>}</div>
+        <div className={editing ? "flex flex-wrap items-center gap-3" : "hidden"}><Button type="button" variant="outline" className="h-11" disabled={mutation.isPending} onClick={() => fileInput.current?.click()}><Camera className="size-4" />{t("profile.changeAvatar")}</Button><span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{draft?.avatarFile?.name ?? t("profile.imageHint")}</span><input type="file" accept="image/*" aria-label={t("profile.avatarFile")} ref={fileInput} disabled={mutation.isPending} onChange={upload} className="hidden" /></div>
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2"><Label htmlFor="profile-name">{t("profile.name")}</Label><Input ref={nameInput} id="profile-name" autoComplete="name" required disabled={!editing || mutation.isPending} className="h-11 disabled:bg-muted/40 disabled:text-muted-foreground disabled:opacity-100" value={current.name} onChange={(event) => change({ name: event.target.value })} /></div>
+          <div className="space-y-2"><Label htmlFor="profile-email">{t("profile.email")}<span className="font-normal text-muted-foreground">{t("profile.readOnly")}</span></Label><Input id="profile-email" autoComplete="email" aria-describedby="profile-email-hint" value={user?.email ?? ""} className="h-11 bg-muted/40 text-muted-foreground" readOnly /><p id="profile-email-hint" className="text-xs text-muted-foreground">{t("profile.emailHint")}</p></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="profile-address">{t("profile.address")}</Label><Input id="profile-address" autoComplete="street-address" disabled={!editing || mutation.isPending} className="h-11 disabled:bg-muted/40 disabled:text-muted-foreground disabled:opacity-100" value={current.address} onChange={(event) => change({ address: event.target.value })} /></div>
+          <div className="space-y-2 sm:col-span-2"><Label htmlFor="profile-bio">{t("profile.bio")}</Label><Textarea id="profile-bio" disabled={!editing || mutation.isPending} className="min-h-24 resize-y disabled:bg-muted/40 disabled:text-muted-foreground disabled:opacity-100" value={current.bio} onChange={(event) => change({ bio: event.target.value })} /></div>
+        </div>
+        {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}{saved && <p role="status" className="text-sm text-success">{t("profile.saved")}</p>}
+        {editing && <div className="flex flex-wrap gap-2 border-t pt-4"><Button type="submit" className="h-11" disabled={mutation.isPending || !changed}>{t(mutation.isPending ? "profile.submitting" : "profile.submit")}</Button><Button type="button" variant="outline" className="h-11" disabled={mutation.isPending} onClick={cancel}>{t("common.cancel")}</Button></div>}
+      </form></TabsContent>
+      <TabsContent value="security" className="max-w-2xl"><section className="space-y-4"><div className="space-y-1"><h2 className="text-base font-semibold">{t("profile.securityTitle")}</h2><p className="text-sm leading-6 text-muted-foreground">{t("password.description")}</p></div><ChangePassword /></section></TabsContent>
+      <TabsContent value="display" className="max-w-2xl"><section className="flex items-start justify-between gap-4"><div className="space-y-1"><h2 className="text-base font-semibold">{t("preferences.title")}</h2><p className="text-sm leading-6 text-muted-foreground">{t("profile.displayDescription")}</p><p className="text-xs text-muted-foreground">{t("preferences.saved")}</p></div><DisplayPreferences /></section></TabsContent>
+    </Tabs>
+  </div>;
 }

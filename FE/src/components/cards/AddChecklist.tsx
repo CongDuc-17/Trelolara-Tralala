@@ -1,106 +1,35 @@
+import { useId, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ListChecks } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { apiClient } from "@/lib/apiClient";
-import { useState } from "react";
-import { useParams } from "react-router-dom";
-import { useCardsStore, type Checklist } from "@/stores/cards.store";
-import { Spinner } from "../ui/spinner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useCardActions } from "@/features/cards/queries";
+import { getApiError } from "@/lib/errors";
 
 export function AddChecklist() {
+  const { t } = useTranslation();
+  const { boardId = "", cardId = "" } = useParams();
+  const actions = useCardActions(boardId, cardId);
+  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const { cardId } = useParams() as { cardId: string };
-  const { addChecklist } = useCardsStore();
-  const [isAdding, setIsAdding] = useState(false);
-
-  async function handleAddChecklist() {
-    if (!title.trim() || isAdding) return;
-
-    try {
-      setIsAdding(true);
-      const response = await apiClient.post<Checklist>(`/cards/${cardId}/checklists`, {
-        title,
-      });
-      setTitle("");
-      setPopoverOpen(false);
-      addChecklist(cardId, response.data);
-    } catch (error) {
-      console.error("Error adding checklist", error);
-    } finally {
-      setIsAdding(false);
-    }
+  const [error, setError] = useState("");
+  const busy = useRef(false);
+  const id = useId();
+  async function add(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy.current || !title.trim()) return;
+    busy.current = true; setError("");
+    try { await actions.createChecklist(title.trim()); setTitle(""); setOpen(false); }
+    catch (error) { setError(getApiError(error).message); }
+    finally { busy.current = false; }
   }
-
-  return (
-    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Add Checklist</Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-90">
-        <div className="grid gap-4">
-          <div className="space-y-2">
-            <h4 className="leading-none font-medium">Add Checklist</h4>
-            <div className="text-xs text-muted-foreground">
-              Add a checklist to your task to keep track of your progress.
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <div className="grid grid-cols-5 items-center gap-4">
-              <Label htmlFor="width">Title</Label>
-              <Input
-                id="width"
-                className="col-span-4 h-8"
-                type="text"
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && title.trim() && !isAdding) {
-                    e.preventDefault();
-                    handleAddChecklist();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPopoverOpen(false);
-                  setTitle("");
-                }}
-                disabled={isAdding}
-              >
-                Cancel
-              </Button>
-
-              {/* --- ĐÃ SỬA LẠI LOGIC RENDER SPINNER TẠI ĐÂY --- */}
-              <Button
-                type="button"
-                disabled={isAdding || !title.trim()}
-                onClick={handleAddChecklist}
-              >
-                {isAdding ? (
-                  <div className="flex items-center">
-                    <Spinner className="mr-2 h-4 w-4" />
-                    Adding...
-                  </div>
-                ) : (
-                  "Add Checklist"
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+  return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><Button variant="outline" className="w-full justify-start"><ListChecks className="size-4" />{t("checklist.add")}</Button></PopoverTrigger>
+    <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))]"><form onSubmit={add} className="space-y-4"><div className="space-y-2"><h3 className="text-sm font-semibold">{t("checklist.add")}</h3><p className="text-sm text-muted-foreground">{t("checklist.description")}</p></div><div className="space-y-2"><Label htmlFor={id}>{t("checklist.title")}</Label><Input id={id} value={title} disabled={actions.pending} onChange={(event) => setTitle(event.target.value)} autoFocus /></div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={actions.pending} onClick={() => { setOpen(false); setTitle(""); }}>{t("common.cancel")}</Button><Button type="submit" disabled={actions.pending || !title.trim()}>{t(actions.pending ? "common.adding" : "common.add")}</Button></div>
+    </form></PopoverContent>
+  </Popover>;
 }

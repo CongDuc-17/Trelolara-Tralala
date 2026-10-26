@@ -43,6 +43,13 @@ export type ProjectMember = Omit<BoardMember, "boardId" | "userId" | "avatar"> &
 export type Member = Omit<BoardMember, "boardId" | "avatar"> & { avatar?: string | null; };
 export type MemberScope = "projects" | "boards";
 export type Role = { id: string; name: string; status: "ACTIVE" | "INACTIVE"; };
+export type CreateCatalogInput = { name: string; description?: string; };
+export type UpdateCatalogInput = { name?: string; description?: string; };
+export type ChangeMemberRoleInput = { userId: string; roleId: string; };
+export type RemoveMemberInput = { userId: string; };
+export type InviteMemberInput = { email: string; roleId: string; };
+export type CatalogLifecycleInput = { kind: MemberScope; id: string; action: "archive" | "restore" | "delete"; };
+export type InvitationAction = "accept" | "reject";
 export type Invitation = {
   id: string;
   token: string;

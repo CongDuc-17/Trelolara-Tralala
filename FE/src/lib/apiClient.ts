@@ -84,6 +84,15 @@ function refreshSession() {
   return pending;
 }
 
+export async function refreshApiSession() {
+  const version = sessionVersion;
+  try { await refreshSession(); }
+  catch (error) {
+    if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) expireSession(version);
+    throw error;
+  }
+}
+
 const publicEndpoints = new Set([
   "/auth/login", "/auth/register", "/auth/verify", "/auth/send-otp",
   "/auth/forgot-password", "/auth/refresh-token",
