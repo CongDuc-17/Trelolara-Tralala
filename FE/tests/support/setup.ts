@@ -12,7 +12,7 @@ function setupBrowser() {
   localStorage.removeItem(THEME_STORAGE_KEY);
   void i18n.changeLanguage("vi");
   document.documentElement.classList.remove("dark", "light");
-  vi.stubGlobal("matchMedia", vi.fn((media: string) => ({ matches: false, media, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+  vi.stubGlobal("matchMedia", vi.fn((media: string) => ({ matches: media.includes("prefers-reduced-motion: reduce"), media, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() })));
   Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => null) });
   // jsdom has no layout engine; size-dependent UI needs browser verification in milestone E.
   vi.stubGlobal("ResizeObserver", class {

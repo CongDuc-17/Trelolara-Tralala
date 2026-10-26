@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/apiClient";
+import i18n from "@/app/i18n";
 import { isNotification, isRecord, isUnreadCount, type NotificationPage } from "./types";
 
 export async function getNotifications(page: number, signal?: AbortSignal, isRead?: boolean): Promise<NotificationPage> {
@@ -26,4 +27,8 @@ export async function getUnreadCount(signal?: AbortSignal): Promise<number> {
 export async function markNotificationRead(id: string): Promise<void> {
   const response = await apiClient.patch<unknown>(`/notifications/${encodeURIComponent(id)}/read`);
   if (response?.success !== true || response.data !== null) throw new Error("Phản hồi đánh dấu đã đọc không hợp lệ.");
+}
+export async function markAllNotificationsRead(): Promise<void> {
+  const response = await apiClient.patch<unknown>("/notifications/read-all");
+  if (response?.success !== true || response.data !== null) throw new Error(i18n.t("common.invalidResponse"));
 }

@@ -17,7 +17,7 @@ const row: CardQuery = {
 	listId: id,
 	position: 1,
 	createdAt: date,
-	_count: { cardMembers: 1, cardLabels: 1, checklists: 1, comments: 1 },
+	_count: { cardMembers: 1, cardLabels: 1, checklists: 1, comments: 1, attachments: 2 },
 	cardMembers: [{ id, userId: id, user: { id, name: 'Author', avatar: null } }],
 	cardLabels: [{ id: 'relation-id', label: { id, name: 'Ready', color: 'red' } }],
 	checklists: [
@@ -60,6 +60,7 @@ describe('Card query projections and FE shape', () => {
 				'labelCount',
 				'checklistCount',
 				'commentCount',
+				'attachmentCount',
 				'_links',
 			].sort(),
 		);
@@ -70,6 +71,7 @@ describe('Card query projections and FE shape', () => {
 			isOverdue: false,
 			memberCount: 1,
 			commentCount: 1,
+			attachmentCount: 2,
 			_links: { comments: `/cards/${id}/comments` },
 		});
 	});
@@ -114,6 +116,7 @@ describe('Card query projections and FE shape', () => {
 			cardLabels: true,
 			checklists: true,
 			comments: true,
+			attachments: true,
 		});
 		expect(query.select.cardMembers.select.user.select).toEqual({
 			id: true,
@@ -131,6 +134,19 @@ describe('Card query projections and FE shape', () => {
 		await repository.getCardWithCounts(id);
 		expect(findUnique.mock.calls[1][0].select).not.toHaveProperty('cardMembers');
 		expect(findUnique.mock.calls[1][0].select.isComplete).toBe(true);
+	});
+	it('loads attachment totals with each list read without selecting private file data', async () => {
+		const findMany = jest.fn().mockResolvedValue([]);
+		const repository = new CardsRepository({
+			cards: { findMany },
+		} as unknown as DatabaseClient);
+		await repository.getAllCardsByListId(id, 'ACTIVE');
+		expect(findMany).toHaveBeenCalledTimes(1);
+		expect(findMany.mock.calls[0][0].include._count.select).toEqual({
+			comments: true,
+			attachments: true,
+		});
+		expect(findMany.mock.calls[0][0].include).not.toHaveProperty('attachments');
 	});
 	it('returns plain data and a controlled missing-card error', async () => {
 		const repository = {

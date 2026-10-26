@@ -72,7 +72,7 @@ export function VerifyEmail() {
       setLoading(false);
     }
   }
-  return <AccessLayout title={t("auth.verifyTitle")} description={<>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
+  return <AccessLayout backdrop title={t("auth.verifyTitle")} description={<>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
     <form id="verify-form" onSubmit={handleVerify} className="space-y-5" aria-busy={loading}>
       <div className="space-y-3"><Label htmlFor="otp-verification">{t("auth.code")}</Label><InputOTP id="otp-verification" maxLength={6} minLength={6} pattern={REGEXP_ONLY_DIGITS} inputMode="numeric" autoComplete="one-time-code" value={otp} disabled={loading} required onChange={setOtp} containerClassName="w-full"><InputOTPGroup className="w-full">{[0, 1, 2, 3, 4, 5].map((index) => <InputOTPSlot key={index} index={index} className="h-12 min-w-0 flex-1 text-xl" />)}</InputOTPGroup></InputOTP><p className="text-xs text-muted-foreground">{t("auth.codeHint")}</p></div>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}

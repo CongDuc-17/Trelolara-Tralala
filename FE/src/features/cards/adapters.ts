@@ -22,12 +22,12 @@ export function readCardList(value: CardListDto[], listId: string): CardSummary[
     checkCard(card);
     if (card.listId !== listId || !["ACTIVE", "ARCHIVED"].includes(card.status) || typeof card.isOverdue !== "boolean" ||
       !Array.isArray(card.cardMembers) || !Array.isArray(card.cardLabels) || !Array.isArray(card.checklists) ||
-      !Number.isInteger(card._count?.comments) || card._count.comments < 0) throw new Error("Dữ liệu quan hệ thẻ không hợp lệ.");
+      !Number.isInteger(card._count?.comments) || card._count.comments < 0 || !Number.isSafeInteger(card._count.attachments) || card._count.attachments < 0) throw new Error("Dữ liệu quan hệ thẻ không hợp lệ.");
     return {
       id: card.id, listId: card.listId, title: card.title, description: card.description, position: card.position, status: card.status,
       dueDate: card.dueDate, isComplete: card.isComplete, isOverdue: card.isOverdue, reminderMinutesBefore: card.reminderMinutesBefore,
       members: card.cardMembers.map(({ id, userId, user }) => ({ id, userId, userName: user.name, userAvatar: user.avatar })),
-      labels: card.cardLabels.map(({ label }) => label), checklists: card.checklists, commentCount: card._count.comments,
+      labels: card.cardLabels.map(({ label }) => label), checklists: card.checklists, commentCount: card._count.comments, attachmentCount: card._count.attachments,
     };
   });
 }
@@ -35,7 +35,7 @@ export function readCardList(value: CardListDto[], listId: string): CardSummary[
 export function readCardDetail(card: CardDetailDto, id: string): CardDetail {
   checkCard(card);
   if (card.id !== id || typeof card.isOverdue !== "boolean" || !Array.isArray(card.members) || !Array.isArray(card.labels) ||
-    !Array.isArray(card.checklists) || !Array.isArray(card.comments) || !Number.isInteger(card.commentCount) || card.commentCount < 0) {
+    !Array.isArray(card.checklists) || !Array.isArray(card.comments) || !Number.isInteger(card.commentCount) || card.commentCount < 0 || !Number.isSafeInteger(card.attachmentCount) || card.attachmentCount < 0) {
     throw new Error("Chưa tải đủ quan hệ chi tiết thẻ.");
   }
   return { ...card, members: card.members, labels: card.labels, checklists: card.checklists,

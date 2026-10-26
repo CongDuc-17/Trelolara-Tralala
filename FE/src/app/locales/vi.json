@@ -64,7 +64,9 @@
     "adding": "Đang thêm…",
     "create": "Tạo",
     "update": "Cập nhật",
-    "edit": "Sửa"
+    "edit": "Sửa",
+    "delete": "Xóa",
+    "invalidResponse": "Máy chủ trả về dữ liệu không hợp lệ. Vui lòng thử lại."
   },
   "overview": {
     "title": "Tổng quan công việc",
@@ -151,7 +153,8 @@
       "CARD_COMMENTED": "Bình luận mới",
       "CARD_DUE_SOON": "Nhắc hạn công việc"
     },
-    "showRead": "Xem thông báo đã đọc"
+    "showRead": "Xem thông báo đã đọc",
+    "markAllRead": "Đánh dấu tất cả đã đọc"
   },
   "createBoard": {
     "add": "Thêm bảng",
@@ -348,7 +351,14 @@
     "progress": "{{completed}}/{{total}} mục hoàn thành",
     "addItem": "Thêm mục kiểm tra",
     "item": "Nội dung mục kiểm tra",
-    "placeholder": "Nhập việc cần làm…"
+    "placeholder": "Nhập việc cần làm…",
+    "rename": "Đổi tên {{name}}",
+    "editTitle": "Tên checklist",
+    "editItem": "Nội dung mục checklist",
+    "renameItem": "Sửa mục {{name}}",
+    "deleteItem": "Xóa mục {{name}}",
+    "deleteItemTitle": "Xóa mục “{{name}}”?",
+    "deleteItemDescription": "Mục này sẽ bị xóa khỏi checklist và không thể khôi phục."
   },
   "comments": {
     "title": "Bình luận",
@@ -373,7 +383,10 @@
     "name": "Tên nhãn",
     "placeholder": "Nhập tên nhãn…",
     "preview": "Xem trước",
-    "partial": "Đã tạo nhãn nhưng chưa hoàn tất gắn vào thẻ. "
+    "partial": "Đã tạo nhãn nhưng chưa hoàn tất gắn vào thẻ. ",
+    "delete": "Xóa nhãn khỏi bảng",
+    "deleteTitle": "Xóa nhãn “{{name}}”?",
+    "deleteHint": "Nhãn sẽ bị xóa khỏi bảng và tất cả thẻ đang dùng nhãn này. Thao tác này không thể hoàn tác."
   },
   "cardMembers": {
     "trigger": "Thêm thành viên vào thẻ",
@@ -413,7 +426,17 @@
       "EDITOR": "Biên tập viên",
       "VIEWER": "Người xem",
       "OWNER": "Chủ sở hữu"
-    }
+    },
+    "invitationMethod": "Cách gửi lời mời",
+    "byEmail": "Qua email",
+    "byLink": "Qua liên kết",
+    "linkHint": "Chọn vai trò rồi tạo liên kết. Người có liên kết cần đăng nhập để tham gia.",
+    "createLink": "Tạo liên kết",
+    "shareLink": "Liên kết mời",
+    "linkExpires": "Hết hạn: {{date}}",
+    "copy": "Sao chép liên kết",
+    "copied": "Đã sao chép liên kết",
+    "copyFailed": "Không thể sao chép tự động. Bạn có thể chọn và sao chép liên kết ở trên."
   },
   "tasks": {
     "myTitle": "Công việc của tôi",
@@ -601,5 +624,83 @@
     "previousMonth": "Tháng trước",
     "count_one": "{{count}} việc",
     "count_other": "{{count}} việc"
+  },
+  "people": {
+    "choose": "Chọn người dùng",
+    "title": "Tìm người dùng",
+    "description": "Tìm theo tên, xem hồ sơ và chọn email để điền vào lời mời.",
+    "search": "Tên người dùng",
+    "profile": "Xem hồ sơ",
+    "noBio": "Chưa có phần giới thiệu.",
+    "select": "Chọn {{name}}",
+    "lookup": "Tra cứu",
+    "resource": "người dùng",
+    "profileResource": "hồ sơ"
+  },
+  "catalogInfo": {
+    "project": "Thông tin dự án",
+    "board": "Thông tin bảng",
+    "description": "Cập nhật tên và mô tả để cả nhóm hiểu rõ không gian làm việc.",
+    "name": "Tên"
+  },
+  "attachments": {
+    "title": "Tệp đính kèm",
+    "hint": "Ảnh JPG, PNG, WebP hoặc tài liệu PDF. Tối đa 10 MiB mỗi tệp.",
+    "choose": "Chọn tệp",
+    "upload": "Tải lên",
+    "uploading": "Đang tải lên…",
+    "invalid": "Chọn ảnh JPG, PNG, WebP hoặc PDF không rỗng, tối đa 10 MiB.",
+    "saved": "Đã thêm tệp đính kèm.",
+    "refresh": "Làm mới tệp đính kèm",
+    "download": "Tải xuống {{name}}",
+    "delete": "Xóa tệp {{name}}",
+    "deleteTitle": "Xóa tệp đính kèm?",
+    "deleteHint": "Tệp “{{name}}” sẽ bị xóa khỏi thẻ. Thao tác này không thể hoàn tác.",
+    "unavailable": "Tệp cũ này chưa có liên kết tải xuống an toàn.",
+    "continueDownload": "Mở liên kết tải xuống",
+    "count_one": "{{count}} tệp đính kèm",
+    "count_other": "{{count}} tệp đính kèm"
+  },
+  "activities": {
+    "title": "Lịch sử hoạt động",
+    "description": "Các thay đổi gần đây nhất của thẻ.",
+    "refresh": "Làm mới lịch sử hoạt động",
+    "more": "Xem hoạt động cũ hơn",
+    "changed": "đã cập nhật thẻ",
+    "actions": {
+      "created": "đã tạo thẻ",
+      "updated": "đã cập nhật thẻ",
+      "moved": "đã di chuyển thẻ",
+      "archived": "đã lưu trữ thẻ",
+      "restored": "đã khôi phục thẻ",
+      "label_added": "đã thêm nhãn",
+      "label_removed": "đã bỏ nhãn",
+      "label_updated": "đã sửa nhãn",
+      "member_added": "đã thêm người được giao",
+      "member_removed": "đã bỏ người được giao",
+      "checklist_created": "đã thêm checklist",
+      "checklist_updated": "đã đổi tên checklist",
+      "checklist_deleted": "đã xóa checklist",
+      "checklist_item_created": "đã thêm mục checklist",
+      "checklist_item_updated": "đã sửa mục checklist",
+      "checklist_item_deleted": "đã xóa mục checklist",
+      "comment_created": "đã bình luận",
+      "comment_updated": "đã sửa bình luận",
+      "attachment_added": "đã thêm tệp đính kèm",
+      "attachment_deleted": "đã xóa tệp đính kèm"
+    }
+  },
+  "landing": {
+    "workspace": "Không gian làm việc",
+    "openWorkspace": "Mở không gian làm việc",
+    "getStarted": "Bắt đầu",
+    "eyebrow": "KHÔNG GIAN CHUNG CHO CẢ NHÓM",
+    "title": "Việc rõ ràng. Cả nhóm cùng tiến.",
+    "description": "Tập trung công việc, kết nối cả nhóm. Từ ý tưởng đầu tiên đến việc hoàn thành, luôn biết bước tiếp theo.",
+    "noteOne": "Bảng Kanban trực quan",
+    "noteTwo": "Tiếng Việt & English",
+    "pause": "Tạm dừng hiệu ứng",
+    "resume": "Tiếp tục hiệu ứng",
+    "footer": "Một nơi để cả nhóm cùng tiến."
   }
 }

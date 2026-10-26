@@ -51,7 +51,7 @@ export function CreateProject() {
           <Plus />{t("projects.create")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t("projects.createTitle")}</DialogTitle>

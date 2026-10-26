@@ -41,6 +41,21 @@ async function login(page: Page, email: string, password: string) {
   await expect(page.getByRole("heading", { name: "Tổng quan công việc" })).toBeVisible();
 }
 
+async function createLinkThroughUI(page: Page, scope: "projects" | "boards", resourceId: string) {
+  await page.goto(`${app}/${scope}/${resourceId}`);
+  await page.getByRole("button", { name: scope === "projects" ? "Thành viên dự án" : "Thành viên bảng", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByText("Qua liên kết", { exact: true }).click();
+  await dialog.getByRole("combobox", { name: "Vai trò lời mời" }).click();
+  await page.getByRole("option", { name: /^(Người xem|Thành viên|Biên tập viên)$/ }).first().click();
+  await dialog.getByRole("button", { name: "Tạo liên kết", exact: true }).click();
+  const link = dialog.getByLabel("Liên kết mời", { exact: true });
+  await expect(link).toBeVisible();
+  const url = await link.inputValue();
+  expect(url.startsWith(`${app}/invite/${scope}/`), "Generated link stays on the application origin").toBe(true);
+  return url;
+}
+
 let cleanupTask: ((info: TestInfo) => Promise<void>) | undefined;
 test.afterEach(async () => {
   test.setTimeout(60_000);
@@ -105,15 +120,13 @@ test("two verified users collaborate through the real API, cookies, board revisi
     const card = await row(context.request, "POST", `/lists/${id(firstList)}/cards`, { title: prefix + " Card" }); cardId = id(card);
     evidence.completed.push("Created a namespaced project, board, two lists and card through existing APIs.");
     await test.step("accept a share link without sending email", async () => {
-      const invite = await row(context.request, "POST", `/invitations/projects/${projectId}/share-link`, {});
-      if (typeof invite.token !== "string") throw new Error("Share link has no token");
-      await second.goto(app + "/invite/projects/" + encodeURIComponent(invite.token));
+      const projectLink = await createLinkThroughUI(page, "projects", projectId);
+      await second.goto(projectLink);
       await second.getByRole("button", { name: "Chấp nhận", exact: true }).click();
       await expect(second).toHaveURL(app + "/dashboard");
       evidence.completed.push("Second account accepted an explicit LINK invitation through the FE; no SMTP was requested.");
-      const boardInvite = await row(context.request, "POST", `/invitations/boards/${boardId}/share-link`, {});
-      if (typeof boardInvite.token !== "string") throw new Error("Board share link has no token");
-      await second.goto(app + "/invite/boards/" + encodeURIComponent(boardInvite.token));
+      const boardLink = await createLinkThroughUI(page, "boards", boardId);
+      await second.goto(boardLink);
       await second.getByRole("button", { name: "Chấp nhận", exact: true }).click();
       await expect(second).toHaveURL(app + "/dashboard");
       evidence.completed.push("Second account accepted a board LINK invitation before being assigned to the card.");
@@ -150,6 +163,44 @@ test("two verified users collaborate through the real API, cookies, board revisi
       await expect.poll(async () => (await row(context.request, "GET", `/cards/${cardId}`)).listId).toBe(id(secondList));
       await expect(second.locator(`[data-list-id="${id(secondList)}"] #board-card-${cardId}`)).toBeVisible();
       evidence.completed.push("Keyboard drag persisted across lists and appeared in the second browser.");
+    });
+    await test.step("edit board information and manage a private attachment through the new UI", async () => {
+      await page.getByRole("button", { name: "Thông tin bảng", exact: true }).click();
+      const information = page.getByRole("dialog", { name: "Thông tin bảng" });
+      await information.getByLabel("Mô tả", { exact: true }).fill("Thông tin kiểm thử của " + prefix);
+      await information.getByRole("button", { name: "Lưu thay đổi", exact: true }).click();
+      await expect.poll(async () => (await row(context.request, "GET", `/boards/${boardId}`)).description).toBe("Thông tin kiểm thử của " + prefix);
+      await page.locator(`#board-card-${cardId}`).click();
+      const files = page.locator("details").filter({ has: page.locator("summary", { hasText: "Tệp đính kèm" }) });
+      await files.locator("summary").click();
+      const fileName = prefix + "-attachment.png";
+      await files.getByLabel("Chọn tệp", { exact: true }).setInputFiles({ name: fileName, mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+kMj8AAAAASUVORK5CYII=", "base64") });
+      await files.getByRole("button", { name: "Tải lên", exact: true }).click();
+      await expect(files.getByText("Đã thêm tệp đính kèm.", { exact: true })).toBeVisible();
+      await expect(page.locator(`[data-card-id="${cardId}"] [role="img"][aria-label="1 tệp đính kèm"]`)).toHaveCount(1);
+      expect((await row(context.request, "GET", `/cards/${cardId}`)).attachmentCount).toBe(1);
+      const attachments = await request(context.request, "GET", `/cards/${cardId}/attachments`);
+      if (!Array.isArray(attachments)) throw new Error("Expected attachment list");
+      const attachment: unknown = attachments.find((value: unknown) => { record(value); return value.fileName === fileName; }); record(attachment);
+      const attachmentId = id(attachment);
+      const download = await row(context.request, "GET", `/cards/${cardId}/attachments/${attachmentId}/download`);
+      if (typeof download.url !== "string" || new URL(download.url).protocol !== "https:") throw new Error("Expected a signed HTTPS download");
+      try {
+        const response = await context.request.get(download.url, { timeout: 15_000 });
+        expect(response.status(), "Signed attachment is downloadable").toBe(200);
+      } catch { throw new Error("The signed attachment could not be downloaded"); }
+      await files.getByRole("button", { name: `Xóa tệp ${fileName}`, exact: true }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Xóa", exact: true }).click();
+      await expect.poll(async () => {
+        const remaining = await request(context.request, "GET", `/cards/${cardId}/attachments`);
+        return Array.isArray(remaining) && !remaining.some((value: unknown) => { record(value); return value.id === attachmentId; });
+      }).toBe(true);
+      await expect(page.locator(`[data-card-id="${cardId}"] [role="img"][aria-label="1 tệp đính kèm"]`)).toHaveCount(0);
+      const history = page.locator("details").filter({ has: page.locator("summary", { hasText: "Lịch sử hoạt động" }) });
+      await history.locator("summary").click();
+      await expect(history.getByText(/đã xóa tệp đính kèm/)).toBeVisible();
+      await page.getByRole("dialog").getByRole("button", { name: "Đóng", exact: true }).click();
+      evidence.completed.push("Board description persisted; a namespaced PNG uploaded through FE, downloaded through its signed URL and was deleted through FE; activity history showed the deletion.");
     });
     await test.step("display the assignment in My work and board search", async () => {
       await page.goto(app + "/my-work");

@@ -26,7 +26,7 @@ let lists: List[];
 let cards: CardListDto[];
 let adapter: ReturnType<typeof vi.fn<AxiosAdapter>>;
 function row(id: string, listId: string, position: number): CardListDto {
-  return { id, listId, position, title: id, description: null, status: "ACTIVE", dueDate: null, isComplete: false, isOverdue: false, reminderMinutesBefore: null, cardMembers: [], cardLabels: [], checklists: [], _count: { comments: 0 } };
+  return { id, listId, position, title: id, description: null, status: "ACTIVE", dueDate: null, isComplete: false, isOverdue: false, reminderMinutesBefore: null, cardMembers: [], cardLabels: [], checklists: [], _count: { comments: 0, attachments: 0 } };
 }
 
 beforeEach(() => {
@@ -67,13 +67,17 @@ it("completes and reopens directly on a card without opening it or duplicating a
   });
   await openBoard();
   const checkbox = screen.getByRole("checkbox", { name: "Hoàn thành c1" });
+  checkbox.focus();
   fireEvent.click(checkbox); fireEvent.click(checkbox);
   await waitFor(() => expect(patches()).toHaveLength(1));
   expect(checkbox).toHaveProperty("disabled", true);
+  // Chrome blurs a focused native button when it becomes disabled; jsdom does not.
+  checkbox.blur();
   await act(async () => { gate.resolve(); });
   await waitFor(() => expect(screen.getByRole("checkbox", { name: "Mở lại c1" }).getAttribute("data-state")).toBe("checked"));
   expect(JSON.parse(patches()[0].data)).toEqual({ isComplete: true });
   expect(screen.getByRole("region", { name: "List Một" })).toBeTruthy();
+  await waitFor(() => expect(document.activeElement).toBe(checkbox));
   checkbox.focus(); await userEvent.setup().keyboard(" ");
   await waitFor(() => expect(screen.getByRole("checkbox", { name: "Hoàn thành c1" }).getAttribute("data-state")).toBe("unchecked"));
   expect(JSON.parse(patches()[1].data)).toEqual({ isComplete: false });

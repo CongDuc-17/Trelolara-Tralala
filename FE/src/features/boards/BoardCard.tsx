@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -22,25 +22,26 @@ export function BoardCard({ card, boardId, lists, pending, onMove, onArchive }: 
   const navigate = useNavigate();
   const actions = useCardActions(boardId, card.id);
   const completion = useRef<HTMLButtonElement>(null);
+  const restoreCompletionFocus = useRef(false);
   const busy = useRef(false);
   const [error, setError] = useState("");
   const reduced = useReducedBoardMotion();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDragId(card.id), data: { kind: "card", id: card.id, listId: card.listId }, transition: { duration: reduced ? 0 : 180, easing: "cubic-bezier(0.2,0.8,0.2,1)" },
   });
+  useEffect(() => {
+    if (pending || actions.pending || !restoreCompletionFocus.current) return;
+    restoreCompletionFocus.current = false;
+    if (document.activeElement === document.body) completion.current?.focus();
+  }, [pending, actions.pending]);
   async function toggleComplete(checked: boolean) {
     if (busy.current || pending || actions.pending) return;
-    const hadFocus = document.activeElement === completion.current;
+    restoreCompletionFocus.current = document.activeElement === completion.current;
     busy.current = true; setError("");
     try {
       await actions.update({ isComplete: checked });
     } catch (error) { if (getApiError(error).kind !== "canceled") setError(getApiError(error).message); }
-    finally {
-      busy.current = false;
-      if (hadFocus && document.activeElement === document.body) requestAnimationFrame(() => {
-        if (document.activeElement === document.body) completion.current?.focus();
-      });
-    }
+    finally { busy.current = false; }
   }
   return <li ref={setNodeRef} data-card-id={card.id} data-drag-placeholder={isDragging || undefined}
     className="board-sortable-card group relative rounded-lg border bg-card text-foreground"

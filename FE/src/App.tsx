@@ -3,11 +3,11 @@ import { lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import { NotFound } from "./pages/NotFound";
 import { CardDetail } from "./pages/CardDetail";
-import { Home } from "./pages/Home";
 import { RequireSession } from "./features/auth/RequireSession";
 import { RouteBoundary } from "./app/RouteBoundary";
 
 const Login = lazy(() => import("./pages/Login").then(({ Login }) => ({ default: Login })));
+const Home = lazy(() => import("./pages/Home").then(({ Home }) => ({ default: Home })));
 const Register = lazy(() => import("./pages/Register").then(({ Register }) => ({ default: Register })));
 const VerifyEmail = lazy(() => import("./components/VerifyEmail").then(({ VerifyEmail }) => ({ default: VerifyEmail })));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then(({ ForgotPassword }) => ({ default: ForgotPassword })));

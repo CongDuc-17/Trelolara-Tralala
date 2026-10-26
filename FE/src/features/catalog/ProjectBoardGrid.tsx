@@ -13,13 +13,13 @@ export function BoardTile({ board, detailed = false }: { board: Board; detailed?
   const { t } = useTranslation();
   return <Link to={`/boards/${board.id}`} aria-label={board.name}
     style={board.background ? { backgroundImage: `url(${JSON.stringify(board.background)})` } : undefined}
-    className={cn("group relative isolate flex min-w-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card bg-cover bg-center p-4 transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-ring", detailed ? "min-h-36" : "min-h-28 justify-between", board.background ? "text-white" : "hover:bg-muted/40")}>
+    className={cn("board-tile group relative isolate flex min-w-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card bg-cover bg-center p-4 transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-ring", detailed ? "min-h-36" : "min-h-28 justify-between", board.background ? "text-white" : "hover:bg-muted/40")}>
     {board.background && <span aria-hidden="true" className="absolute inset-0 -z-10 bg-black/75 transition-colors group-hover:bg-black/80" />}
     <div className={cn("flex items-start justify-between gap-3", board.background ? "text-white/80" : "text-muted-foreground")}>
       <div className="flex min-w-0 items-center gap-2"><Columns3 className="size-4 shrink-0" />{detailed && ["ACTIVE", "ARCHIVED"].includes(board.status ?? "") && <span className="text-xs">{t(board.status === "ACTIVE" ? "projects.active" : "projects.archived")}</span>}</div>
       <ArrowUpRight className={cn("size-4 transition-colors", !board.background && "group-hover:text-primary")} />
     </div>
-    <div className="min-w-0"><div className="break-words text-sm font-semibold">{board.name}</div>
+    <div className="min-w-0"><div className="board-tile-name break-words text-sm font-semibold">{board.name}</div>
       {board.description && <p className={cn("mt-1 text-xs", detailed ? "line-clamp-2 break-words leading-5" : "truncate", board.background ? "text-white/80" : "text-muted-foreground")}>{board.description}</p>}
     </div>
     {detailed && (board.membersCount !== undefined || board.listsCount !== undefined) && <div className={cn("mt-auto flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-xs tabular-nums", board.background ? "border-white/25 text-white/80" : "border-border/70 text-muted-foreground")}>

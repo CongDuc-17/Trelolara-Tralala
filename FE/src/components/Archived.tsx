@@ -32,7 +32,7 @@ export function Archived({ projects, boards, pending, handleRestoreProject, hand
       </TabsList>
       <TabsContent value="projects" className="divide-y">
         {!archivedProjects.length && <Empty className="items-start gap-3 border p-5 text-left md:p-5"><EmptyHeader className="max-w-none items-start text-left"><EmptyTitle className="text-sm tracking-normal">{t("archive.emptyProjects")}</EmptyTitle><EmptyDescription>{t("archive.emptyHint")}</EmptyDescription></EmptyHeader><EmptyContent className="items-start"><Button asChild variant="outline" className="h-11"><Link to="/projects">{t("overview.browse")}</Link></Button></EmptyContent></Empty>}
-        {archivedProjects.map((project) => <article key={project.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+        {archivedProjects.map((project) => <article key={project.id} className="archive-row flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
           <div className="min-w-0 flex-1 basis-48 space-y-1">
             <h3 className="break-words text-sm font-medium">{project.name}</h3>
             {project.description && <p className="line-clamp-2 break-words text-xs text-muted-foreground">{project.description}</p>}
@@ -49,7 +49,7 @@ export function Archived({ projects, boards, pending, handleRestoreProject, hand
       </TabsContent>
       <TabsContent value="boards" className="divide-y">
         {!archivedBoards.length && <Empty className="items-start gap-3 border p-5 text-left md:p-5"><EmptyHeader className="max-w-none items-start text-left"><EmptyTitle className="text-sm tracking-normal">{t("archive.emptyBoards")}</EmptyTitle><EmptyDescription>{t("archive.emptyHint")}</EmptyDescription></EmptyHeader><EmptyContent className="items-start"><Button asChild variant="outline" className="h-11"><Link to="/dashboard">{t("overview.projectsTitle")}</Link></Button></EmptyContent></Empty>}
-        {archivedBoards.map((board) => <article key={board.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+        {archivedBoards.map((board) => <article key={board.id} className="archive-row flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
           <div className="min-w-0 flex-1 basis-48 space-y-1"><h3 className="break-words text-sm font-medium">{board.name}</h3>{board.projectName && <p className="break-words text-xs text-muted-foreground">{board.projectName}</p>}</div>
           <div className="flex justify-end gap-1">
           <Button variant="outline" className="h-11 shrink-0 gap-2 border-border bg-card shadow-none" disabled={pending} aria-label={`${t("archive.restoreBoard")} ${board.name}`} onClick={() => handleRestoreBoard(board.id)}><ArchiveRestore className="size-4" />{t("archive.restore")}</Button>

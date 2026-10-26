@@ -23,6 +23,7 @@ export function mapCard(card: CardQuery, include?: CardIncludes): CardDetails {
 		labelCount: card._count?.cardLabels ?? 0,
 		checklistCount: card._count?.checklists ?? 0,
 		commentCount: card._count?.comments ?? 0,
+		attachmentCount: card._count?.attachments ?? 0,
 		_links: {
 			members: `/cards/${card.id}/members`,
 			labels: `/cards/${card.id}/labels`,

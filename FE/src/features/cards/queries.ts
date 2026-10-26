@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assertBoardSession, listsOptions, useBoardScope, useBoardWrite } from "@/features/boards/queries";
 import { getApiError } from "@/lib/errors";
 import * as api from "./api";
@@ -53,10 +53,28 @@ export function useCardActions(boardId: string, cardId: string) {
     createChecklistItem: (checklistId: string, title: string) => write.mutateAsync(() => api.createChecklistItem(checklistId, title)),
     setChecklistItemCompletion: (id: string, completed: boolean) => write.mutateAsync(() => api.setChecklistItemCompletion(id, completed)),
     deleteChecklist: (id: string) => write.mutateAsync(() => api.deleteChecklist(id)),
+    updateChecklistTitle: (id: string, title: string) => write.mutateAsync(() => api.updateChecklistTitle(id, title)),
+    updateChecklistItemTitle: (id: string, title: string) => write.mutateAsync(() => api.updateChecklistItemTitle(id, title)),
+    deleteChecklistItem: (id: string) => write.mutateAsync(() => api.deleteChecklistItem(id)),
+    deleteLabel: (id: string) => write.mutateAsync(() => api.deleteBoardLabel(id)),
+    uploadAttachment: (file: File, signal: AbortSignal) => write.mutateAsync(() => api.uploadAttachment(cardId, file, signal)),
+    deleteAttachment: (id: string) => write.mutateAsync(() => api.deleteAttachment(cardId, id)),
     setLabel: (labelId: string, attached: boolean) => write.mutateAsync(() => attached ? api.attachCardLabel(cardId, labelId) : api.detachCardLabel(cardId, labelId)),
     addMember: (userId: string) => write.mutateAsync(() => api.addCardMember(cardId, userId)),
     removeMember: (userId: string) => write.mutateAsync(() => api.removeCardMember(cardId, userId)),
   };
+}
+
+export function useCardAttachments(boardId: string, cardId: string) {
+  const scope = useBoardScope(boardId);
+  return useQuery({ queryKey: [...scope, "attachments", cardId], enabled: !!scope[2],
+    queryFn: async ({ signal }) => { assertBoardSession(scope); const files = await api.getAttachments(cardId, signal); assertBoardSession(scope); return files; } });
+}
+export function useCardActivities(boardId: string, cardId: string) {
+  const scope = useBoardScope(boardId);
+  return useInfiniteQuery({ queryKey: [...scope, "activities", cardId], enabled: !!scope[2], initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam, signal }) => { assertBoardSession(scope); const events = await api.getCardActivities(cardId, pageParam, signal); assertBoardSession(scope); return events; },
+    getNextPageParam: (page, pages) => page.nextCursor && !pages.slice(0, -1).some((previous) => previous.nextCursor === page.nextCursor) ? page.nextCursor : undefined });
 }
 
 export function useSaveCardLabel(boardId: string, cardId: string) {

@@ -64,7 +64,9 @@
     "adding": "Adding…",
     "create": "Create",
     "update": "Update",
-    "edit": "Edit"
+    "edit": "Edit",
+    "delete": "Delete",
+    "invalidResponse": "The server returned an unexpected response. Please try again."
   },
   "overview": {
     "title": "Work overview",
@@ -151,7 +153,8 @@
       "CARD_COMMENTED": "New comment",
       "CARD_DUE_SOON": "Task due reminder"
     },
-    "showRead": "Show read notifications"
+    "showRead": "Show read notifications",
+    "markAllRead": "Mark all as read"
   },
   "createBoard": {
     "add": "Add board",
@@ -348,7 +351,14 @@
     "progress": "{{completed}}/{{total}} items complete",
     "addItem": "Add checklist item",
     "item": "Checklist item",
-    "placeholder": "Enter a checklist item…"
+    "placeholder": "Enter a checklist item…",
+    "rename": "Rename {{name}}",
+    "editTitle": "Checklist name",
+    "editItem": "Checklist item",
+    "renameItem": "Edit item {{name}}",
+    "deleteItem": "Delete item {{name}}",
+    "deleteItemTitle": "Delete “{{name}}”?",
+    "deleteItemDescription": "This item will be permanently removed from the checklist."
   },
   "comments": {
     "title": "Comments",
@@ -373,7 +383,10 @@
     "name": "Label name",
     "placeholder": "Enter a label name…",
     "preview": "Preview",
-    "partial": "The label was created but could not be attached to this card. "
+    "partial": "The label was created but could not be attached to this card. ",
+    "delete": "Delete label from board",
+    "deleteTitle": "Delete label “{{name}}”?",
+    "deleteHint": "The label will be removed from the board and every card using it. This cannot be undone."
   },
   "cardMembers": {
     "trigger": "Assign card members",
@@ -413,7 +426,17 @@
       "EDITOR": "Editor",
       "VIEWER": "Viewer",
       "OWNER": "Owner"
-    }
+    },
+    "invitationMethod": "Invitation method",
+    "byEmail": "By email",
+    "byLink": "By link",
+    "linkHint": "Choose a role, then create a link. Anyone using the link must sign in to join.",
+    "createLink": "Create link",
+    "shareLink": "Invitation link",
+    "linkExpires": "Expires: {{date}}",
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "copyFailed": "Automatic copying failed. Select and copy the link above."
   },
   "tasks": {
     "myTitle": "My work",
@@ -601,5 +624,83 @@
     "previousMonth": "Previous month",
     "count_one": "{{count}} task",
     "count_other": "{{count}} tasks"
+  },
+  "people": {
+    "choose": "Choose a user",
+    "title": "Find people",
+    "description": "Search by name, view profiles and select an email for the invitation.",
+    "search": "User name",
+    "profile": "View profile",
+    "noBio": "No introduction yet.",
+    "select": "Choose {{name}}",
+    "lookup": "Find",
+    "resource": "people",
+    "profileResource": "profile"
+  },
+  "catalogInfo": {
+    "project": "Project information",
+    "board": "Board information",
+    "description": "Update the name and description so everyone understands the workspace.",
+    "name": "Name"
+  },
+  "attachments": {
+    "title": "Attachments",
+    "hint": "JPG, PNG, WebP images or PDF documents. Up to 10 MiB per file.",
+    "choose": "Choose a file",
+    "upload": "Upload",
+    "uploading": "Uploading…",
+    "invalid": "Choose a non-empty JPG, PNG, WebP or PDF, up to 10 MiB.",
+    "saved": "Attachment added.",
+    "refresh": "Refresh attachments",
+    "download": "Download {{name}}",
+    "delete": "Delete file {{name}}",
+    "deleteTitle": "Delete attachment?",
+    "deleteHint": "“{{name}}” will be removed from this card. This cannot be undone.",
+    "unavailable": "This older file has no secure download link.",
+    "continueDownload": "Open download link",
+    "count_one": "{{count}} attachment",
+    "count_other": "{{count}} attachments"
+  },
+  "activities": {
+    "title": "Activity history",
+    "description": "The most recent changes to this card.",
+    "refresh": "Refresh activity history",
+    "more": "Load older activity",
+    "changed": "updated the card",
+    "actions": {
+      "created": "created the card",
+      "updated": "updated the card",
+      "moved": "moved the card",
+      "archived": "archived the card",
+      "restored": "restored the card",
+      "label_added": "added a label",
+      "label_removed": "removed a label",
+      "label_updated": "updated a label",
+      "member_added": "assigned a member",
+      "member_removed": "removed an assignee",
+      "checklist_created": "added a checklist",
+      "checklist_updated": "renamed a checklist",
+      "checklist_deleted": "deleted a checklist",
+      "checklist_item_created": "added a checklist item",
+      "checklist_item_updated": "updated a checklist item",
+      "checklist_item_deleted": "deleted a checklist item",
+      "comment_created": "added a comment",
+      "comment_updated": "edited a comment",
+      "attachment_added": "added an attachment",
+      "attachment_deleted": "deleted an attachment"
+    }
+  },
+  "landing": {
+    "workspace": "Workspace",
+    "openWorkspace": "Open workspace",
+    "getStarted": "Get started",
+    "eyebrow": "ONE SHARED SPACE FOR YOUR TEAM",
+    "title": "Clear work. Shared progress.",
+    "description": "Keep work in focus and your team connected. From the first idea to the final task, know what comes next.",
+    "noteOne": "Visual Kanban boards",
+    "noteTwo": "Vietnamese & English",
+    "pause": "Pause animation",
+    "resume": "Resume animation",
+    "footer": "A place for the whole team to move forward."
   }
 }

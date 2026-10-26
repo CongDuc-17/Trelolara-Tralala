@@ -17,7 +17,7 @@ import type { Task, TaskPage } from "@/features/discovery/types";
 
 vi.mock("@/features/auth/session-context", () => ({ useSession: () => ({ user: { id: "alice" } }) }));
 const blocked = axiosClient.defaults.adapter;
-const first: Task = { ...testCard, status: "ACTIVE", createdAt: "2026-10-23T10:00:00Z", list: { id: testCard.listId, name: "Đang làm", status: "ACTIVE", board: { id: "board", name: "Sản phẩm", status: "ACTIVE", projectId: "project", project: { status: "ACTIVE" } } }, cardMembers: [{ userId: "alice", user: { id: "alice", name: "An", avatar: null } }], cardLabels: [] };
+const first: Task = { ...testCard, _count: { attachments: 0 }, status: "ACTIVE", createdAt: "2026-10-23T10:00:00Z", list: { id: testCard.listId, name: "Đang làm", status: "ACTIVE", board: { id: "board", name: "Sản phẩm", status: "ACTIVE", projectId: "project", project: { status: "ACTIVE" } } }, cardMembers: [{ userId: "alice", user: { id: "alice", name: "An", avatar: null } }], cardLabels: [] };
 const second: Task = { ...first, id: "00000000-0000-4000-8000-000000000003", title: "Công việc tiếp theo" };
 let client = createQueryClient();
 let adapter: ReturnType<typeof vi.fn<AxiosAdapter>>;

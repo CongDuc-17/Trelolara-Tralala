@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { Bell, RefreshCw } from "lucide-react";
+import { Bell, CheckCheck, RefreshCw } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -17,14 +17,15 @@ export function Notifications() {
   const { t, i18n } = useTranslation();
   const [showRead, setShowRead] = useState(false);
   const [open, setOpen] = useState(false);
-  const { notifications, unreadCount, isLoading, hasMore, error, refresh, loadNextPage, markRead, readPending, clearReadError } = useNotifications(showRead);
+  const { notifications, unreadCount, isLoading, hasMore, error, refresh, loadNextPage, markRead, markAllRead, readPending, clearReadError } = useNotifications(showRead);
   const feedback = error ? getApiError(error) : null;
   const locale = i18n.resolvedLanguage === "en" ? "en-US" : "vi-VN";
   return <Popover open={open} onOpenChange={(next) => { setOpen(next); if (next) refresh(); }}>
     <PopoverTrigger asChild><Button variant="ghost" size="icon" className="relative size-9 text-muted-foreground" aria-label={unreadCount > 0 ? t("notifications.unreadCount", { count: unreadCount }) : t("notifications.title")}><Bell className="size-5" />{unreadCount > 0 && <Badge variant="destructive" className="absolute -right-1 -top-1 h-4 min-w-4 border-0 px-1 py-0 tabular-nums">{unreadCount > 99 ? "99+" : unreadCount}</Badge>}</Button></PopoverTrigger>
-    <PopoverContent align="end" aria-label={t("notifications.title")} className="w-[min(27rem,calc(100vw-2rem))] overflow-hidden p-0">
+    <PopoverContent align="end" aria-label={t("notifications.title")} className="notifications-panel w-[min(27rem,calc(100vw-2rem))] overflow-hidden p-0">
       <div className="space-y-3 border-b p-4"><div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">{t("notifications.title")}</h2><Button size="icon" variant="ghost" className="size-11" aria-label={t("notifications.refresh")} disabled={isLoading} onClick={refresh}><RefreshCw className="size-4" /></Button></div><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{t(showRead ? "notifications.readHelp" : "notifications.unreadHelp")}</p><div className="flex items-center gap-2"><Switch id="show-read" checked={showRead} onCheckedChange={(value) => { clearReadError(); setShowRead(value); }} /><Label htmlFor="show-read">{t("notifications.showRead")}</Label></div></div></div>
       <div className="max-h-[min(30rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain" aria-busy={isLoading}>
+        {!showRead && unreadCount > 0 && <div className="border-b px-4 py-1"><Button type="button" variant="ghost" size="sm" disabled={readPending || isLoading} onClick={markAllRead}><CheckCheck className="size-4" />{t("notifications.markAllRead")}</Button></div>}
         {feedback && feedback.kind !== "canceled" && <div className="space-y-2 border-b p-4 text-sm"><p role="alert" className="break-words">{feedback.message}</p><Button size="sm" variant="outline" disabled={isLoading} onClick={refresh}>{t("common.retry")}</Button></div>}
         {isLoading && notifications.length === 0 ? <div role="status" aria-label={t("notifications.loading")} className="space-y-4 p-4">{[1, 2, 3].map((id) => <div key={id} className="space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-full" /></div>)}</div> : notifications.length === 0 && !error && <p className="p-6 text-sm text-muted-foreground">{t(showRead ? "notifications.emptyRead" : "notifications.emptyUnread")}</p>}
         <ul>{notifications.filter((item) => item.isRead === showRead).map((notification) => {

@@ -11,6 +11,7 @@ export type TaskFilters = {
 export type Task = CardRow & {
   isOverdue: boolean;
   createdAt: string;
+  _count: { attachments: number };
   list: { id: string; name: string; status: string; board: { id: string; name: string; status: string; projectId: string; project: { status: string } } };
   cardMembers: { userId: string; user: { id: string; name: string; avatar: string | null } }[];
   cardLabels: { label: Label }[];

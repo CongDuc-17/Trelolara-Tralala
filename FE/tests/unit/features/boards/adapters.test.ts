@@ -6,11 +6,12 @@ import type { CardDetailDto, CardListDto } from "@/features/cards/types";
 
 it("normalizes list joins and counts without inventing included comments", () => {
   const raw: CardListDto = { ...testCard, status: "ACTIVE", cardMembers: [{ id: "relation", userId: "user", user: { id: "user", name: "An", avatar: null } }],
-    cardLabels: [{ id: "label-relation", label: { id: "label", name: "Gấp", color: "#ff0000" } }], checklists: [], _count: { comments: 3 } };
+    cardLabels: [{ id: "label-relation", label: { id: "label", name: "Gấp", color: "#ff0000" } }], checklists: [], _count: { comments: 3, attachments: 2 } };
   const [card] = readCardList([raw], raw.listId);
   expect(card.members[0]).toEqual({ id: "relation", userId: "user", userName: "An", userAvatar: null });
   expect(card.labels[0].name).toBe("Gấp");
   expect(card.commentCount).toBe(3);
+  expect(card.attachmentCount).toBe(2);
   expect(card).not.toHaveProperty("comments");
 });
 it("normalizes included flat detail comments with their card scope", () => {

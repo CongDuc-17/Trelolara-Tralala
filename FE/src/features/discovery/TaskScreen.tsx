@@ -28,7 +28,7 @@ export function TaskScreen({ boardId, boardName }: { boardId?: string; boardName
   const denied = ["forbidden", "unauthorized", "not-found"].includes(getApiError(query.error).kind);
   const cursorError = query.isError && getApiError(query.error).status === 422;
   const updated = query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toLocaleTimeString(i18n.resolvedLanguage === "en" ? "en-US" : "vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
-  return <div className="min-w-0 space-y-4 p-4 md:space-y-6 md:p-6">
+  return <div className="app-page min-w-0 space-y-4 p-4 md:space-y-6 md:p-6">
     <header className="space-y-3">
       {boardId && <Link to={`/boards/${boardId}`} className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" />{boardName}</Link>}
       <div className="flex items-start justify-between gap-3"><div className="min-w-0 space-y-1"><h1 className="text-2xl font-semibold tracking-tight">{t(boardId ? "tasks.boardTitle" : "tasks.myTitle")}</h1><p className="text-sm leading-6 text-muted-foreground">{t(boardId ? "tasks.boardDescription" : "tasks.myDescription")}</p></div><Button variant="ghost" size="icon" className="size-11 shrink-0" disabled={query.isFetching || !valid} aria-label={t("tasks.refresh")} onClick={() => { void query.restart(); }}><RefreshCw className={query.isFetching ? "size-4 animate-spin" : "size-4"} /></Button></div>
@@ -37,7 +37,7 @@ export function TaskScreen({ boardId, boardName }: { boardId?: string; boardName
     {!valid ? <div role="alert" className="space-y-3 rounded-lg border p-4"><p className="text-sm">{t("tasks.invalidFilters")}</p><Button variant="outline" onClick={() => setParams({})}>{t("tasks.clearFilters")}</Button></div> : <>
       <div className="space-y-3">
       <TaskFilters filters={filters} boardId={boardId} tasks={denied ? [] : tasks} />
-      {!boardId && <section aria-label={t("tasks.summary")} className="space-y-2 border-y py-3">
+      {!boardId && <section aria-label={t("tasks.summary")} className="app-summary task-summary space-y-2 border-y py-3">
         <p className="text-xs text-muted-foreground">{t("tasks.summaryScope")}</p>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-1 md:flex md:flex-wrap md:gap-x-6">
           {[

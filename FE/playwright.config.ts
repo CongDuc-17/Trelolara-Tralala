@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: ["app.spec.ts", "project.spec.ts"],
+  testMatch: ["app.spec.ts", "project.spec.ts", "features.spec.ts", "public.spec.ts"],
   outputDir: "node_modules/.tmp/e2e-results",
   fullyParallel: true,
   workers: 2,
@@ -13,6 +13,7 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:4173",
     channel: "chrome",
+    launchOptions: { args: ["--enable-unsafe-swiftshader"] },
     locale: "vi-VN",
     timezoneId: "Asia/Ho_Chi_Minh",
     contextOptions: { reducedMotion: "reduce" },

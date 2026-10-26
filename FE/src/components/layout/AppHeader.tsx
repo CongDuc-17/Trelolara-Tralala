@@ -24,7 +24,7 @@ export function AppHeader({ contextOpen, onToggleContext }: { contextOpen: boole
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
     else document.getElementById("dashboard-main")?.scrollTo({ top: 0 });
   }, [scrollPath, hash]);
-  return <header className="z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-2 gap-y-3 md:flex md:items-center md:justify-between [&_button]:min-h-11 [&_button]:min-w-11">
+  return <header className="workspace-header z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-2 gap-y-3 md:flex md:items-center md:justify-between [&_button]:min-h-11 [&_button]:min-w-11">
     <a href="#dashboard-main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-card focus:p-3">{t("nav.skip")}</a>
     <div className="contents md:flex md:min-w-0 md:items-center md:gap-2">
       {isMobile && <Button variant="ghost" size="icon" className="size-11 shrink-0" onClick={toggleSidebar} aria-label={t("nav.open")}><Menu /></Button>}

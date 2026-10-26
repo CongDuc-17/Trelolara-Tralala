@@ -131,6 +131,7 @@ export class CardSearchRepository {
 				cardLabels: {
 					select: { label: { select: { id: true, name: true, color: true } } },
 				},
+				_count: { select: { attachments: true } },
 			},
 		});
 		const items = rows.slice(0, input.limit);

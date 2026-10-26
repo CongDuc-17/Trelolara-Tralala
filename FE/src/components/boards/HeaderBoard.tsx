@@ -10,9 +10,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useChangeCatalogLifecycle, useUpdateBoard, useUploadBoardBackground } from "@/features/catalog/queries";
 import { getApiError } from "@/lib/errors";
+import { CatalogInfo } from "@/features/catalog/CatalogInfo";
 
-export function HeaderBoard({ boardId, boardName, membersCount, onPreviewBackground, archive }: {
-  boardId: string; boardName?: string; membersCount?: number; onPreviewBackground?: (url: string | null) => void; archive?: ReactNode;
+export function HeaderBoard({ boardId, boardName, description, membersCount, onPreviewBackground, archive }: {
+  boardId: string; boardName?: string; description?: string; membersCount?: number; onPreviewBackground?: (url: string | null) => void; archive?: ReactNode;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -60,7 +61,7 @@ export function HeaderBoard({ boardId, boardName, membersCount, onPreviewBackgro
       upload.current = null; if (fileInput.current) fileInput.current.value = "";
     }
   }
-  return <header className="shrink-0 space-y-2 border-b bg-frame/95 px-4 py-3 md:px-6">
+  return <header className="board-header shrink-0 space-y-2 border-b bg-frame/95 px-4 py-3 md:px-6">
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div className="flex min-w-0 w-full items-center gap-2 sm:w-auto sm:flex-[1_1_16rem]">
         {editing ? <><h1 id="board-title" tabIndex={-1} className="sr-only">{boardName}</h1><Input ref={input} autoFocus aria-label={t("board.name")} value={name} disabled={update.isPending} className="h-9 max-w-md text-base font-medium" onChange={(event) => setName(event.target.value)} onBlur={() => { void saveName(); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveName(); } if (event.key === "Escape") setEditing(false); }} /></>
@@ -68,7 +69,7 @@ export function HeaderBoard({ boardId, boardName, membersCount, onPreviewBackgro
       </div>
       <div className="flex flex-wrap items-center gap-2 max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-11 max-sm:[&_a]:min-h-11">
         <Button variant="outline" size="sm" asChild><Link to={`/boards/${boardId}/search`}><Search className="size-4" />{t("tasks.searchBoard")}</Link></Button>
-        {archive}<div className="flex items-center gap-1"><MembersBoard boardId={boardId} count={membersCount} />
+        {archive}<div className="flex items-center gap-1"><CatalogInfo kind="boards" id={boardId} name={boardName ?? ""} description={description} /><MembersBoard boardId={boardId} count={membersCount} />
         <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={t("board.options")}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" onCloseAutoFocus={(event) => { if (confirm) event.preventDefault(); if (renameFromMenu.current) { event.preventDefault(); renameFromMenu.current = false; input.current?.focus(); } }}>
             <DropdownMenuItem onSelect={() => { renameFromMenu.current = true; rename(); }} disabled={update.isPending}><Pencil />{t("board.rename")}</DropdownMenuItem>

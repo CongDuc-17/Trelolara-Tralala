@@ -16,7 +16,7 @@ import type { Task, TaskFilters as Filters } from "./types";
 
 function CompletionFilter({ filters, change }: { filters: Filters; change: (next: Partial<Filters>) => void }) {
   const { t } = useTranslation();
-  return <Select value={filters.isComplete === undefined ? "all" : String(filters.isComplete)} onValueChange={(value) => change({ isComplete: value === "all" ? undefined : value === "true" })}><SelectTrigger className="h-11 min-w-36 sm:h-10" aria-label={t("tasks.completion")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("tasks.allCompletion")}</SelectItem><SelectItem value="false">{t("tasks.incomplete")}</SelectItem><SelectItem value="true">{t("tasks.complete")}</SelectItem></SelectContent></Select>;
+  return <Select value={filters.isComplete === undefined ? "all" : String(filters.isComplete)} onValueChange={(value) => change({ isComplete: value === "all" ? undefined : value === "true" })}><SelectTrigger className="h-11 min-w-36" aria-label={t("tasks.completion")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("tasks.allCompletion")}</SelectItem><SelectItem value="false">{t("tasks.incomplete")}</SelectItem><SelectItem value="true">{t("tasks.complete")}</SelectItem></SelectContent></Select>;
 }
 
 export function TaskFilters({ filters, boardId, tasks }: { filters: Filters; boardId?: string; tasks: Task[] }) {
@@ -50,11 +50,11 @@ export function TaskFilters({ filters, boardId, tasks }: { filters: Filters; boa
     change({ [key]: next.length ? next : undefined });
   }
   const advancedCount = (filters.memberIds?.length ?? 0) + (filters.labelIds?.length ?? 0) + Number(filters.status !== undefined && filters.status !== "ACTIVE") + Number(filters.isComplete !== undefined);
-  return <div className="space-y-3">
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-40 flex-1"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3.5 size-4 sm:top-3 text-muted-foreground" /><Input type="search" aria-label={t("tasks.keyword")} placeholder={t("tasks.keyword")} maxLength={100} value={keyword} onChange={(event) => setDraft({ source: currentKeyword, value: event.target.value })} className="h-11 pl-9 sm:h-10" /></div>
+  return <div className="task-filters flex flex-wrap items-center gap-2">
+    <div className="contents">
+      <div className="task-filter-search relative min-w-40 flex-[1_1_14rem]"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label={t("tasks.keyword")} placeholder={t("tasks.keyword")} maxLength={100} value={keyword} onChange={(event) => setDraft({ source: currentKeyword, value: event.target.value })} className="h-11 pl-9" /></div>
       <div className="hidden sm:block"><CompletionFilter filters={filters} change={change} /></div>
-      <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><Button variant="outline" className="h-11 sm:h-10" aria-label={t("tasks.filters")}><SlidersHorizontal className="size-4" /><span className="hidden sm:inline">{t("tasks.filters")}</span>{advancedCount > 0 && <span className="tabular-nums">{advancedCount}</span>}</Button></PopoverTrigger><PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] max-h-[min(36rem,75dvh)] overflow-y-auto space-y-4">
+      <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><Button variant="outline" className="h-11" aria-label={t("tasks.filters")}><SlidersHorizontal className="size-4" /><span className="hidden sm:inline">{t("tasks.filters")}</span>{advancedCount > 0 && <span className="tabular-nums">{advancedCount}</span>}</Button></PopoverTrigger><PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))] max-h-[min(36rem,75dvh)] overflow-y-auto space-y-4">
         <div><h2 className="text-sm font-semibold">{t("tasks.filters")}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{t("tasks.filterLogic")}</p></div>
         <div className="sm:hidden"><CompletionFilter filters={filters} change={change} /></div>
         {boardId && <div className="space-y-2"><Label htmlFor="task-status">{t("tasks.lifecycle")}</Label><Select value={filters.status ?? "ACTIVE"} onValueChange={(value) => change({ status: value as Filters["status"] })}><SelectTrigger id="task-status" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{["ACTIVE", "ARCHIVED", "ALL"].map((value) => <SelectItem key={value} value={value}>{t(`tasks.${value}`)}</SelectItem>)}</SelectContent></Select></div>}
@@ -70,8 +70,8 @@ export function TaskFilters({ filters, boardId, tasks }: { filters: Filters; boa
         })}
       </PopoverContent></Popover>
     </div>
-    <div className="flex flex-wrap items-center justify-between gap-2"><ToggleGroup type="single" size="sm" spacing={1} value={filters.due ?? "all"} onValueChange={(due) => { if (due) change({ due: due === "all" ? undefined : due as Filters["due"] }); }} aria-label={t("tasks.dueFilter")} className="max-w-full overflow-x-auto rounded-md border p-1">{["all", "overdue", "soon", "none"].map((due) => <ToggleGroupItem key={due} value={due} className="h-11 rounded-sm px-1 text-xs sm:h-8 sm:px-3">{t(`tasks.due_${due}`)}</ToggleGroupItem>)}</ToggleGroup>
-      {Object.keys(filters).length > 0 && <Button size="sm" variant="ghost" className="h-11 text-muted-foreground sm:h-8" onClick={() => setParams({})}><X className="size-3.5" />{t("tasks.clearFilters")}</Button>}
+    <div className="contents"><ToggleGroup type="single" size="sm" spacing={1} value={filters.due ?? "all"} onValueChange={(due) => { if (due) change({ due: due === "all" ? undefined : due as Filters["due"] }); }} aria-label={t("tasks.dueFilter")} className="task-due-filters grid max-w-full grid-cols-4 rounded-md bg-muted">{["all", "overdue", "soon", "none"].map((due) => <ToggleGroupItem key={due} value={due} className="min-h-11 min-w-0 whitespace-normal rounded-md px-2 py-2 text-xs leading-4 data-[state=on]:bg-card data-[state=on]:ring-1 data-[state=on]:ring-border sm:px-3">{t(`tasks.due_${due}`)}</ToggleGroupItem>)}</ToggleGroup>
+      {Object.keys(filters).length > 0 && <Button size="sm" variant="ghost" className="h-11 text-muted-foreground" onClick={() => setParams({})}><X className="size-3.5" />{t("tasks.clearFilters")}</Button>}
     </div>
   </div>;
 }

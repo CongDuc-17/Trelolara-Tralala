@@ -14,7 +14,7 @@ export const testCard: CardDetailDto = {
   members: [],
   labels: [],
   checklists: [],
-  commentCount: 0,
+  attachmentCount: 0, commentCount: 0,
 };
 
 // Matches BE's POST /cards/:cardId/comments JSON envelope; dates cross HTTP as strings.

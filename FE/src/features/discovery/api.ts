@@ -10,7 +10,7 @@ export function readTaskPage(value: TaskPage, boardId?: string): TaskPage {
   const ids = new Set<string>();
   for (const card of value.items) {
     readCardBase(card, card.id);
-    if (ids.has(card.id) || !["ACTIVE", "ARCHIVED"].includes(card.status) || typeof card.isOverdue !== "boolean" || !Number.isFinite(Date.parse(card.createdAt)) ||
+    if (ids.has(card.id) || !["ACTIVE", "ARCHIVED"].includes(card.status) || typeof card.isOverdue !== "boolean" || !Number.isFinite(Date.parse(card.createdAt)) || !Number.isSafeInteger(card._count?.attachments) || card._count.attachments < 0 ||
       !card.list || card.list.id !== card.listId || typeof card.list.name !== "string" || typeof card.list.status !== "string" ||
       !card.list.board || !card.list.board.id || (boardId && card.list.board.id !== boardId) || typeof card.list.board.name !== "string" ||
       typeof card.list.board.status !== "string" || !card.list.board.projectId || typeof card.list.board.project?.status !== "string" ||

@@ -3,7 +3,7 @@ import { projectMove, sameOrder, type BoardState } from "@/features/boards/board
 import type { CardSummary } from "@/features/cards/types";
 import { newerRevision, readBoardEvent } from "@/features/boards/realtime";
 
-const card = (id: string, listId: string, position: number): CardSummary => ({ id, listId, position, title: id, description: null, status: "ACTIVE", dueDate: null, isComplete: false, reminderMinutesBefore: null, isOverdue: false, labels: [], members: [], checklists: [], commentCount: 0 });
+const card = (id: string, listId: string, position: number): CardSummary => ({ id, listId, position, title: id, description: null, status: "ACTIVE", dueDate: null, isComplete: false, reminderMinutesBefore: null, isOverdue: false, labels: [], members: [], checklists: [], attachmentCount: 0, commentCount: 0 });
 function state(): BoardState { return { lists: [{ id: "a", boardId: "b", name: "A", position: 1, status: "ACTIVE" }, { id: "b", boardId: "b", name: "B", position: 2, status: "ACTIVE" }, { id: "empty", boardId: "b", name: "Empty", position: 3, status: "ACTIVE" }], cards: { a: [card("1", "a", 1), card("2", "a", 2)], b: [card("3", "b", 1)], empty: [] } }; }
 
 it.each(["top", "bottom"] as const)("projects a move %s a destination card without mutating its source", (direction) => {

@@ -32,7 +32,7 @@ export function TaskSchedule({ enabled }: { enabled: boolean }) {
   function today() { const date = new Date(); setSelected(date); setMonth(date); }
 
   return <section aria-labelledby="schedule-title" className="space-y-4" aria-busy={query.isFetching}>
-    <Card className="gap-0 space-y-2 rounded-2xl bg-muted p-3 dark:bg-background">
+    <Card className="workspace-calendar gap-0 space-y-2 rounded-2xl bg-muted p-3 dark:bg-background">
     <p className="sr-only">{t("schedule.description")}</p>
     <Calendar mode="single" required selected={selected} onSelect={setSelected} month={month} onMonthChange={setMonth}
       className="[&_button[data-day]]:rounded-full"
@@ -46,15 +46,15 @@ export function TaskSchedule({ enabled }: { enabled: boolean }) {
       <Button size="icon" variant="ghost" className="size-11 shrink-0" disabled={query.isFetching} aria-label={t("schedule.refresh")} onClick={() => { void query.restart(); }}><RefreshCw className="size-3.5" /></Button>
     </div>
     </Card>
-    <div className="flex items-center justify-between gap-2">
-      <h2 id="schedule-title" className="text-sm font-semibold">{t("schedule.title")}</h2>
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0">
+      <h2 id="schedule-title" className="min-w-0 text-sm font-semibold">{t("schedule.title")}</h2>
       <Link to="/my-work" className="inline-flex min-h-11 shrink-0 items-center rounded-md text-xs text-muted-foreground hover:text-foreground hover:underline">{t("schedule.all")}</Link>
     </div>
     {query.isPending ? <div role="status" aria-label={t("common.loadingResource", { label: t("tasks.results").toLowerCase() })} className="space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-12 w-full" /></div> : <>
       {query.isError && <div className="space-y-2"><p role="alert" className="text-sm">{t(failedCursor ? "tasks.cursorExpired" : "tasks.loadError")}</p><Button size="sm" variant="outline" disabled={query.isFetching} onClick={() => { if (query.isFetchNextPageError && !failedCursor) void query.fetchNextPage(); else void query.restart(); }}>{t("common.retry")}</Button></div>}
-      {!denied && query.data && <div className="space-y-3">
+      {!denied && query.data && <div className="schedule-agenda space-y-3">
         <h3 className="text-xs text-muted-foreground">{selected.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "long" })}<span className="ml-2 tabular-nums">{t("schedule.count", { count: agenda.length })}</span></h3>
-        <div aria-live="polite">{agenda.length ? <ul className="space-y-2">{agenda.map((task) => <li key={task.id}><Link className="flex min-h-16 items-center gap-3 rounded-xl border bg-card p-3 focus-visible:ring-2 focus-visible:ring-ring hover:bg-accent dark:bg-background" to={`/my-work/boards/${task.list.board.id}/cards/${task.id}`}>
+        <div aria-live="polite">{agenda.length ? <ul className="space-y-2">{agenda.map((task) => <li key={task.id}><Link className="schedule-task flex min-h-16 items-center gap-3 rounded-xl border bg-card p-3 focus-visible:ring-2 focus-visible:ring-ring hover:bg-accent dark:bg-background" to={`/my-work/boards/${task.list.board.id}/cards/${task.id}`}>
           <div className="min-w-0 flex-1 space-y-1"><p className="break-words text-sm font-medium">{task.title}</p><p className="truncate text-xs text-muted-foreground">{task.list.board.name}</p></div>
           <p className={`shrink-0 text-right text-xs tabular-nums ${Date.parse(task.dueDate!) < now ? "text-destructive" : "text-muted-foreground"}`}><time dateTime={task.dueDate!}>{new Date(task.dueDate!).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>{Date.parse(task.dueDate!) < now && <span className="mt-1 block">{t("deadline.overdue")}</span>}</p>
         </Link></li>)}</ul> : <p className="rounded-xl bg-muted p-4 text-sm text-muted-foreground dark:bg-background">{t(query.hasNextPage ? "schedule.emptyLoaded" : "schedule.empty")}</p>}</div>

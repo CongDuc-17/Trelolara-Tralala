@@ -1,7 +1,8 @@
 import { useId, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ export function AddLabel({ labelsBoard, selectedLabels }: { labelsBoard: BoardLa
   const [color, setColor] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const busy = useRef(false);
   const id = useId();
   const pending = actions.pending || saveLabel.pending;
@@ -50,7 +52,14 @@ export function AddLabel({ labelsBoard, selectedLabels }: { labelsBoard: BoardLa
     catch (error) { setError(saveLabel.errorMessage(error)); }
     finally { busy.current = false; }
   }
-  return <Popover open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}><div className="space-y-2">
+  async function remove() {
+    if (!editing || busy.current) return;
+    busy.current = true; setError("");
+    try { await actions.deleteLabel(editing.id); setDeleting(false); setEditor(false); setEditing(null); setOpen(false); }
+    catch (failure) { setError(getApiError(failure).message); }
+    finally { busy.current = false; }
+  }
+  return <><Popover open={open} onOpenChange={(value) => { if (!pending && !deleting) setOpen(value); }}><div className="space-y-2">
     {selectedLabels.length ? <div className="flex flex-wrap gap-1.5">{selectedLabels.map((label) => <LabelBadge key={label.id} label={label} />)}</div> : <p className="text-xs text-muted-foreground">{t("card.noLabels")}</p>}
     <PopoverTrigger asChild><Button variant="outline" size="sm" aria-label={t("cardLabels.trigger")}><Plus className="size-4" />{t("card.labels")}</Button></PopoverTrigger>
   </div>
@@ -59,7 +68,8 @@ export function AddLabel({ labelsBoard, selectedLabels }: { labelsBoard: BoardLa
         <fieldset disabled={pending} className="space-y-2"><legend className="mb-2 text-sm font-medium">{t("cardLabels.color")}</legend><div className="flex flex-wrap gap-2">{colors.map((value) => <Button key={value} type="button" variant="outline" size="icon" aria-label={t("cardLabels.chooseColor", { color: value })} aria-pressed={color === value} className={`size-9 border-2 ring-offset-2 ring-offset-popover ${color === value ? "border-foreground ring-2 ring-ring" : "border-transparent"}`} style={{ backgroundColor: value }} onClick={() => setColor(value)} />)}</div></fieldset>
         <div className="space-y-2"><Label htmlFor={`${id}-name`}>{t("cardLabels.name")}</Label><Input id={`${id}-name`} placeholder={t("cardLabels.placeholder")} value={name} disabled={pending} onChange={(event) => setName(event.target.value)} autoFocus /></div>
         {color && <LabelBadge label={{ name: name || t("cardLabels.preview"), color }} />}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {error && !deleting && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {editing && <Button type="button" variant="outline" className="w-full text-destructive" disabled={pending} onClick={() => { setError(""); setDeleting(true); }}><Trash2 className="size-4" />{t("cardLabels.delete")}</Button>}
         <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={pending} onClick={() => { setEditor(false); setError(""); }}>{t("common.cancel")}</Button><Button type="submit" disabled={pending || !name.trim() || !color}>{t(editing ? "common.update" : "common.create")}</Button></div>
       </form> : <div className="space-y-4"><div className="space-y-2"><h3 className="text-sm font-semibold">{t("cardLabels.title")}</h3><p className="text-sm text-muted-foreground">{t("cardLabels.description")}</p></div><div className="space-y-2"><Label htmlFor={`${id}-search`}>{t("cardLabels.search")}</Label><Input id={`${id}-search`} value={search} onChange={(event) => setSearch(event.target.value)} /></div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -67,5 +77,5 @@ export function AddLabel({ labelsBoard, selectedLabels }: { labelsBoard: BoardLa
         <Button type="button" variant="outline" className="w-full" disabled={pending} onClick={() => start(null)}><Plus className="size-4" />{t("cardLabels.create")}</Button>
       </div>}
     </PopoverContent>
-  </Popover>;
+  </Popover><AlertDialog open={deleting} onOpenChange={(value) => { if (!pending) { setDeleting(value); setError(""); } }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t("cardLabels.deleteTitle", { name: editing?.name })}</AlertDialogTitle><AlertDialogDescription>{t("cardLabels.deleteHint")}</AlertDialogDescription></AlertDialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<AlertDialogFooter><AlertDialogCancel disabled={pending}>{t("common.cancel")}</AlertDialogCancel><Button variant="destructive" disabled={pending} onClick={() => { void remove(); }}>{t("common.delete")}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog></>;
 }

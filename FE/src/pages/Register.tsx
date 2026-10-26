@@ -63,8 +63,8 @@ export function Register() {
     }
   }
 
-  return <AccessLayout title={t("auth.registerTitle")} description={t("auth.registerDescription")}>
-    <form id="register-form" onSubmit={handleRegister} className="space-y-4" aria-busy={loading}>
+  return <AccessLayout backdrop title={t("auth.registerTitle")} description={t("auth.registerDescription")}>
+    <form id="register-form" onSubmit={handleRegister} className="auth-form space-y-4" aria-busy={loading}>
       <div className="space-y-2"><Label htmlFor="name">{t("profile.name")}</Label><Input id="name" name="name" minLength={2} maxLength={100} autoComplete="name" required disabled={loading} className="h-11" value={name} onChange={(event) => setName(event.target.value)} /></div>
       <div className="space-y-2"><Label htmlFor="email">{t("profile.email")}</Label><Input id="email" name="email" type="email" autoComplete="email" required disabled={loading} className="h-11" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
       <div className="space-y-2"><Label htmlFor="password">{t("auth.password")}</Label><PasswordInput id="password" name="password" minLength={8} autoComplete="new-password" required disabled={loading} value={password} onChange={(event) => setPassword(event.target.value)} /><p className="text-xs text-muted-foreground">{t("auth.passwordHint")}</p></div>

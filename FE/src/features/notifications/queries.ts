@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useSession } from "@/features/auth/session-context";
 import { getSessionVersion, refreshApiSession } from "@/lib/apiClient";
-import { getNotifications, getUnreadCount, markNotificationRead } from "./api";
+import { getNotifications, getUnreadCount, markAllNotificationsRead, markNotificationRead } from "./api";
 import { readNotificationEvent, type Notification, type NotificationPage } from "./types";
 
 export function useNotifications(isRead = false) {
@@ -22,12 +22,13 @@ export function useNotifications(isRead = false) {
   });
   const count = useQuery({ queryKey: countKey, enabled: !!userId, queryFn: ({ signal }) => getUnreadCount(signal) });
   const read = useMutation({
-    mutationFn: markNotificationRead,
+    mutationFn: (id: string | undefined) => id === undefined ? markAllNotificationsRead() : markNotificationRead(id),
     onSuccess: (_, id) => {
       if (version !== getSessionVersion()) return;
       void client.cancelQueries({ queryKey: listScope });
       for (const [key, data] of client.getQueriesData<InfiniteData<NotificationPage>>({ queryKey: listScope })) {
         if (!data) continue;
+        if (id === undefined) { client.setQueryData(key, { ...data, pages: data.pages.slice(0, 1), pageParams: data.pageParams.slice(0, 1) }); continue; }
         client.setQueryData(key, { ...data, pages: data.pages.map((page) => ({ ...page, items: page.items.map((item) => item.id === id ? { ...item, isRead: true } : item).filter((item) => item.isRead === key.at(-1)) })) });
       }
       void client.invalidateQueries({ queryKey: listScope });
@@ -147,7 +148,8 @@ export function useNotifications(isRead = false) {
     },
     loadNextPage: () => { if (!list.isFetching && list.hasNextPage) void list.fetchNextPage(); },
     markRead: (notification: Notification) => {
-      if (!notification.isRead && !(read.isPending && read.variables === notification.id)) read.mutate(notification.id);
+      if (!notification.isRead && !(read.isPending && (read.variables === undefined || read.variables === notification.id))) read.mutate(notification.id);
     },
+    markAllRead: () => { if (!read.isPending && (count.data ?? 0) > 0) read.mutate(undefined); },
   };
 }

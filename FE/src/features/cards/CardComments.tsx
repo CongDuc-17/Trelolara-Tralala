@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useSession } from "@/features/auth/session-context";
 import { getApiError } from "@/lib/errors";
 import { useCardActions } from "./queries";
@@ -28,8 +27,8 @@ export function CardComments({ card, boardId }: { card: CardDetail; boardId: str
   }
   return <section aria-labelledby="card-comments-title" className="min-w-0 space-y-4 border-t pt-6 md:col-start-1">
     <h2 id="card-comments-title" className="text-base font-semibold">{t("comments.title")}</h2>
-    <form onSubmit={save} className="space-y-2"><Label htmlFor="comments">{t(editingId ? "comments.editing" : "comments.title")}</Label>
-      <Input ref={input} id="comments" name="comments" placeholder={t("comments.placeholder")} value={content} disabled={actions.pending} onChange={(event) => setContent(event.target.value)} />
+    <form onSubmit={save} className="space-y-2">
+      <Input ref={input} id="comments" name="comments" aria-label={t(editingId ? "comments.editing" : "comments.title")} placeholder={t("comments.placeholder")} value={content} disabled={actions.pending} onChange={(event) => setContent(event.target.value)} />
       <div className="flex flex-wrap gap-2"><Button type="submit" size="sm" disabled={actions.pending || !content.trim()}>{t(editingId ? "common.update" : "comments.send")}</Button>{editingId && <Button type="button" size="sm" variant="ghost" disabled={actions.pending} onClick={() => { setEditingId(null); setContent(""); }}>{t("common.cancel")}</Button>}</div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </form>

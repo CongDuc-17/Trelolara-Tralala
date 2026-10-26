@@ -13,6 +13,7 @@ export const cardBasicResponseDtoSchema = z.object({
 	labelCount: z.number(),
 	checklistCount: z.number(),
 	commentCount: z.number(),
+	attachmentCount: z.number().int().nonnegative(),
 	_links: z.object({
 		members: z.string(),
 		labels: z.string(),

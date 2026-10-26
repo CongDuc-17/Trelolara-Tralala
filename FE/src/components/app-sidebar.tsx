@@ -13,7 +13,7 @@ export function AppSidebar() {
   function closeMobile() { if (isMobile) setOpenMobile(false); }
   return <Sidebar collapsible="icon" variant="floating" className="dashboard-rail p-0 md:inset-y-5 md:left-5 md:h-auto">
     <SidebarHeader className="items-center gap-2 px-0 py-4">
-      <Link to="/dashboard" onClick={closeMobile} className="inline-flex size-11 items-center justify-center rounded-md" aria-label={`Trelolara — ${t("nav.overview")}`} title="Trelolara"><Columns3 className="size-5 text-primary" /></Link>
+      <Link to="/dashboard" onClick={closeMobile} className="workspace-brand inline-flex size-11 items-center justify-center rounded-md" aria-label={`Trelolara — ${t("nav.overview")}`} title="Trelolara"><Columns3 className="size-5 text-primary" /></Link>
       {isMobile && <SidebarMenuButton className="size-9 justify-center p-0" onClick={closeMobile} aria-label={t("nav.close")}><X /></SidebarMenuButton>}
     </SidebarHeader>
     <SidebarContent className="py-3">
@@ -33,6 +33,10 @@ export function AppSidebar() {
         </SidebarMenu>
       </nav>
     </SidebarContent>
-    <SidebarFooter className="items-center gap-4 px-0 pb-5"><DisplayPreferences sidebar /><SidebarLogout /></SidebarFooter>
+    <SidebarFooter className="items-center gap-4 px-0 pb-5">
+      <div className="rail-preferences-full"><DisplayPreferences sidebar /></div>
+      <div className="rail-preferences-menu"><DisplayPreferences /></div>
+      <SidebarLogout />
+    </SidebarFooter>
   </Sidebar>;
 }

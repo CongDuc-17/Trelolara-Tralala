@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/apiClient";
-import type { CardBase, CardDetailDto, CardListDto, CardRow, Checklist, ChecklistItemDto, CommentDto, Label, LabelInput, MoveCardInput, UpdateCardInput } from "./types";
+import i18n from "@/app/i18n";
+import type { CardActivityPage, CardAttachment, CardBase, CardDetailDto, CardListDto, CardRow, Checklist, ChecklistItemDto, CommentDto, Label, LabelInput, MoveCardInput, UpdateCardInput } from "./types";
 
 export async function getCard(id: string, signal?: AbortSignal) {
   return (await apiClient.get<CardBase>(`/cards/${id}`, { signal })).data;
@@ -56,3 +57,37 @@ export function addCardMember(cardId: string, userId: string) {
 export function removeCardMember(cardId: string, userId: string) {
   return apiClient.delete<null>(`/cards/${cardId}/members/${userId}`);
 }
+
+export async function getAttachments(cardId: string, signal: AbortSignal) {
+  const { data, success } = await apiClient.get<CardAttachment[]>(`/cards/${encodeURIComponent(cardId)}/attachments`, { signal });
+  if (!success || !Array.isArray(data) || data.some((file) => !file || file.cardId !== cardId || typeof file.id !== "string" || !file.id || typeof file.userId !== "string" || typeof file.fileName !== "string" || !Number.isSafeInteger(file.fileSize) || file.fileSize < 0 || typeof file.createdAt !== "string" || !Number.isFinite(Date.parse(file.createdAt)) || !(file.mimeType === null || typeof file.mimeType === "string") || !(file.downloadUrl === null || typeof file.downloadUrl === "string"))) throw new Error(i18n.t("common.invalidResponse"));
+  return data;
+}
+export async function uploadAttachment(cardId: string, file: File, signal: AbortSignal) {
+  const form = new FormData(); form.append("file", file);
+  const response = await apiClient.post<CardAttachment>(`/cards/${encodeURIComponent(cardId)}/attachments`, form, { signal });
+  if (!response.success || response.data?.cardId !== cardId || typeof response.data.id !== "string") throw new Error(i18n.t("common.invalidResponse"));
+  return response;
+}
+export async function deleteAttachment(cardId: string, id: string) {
+  const response = await apiClient.delete<null>(`/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(id)}`);
+  if (!response.success || response.data !== null) throw new Error(i18n.t("common.invalidResponse"));
+  return response;
+}
+export async function getAttachmentDownload(cardId: string, id: string) {
+  const { data, success } = await apiClient.get<{ url: string; expiresAt: string }>(`/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(id)}/download`);
+  if (!success || !data || typeof data.url !== "string" || typeof data.expiresAt !== "string") throw new Error(i18n.t("common.invalidResponse"));
+  let url: URL;
+  try { url = new URL(data.url); } catch { throw new Error(i18n.t("common.invalidResponse")); }
+  if (url.protocol !== "https:" || url.username || url.password || !Number.isFinite(Date.parse(data.expiresAt)) || Date.parse(data.expiresAt) <= Date.now()) throw new Error(i18n.t("common.invalidResponse"));
+  return url.href;
+}
+export async function getCardActivities(cardId: string, cursor: string | undefined, signal: AbortSignal) {
+  const { data, success } = await apiClient.get<CardActivityPage>(`/cards/${encodeURIComponent(cardId)}/activities`, { params: { limit: 20, ...(cursor ? { cursor } : {}) }, signal });
+  if (!success || !data || !Array.isArray(data.items) || !(data.nextCursor === null || typeof data.nextCursor === "string") || data.items.some((event) => !event || event.cardId !== cardId || typeof event.id !== "string" || typeof event.action !== "string" || !event.actor || event.actor.id !== event.userId || typeof event.actor.name !== "string" || !(event.actor.avatar === null || typeof event.actor.avatar === "string") || !(event.details === null || typeof event.details === "string") || typeof event.createdAt !== "string" || !Number.isFinite(Date.parse(event.createdAt)))) throw new Error(i18n.t("common.invalidResponse"));
+  return data;
+}
+export function updateChecklistTitle(id: string, title: string) { return apiClient.patch(`/checklists/${id}`, { title }); }
+export function updateChecklistItemTitle(id: string, title: string) { return apiClient.patch(`/checklist-items/${id}`, { title }); }
+export function deleteChecklistItem(id: string) { return apiClient.delete(`/checklist-items/${id}`); }
+export function deleteBoardLabel(id: string) { return apiClient.delete(`/labels/${id}`); }

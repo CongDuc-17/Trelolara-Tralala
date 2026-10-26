@@ -51,11 +51,11 @@ export function CreateBoard({ projectId, compact = false }: { projectId: string;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {compact ? <Button className="h-11"><Plus className="size-4" />{t("createBoard.create")}</Button> : <Button type="button" variant="outline" className="h-auto min-h-28 w-full rounded-lg border-dashed bg-transparent font-normal text-muted-foreground">
+        {compact ? <Button className="h-11"><Plus className="size-4" />{t("createBoard.create")}</Button> : <Button type="button" variant="outline" className="board-create-tile h-auto min-h-28 w-full rounded-lg border-dashed bg-transparent font-normal text-muted-foreground">
           <Plus className="size-4" />{t("createBoard.add")}
         </Button>}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t("createBoard.title")}</DialogTitle>

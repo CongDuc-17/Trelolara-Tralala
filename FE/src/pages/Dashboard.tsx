@@ -24,9 +24,9 @@ export function Dashboard() {
   ];
 
   return (
-        <div className="min-w-0 space-y-4 p-4 md:space-y-6 md:p-6">
+        <div className="app-page min-w-0 space-y-4 p-4 md:space-y-6 md:p-6">
           <header className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 space-y-1"><h1 className="text-2xl font-semibold tracking-tight">{t("overview.title")}</h1><p className="text-sm leading-6 text-muted-foreground">{t("overview.description")}</p></div><Button asChild className="h-11"><Link to="/my-work">{t("nav.myWork")}<ArrowRight className="size-4" /></Link></Button></header>
-          <section aria-label={t("nav.workspace")} className="space-y-2 border-y py-3">
+          <section aria-label={t("nav.workspace")} className="app-summary space-y-2 border-y py-3">
             <p className="text-xs text-muted-foreground">{t(boardsQuery.hasNextPage || projectsQuery.hasNextPage ? "overview.loadedCatalog" : "overview.yourCatalog")}</p>
             <dl className="flex flex-wrap gap-x-6 gap-y-2">
               {[
@@ -48,7 +48,7 @@ export function Dashboard() {
             {projectsQuery.isSuccess && activeProjects.length === 0 && <CreateProject />}
             {groups.map((group) => group.data.length > 0 && <section key={group.id} className="space-y-4">
               <h3 className="text-sm font-medium text-muted-foreground">{group.title}</h3>
-              {group.data.map((project) => <article key={project.id} className="space-y-3 border-b pb-4 last:border-b-0 last:pb-0">
+              {group.data.map((project) => <article key={project.id} className="project-group space-y-3 border-b pb-4 last:border-b-0 last:pb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <Link to={`/projects/${project.id}`} className="inline-flex max-w-full items-center gap-2 rounded-sm font-medium hover:text-primary">

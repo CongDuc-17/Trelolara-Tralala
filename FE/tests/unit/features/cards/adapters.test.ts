@@ -5,7 +5,7 @@ import type { CardListDto } from "@/features/cards/types";
 
 it.each([null, 60, 1440] as const)("preserves nullable deadlines, false completion and reminder preference %s in both read projections", (reminderMinutesBefore) => {
   const raw = { ...testCard, dueDate: null, isComplete: false, isOverdue: false, reminderMinutesBefore };
-  const row: CardListDto = { ...raw, status: "ACTIVE", cardMembers: [], cardLabels: [], checklists: [], _count: { comments: 0 } };
+  const row: CardListDto = { ...raw, status: "ACTIVE", cardMembers: [], cardLabels: [], checklists: [], _count: { comments: 0, attachments: 0 } };
   const expected = { dueDate: null, isComplete: false, isOverdue: false, reminderMinutesBefore };
   expect(readCardDetail(raw, raw.id)).toMatchObject(expected);
   expect(readCardList([row], row.listId)[0]).toMatchObject(expected);
@@ -30,4 +30,11 @@ it("rejects a mismatched card and a missing overdue projection", () => {
   const raw = structuredClone(testCard);
   Object.assign(raw, { isOverdue: undefined });
   expect(() => readCardDetail(raw, raw.id)).toThrow();
+});
+
+it.each([-1, 1.5, undefined, "2"])("rejects invalid attachment totals: %s", (count) => {
+  const detail = { ...testCard, attachmentCount: count } as unknown as typeof testCard;
+  expect(() => readCardDetail(detail, detail.id)).toThrow();
+  const row = { ...testCard, status: "ACTIVE", cardMembers: [], cardLabels: [], checklists: [], _count: { comments: 0, attachments: count } } as unknown as CardListDto;
+  expect(() => readCardList([row], row.listId)).toThrow();
 });

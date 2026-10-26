@@ -68,8 +68,8 @@ export function Login() {
     }
   }
 
-  return <AccessLayout title={t("auth.loginTitle")} description={t("auth.loginDescription")}>
-    <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading}>
+  return <AccessLayout backdrop title={t("auth.loginTitle")} description={t("auth.loginDescription")}>
+    <form onSubmit={handleSubmit} className="auth-form space-y-4" aria-busy={isLoading}>
       <div className="space-y-2"><Label htmlFor="email">{t("profile.email")}</Label><Input id="email" name="email" type="email" autoComplete="email" required className="h-11" disabled={isLoading} value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} /></div>
       <div className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><Label htmlFor="password">{t("auth.password")}</Label><Link to={authLink("/forgot-password", returnTo)} className="rounded-sm text-sm text-muted-foreground underline-offset-4 hover:underline">{t("auth.forgot")}</Link></div><PasswordInput id="password" name="password" required minLength={8} autoComplete="current-password" disabled={isLoading} value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} /></div>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}

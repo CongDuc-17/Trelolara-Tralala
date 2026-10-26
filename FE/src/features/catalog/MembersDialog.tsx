@@ -8,18 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, X } from "lucide-react";
+import { Copy, Link as LinkIcon, Users, X } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getApiError } from "@/lib/errors";
-import { pageItems, useChangeMemberRole, useInviteMember, useMembers, useRemoveMember, useRoles } from "./queries";
+import { pageItems, useChangeMemberRole, useCreateShareLink, useInviteMember, useMembers, useRemoveMember, useRoles } from "./queries";
 import { LoadMore, QueryFeedback } from "./QueryFeedback";
 import type { Invitation, MemberScope } from "./types";
+import { PeoplePicker } from "./PeoplePicker";
 
 export function MembersDialog({ kind, id, count }: { kind: MemberScope; id: string; count?: number; }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const members = useMembers(kind, id, true);
   const roles = useRoles(kind, open);
   const invitation = useInviteMember(kind, id);
+  const shareLink = useCreateShareLink(kind, id);
+  const [mode, setMode] = useState("email");
+  const [copied, setCopied] = useState(false);
   const changeRole = useChangeMemberRole(kind, id);
   const remove = useRemoveMember(kind, id);
   const [email, setEmail] = useState("");
@@ -37,12 +42,13 @@ export function MembersDialog({ kind, id, count }: { kind: MemberScope; id: stri
   async function invite(event: FormEvent) {
     event.preventDefault();
     if (busy.current || result) return;
-    if (!email.trim() || !roleId) { setError(t("membersDialog.required")); return; }
+    if (!roleId || (mode === "email" && !email.trim())) { setError(t("membersDialog.required")); return; }
     busy.current = true;
     setPending(true);
     setError("");
+    setCopied(false);
     try {
-      setResult(await invitation.mutateAsync({ email: email.trim(), roleId }));
+      setResult(mode === "link" ? await shareLink.mutateAsync(roleId) : await invitation.mutateAsync({ email: email.trim(), roleId }));
     } catch (error) {
       setError(getApiError(error).message);
     } finally {
@@ -76,37 +82,44 @@ export function MembersDialog({ kind, id, count }: { kind: MemberScope; id: stri
         <span id={`${emailId}-preview`} className="sr-only">{t("common.members", { count: total })}{items.length ? `: ${items.slice(0, 3).map((member) => member.name).join(", ")}` : ""}</span>
       </Button>
     </DialogTrigger>
-    <DialogContent className="sm:max-w-[500px] max-h-[90dvh] overflow-y-auto">
+    <DialogContent className="sm:max-w-xl max-h-[90dvh] overflow-y-auto">
       <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{t("membersDialog.description")}</DialogDescription></DialogHeader>
+      <ToggleGroup type="single" aria-label={t("membersDialog.invitationMethod")} value={mode} onValueChange={(value) => { if (value) { setMode(value); setResult(null); setError(""); setCopied(false); } }} className="w-full bg-muted"><ToggleGroupItem value="email" className="h-11 flex-1 data-[state=on]:bg-card data-[state=on]:ring-1 data-[state=on]:ring-border" disabled={pending}>{t("membersDialog.byEmail")}</ToggleGroupItem><ToggleGroupItem value="link" className="h-11 flex-1 data-[state=on]:bg-card data-[state=on]:ring-1 data-[state=on]:ring-border" disabled={pending}><LinkIcon className="size-4" />{t("membersDialog.byLink")}</ToggleGroupItem></ToggleGroup>
       <form onSubmit={invite} className="space-y-4">
-        <div className="space-y-2"><Label htmlFor={emailId}>{t("membersDialog.email")}</Label>
+        {mode === "email" ? <div className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><Label htmlFor={emailId}>{t("membersDialog.email")}</Label><PeoplePicker disabled={pending} onSelect={(value) => { setEmail(value); setResult(null); }} /></div>
           <Input id={emailId} type="email" required value={email} disabled={pending} onChange={(event) => { setEmail(event.target.value); setResult(null); }} />
-        </div>
+        </div> : <p className="text-sm text-muted-foreground">{t("membersDialog.linkHint")}</p>}
         <QueryFeedback query={roles} empty={roles.data?.length === 0} label={t("membersDialog.roles")} />
-        <DialogFooter className="flex-col flex-wrap sm:flex-row">
+        <DialogFooter className="grid grid-cols-1 items-center sm:grid-cols-[minmax(0,1fr)_auto_auto]">
           <Select value={roleId} disabled={pending || !roles.data?.length} onValueChange={(value) => { setRoleId(value); setResult(null); }}>
-            <SelectTrigger aria-label={t("membersDialog.invitationRole")} className="w-[180px]"><SelectValue placeholder={t("membersDialog.chooseRole")} /></SelectTrigger>
+            <SelectTrigger aria-label={t("membersDialog.invitationRole")} className="w-full min-w-0"><SelectValue placeholder={t("membersDialog.chooseRole")} /></SelectTrigger>
             <SelectContent>{roles.data?.map((role) => <SelectItem key={role.id} value={role.id}>{roleLabel(role.name)}</SelectItem>)}</SelectContent>
           </Select>
           <DialogClose asChild><Button type="button" variant="outline">{t("common.close")}</Button></DialogClose>
-          <Button type="submit" disabled={pending || !!result || !roles.data?.length}>{t(pending ? "membersDialog.processing" : "membersDialog.invite")}</Button>
+          <Button type="submit" disabled={pending || !!result || !roles.data?.length}>{t(pending ? "membersDialog.processing" : mode === "link" ? "membersDialog.createLink" : "membersDialog.invite")}</Button>
         </DialogFooter>
       </form>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result && <div role="status" className="space-y-2 text-sm">
+      {result?.type === "LINK" ? <div className="space-y-2 rounded-lg border p-3">
+        <Label htmlFor={`${emailId}-link`}>{t("membersDialog.shareLink")}</Label>
+        <Input id={`${emailId}-link`} autoFocus readOnly value={`${window.location.origin}/invite/${kind}/${encodeURIComponent(result.token)}`} onFocus={(event) => event.currentTarget.select()} />
+        <p className="text-xs text-muted-foreground">{t("membersDialog.linkExpires", { date: new Date(result.expiresAt).toLocaleString(i18n.resolvedLanguage === "en" ? "en-US" : "vi-VN") })}</p>
+        <Button type="button" variant="outline" onClick={async () => { try { await navigator.clipboard.writeText(`${window.location.origin}/invite/${kind}/${encodeURIComponent(result.token)}`); setCopied(true); } catch { setError(t("membersDialog.copyFailed")); } }}><Copy className="size-4" />{t(copied ? "membersDialog.copied" : "membersDialog.copy")}</Button>
+        {copied && <p role="status" className="text-xs text-success">{t("membersDialog.copied")}</p>}
+      </div> : result && <div role="status" className="space-y-2 text-sm">
         <p>{t(result.delivery.email === "SENT" ? "membersDialog.sent" : "membersDialog.emailFailed")}</p>
         {result.delivery.notification === "FAILED" && <p>{t("membersDialog.notificationFailed")}</p>}
         <Button type="button" size="sm" variant="outline" onClick={() => { setResult(null); setEmail(""); setRoleId(""); }}>{t("membersDialog.inviteAnother")}</Button>
       </div>}
-      <div className="max-h-[300px] overflow-y-auto space-y-2">
+      <div className="space-y-2">
         <QueryFeedback query={members} empty={items.length === 0} label={t("membersDialog.resource")} />
-        {items.map((member) => <Card key={member.userId} className="flex flex-row flex-wrap justify-between items-center gap-4 p-4">
-          <div className="flex min-w-0 items-center"><Avatar><AvatarImage src={member.avatar ?? ""} alt={member.name} /><AvatarFallback>{member.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-            <div className="ml-3 min-w-0"><div className="font-semibold break-words">{member.name}</div><div className="text-xs text-muted-foreground break-all">{member.email}</div></div>
+        {items.map((member) => <Card key={member.userId} className="member-row grid grid-cols-1 items-center gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
+          <div className="flex min-w-0 items-center gap-3"><Avatar><AvatarImage src={member.avatar ?? ""} alt={member.name} /><AvatarFallback>{member.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+            <div className="min-w-0 space-y-0.5"><div className="break-words font-semibold">{member.name}</div><div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{member.email}</div></div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-2">
             <Select value={member.roleId} onValueChange={(value) => { void changeMember(member.userId, value); }} disabled={pending || !roles.data?.length}>
-              <SelectTrigger className="w-fit" aria-label={t("membersDialog.roleOf", { name: member.name })}><SelectValue placeholder={roleLabel(member.roleName)} /></SelectTrigger>
+              <SelectTrigger className="w-full min-w-0" aria-label={t("membersDialog.roleOf", { name: member.name })}><SelectValue placeholder={roleLabel(member.roleName)} /></SelectTrigger>
               <SelectContent>{!roles.data?.some((role) => role.id === member.roleId) && <SelectItem value={member.roleId} disabled>{roleLabel(member.roleName)}</SelectItem>}
                 {roles.data?.map((role) => <SelectItem key={role.id} value={role.id}>{roleLabel(role.name)}</SelectItem>)}
               </SelectContent>

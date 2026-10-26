@@ -50,6 +50,7 @@ export type RemoveMemberInput = { userId: string; };
 export type InviteMemberInput = { email: string; roleId: string; };
 export type CatalogLifecycleInput = { kind: MemberScope; id: string; action: "archive" | "restore" | "delete"; };
 export type InvitationAction = "accept" | "reject";
+export type Person = { id: string; name: string; email: string; avatar?: string | null; address?: string | null; bio?: string | null; createdAt?: string };
 export type Invitation = {
   id: string;
   token: string;

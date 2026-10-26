@@ -3,3 +3,5 @@ dist
 .env
 /generated/prisma
 /src/models
+*.md
+*.sql

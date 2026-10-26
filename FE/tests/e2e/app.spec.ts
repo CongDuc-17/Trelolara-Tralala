@@ -1,5 +1,75 @@
 import { test, expect } from "./fixture";
 
+test("task row controls stay centered with wrapped titles and multiple members", async ({ page, api }, info) => {
+  await page.route("http://api.e2e.test/cards/c1", async (route) => {
+    if (route.request().method() === "PATCH") await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fallback();
+  });
+  api.cards[0].title = "Đối chiếu kế hoạch phát hành và cập nhật công việc cùng các thành viên";
+  api.cards[0].cardLabels = [{ id: "assignment-label", label: { id: "review", name: "Cần duyệt nội dung phát hành", color: "#ef4444" } }];
+  api.cards[0].cardMembers.push({ id: "second-assignment", userId: "00000000-0000-4000-8000-000000000102", user: { ...api.user, id: "00000000-0000-4000-8000-000000000102", name: "Phạm Minh Hằng" } });
+  await page.goto("/my-work");
+  const row = page.locator("li").filter({ has: page.locator("#task-link-c1") });
+  const complete = row.getByRole("button", { name: new RegExp(api.cards[0].title) });
+  await expect(complete).toBeVisible();
+  const search = (await page.getByRole("searchbox").boundingBox())!;
+  const searchIcon = (await page.locator(".task-filters svg.lucide-search").boundingBox())!;
+  expect(Math.abs(searchIcon.y + searchIcon.height / 2 - search.y - search.height / 2)).toBeLessThanOrEqual(1);
+  for (const checked of [false, true]) {
+    if (checked) await complete.click();
+    await expect(complete).toHaveAttribute("aria-pressed", String(checked));
+    if (checked) {
+      await expect(complete).toBeEnabled();
+      await expect(complete).toBeFocused();
+    }
+    const bounds = (await row.boundingBox())!;
+    const button = (await complete.boundingBox())!;
+    expect(Math.abs(button.y + button.height / 2 - bounds.y - bounds.height / 2)).toBeLessThanOrEqual(1);
+    const navigationArrow = row.locator("a > svg.lucide-chevron-right");
+    if (await navigationArrow.count()) {
+      const arrow = (await navigationArrow.boundingBox())!;
+      expect(Math.abs(arrow.y + arrow.height / 2 - button.y - button.height / 2)).toBeLessThanOrEqual(1);
+    }
+    const mark = (await complete.locator(checked ? "svg" : "span").boundingBox())!;
+    expect(Math.abs(mark.x + mark.width / 2 - button.x - button.width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(mark.y + mark.height / 2 - button.y - button.height / 2)).toBeLessThanOrEqual(1);
+  }
+  await page.screenshot({ path: info.outputPath("task-alignment.jpg") });
+});
+
+test("member dialog controls have consistent heights and aligned role columns", async ({ page, api }, info) => {
+  const members = [
+    { userId: api.user.id, boardId: "board", name: "Nguyễn Minh Anh", email: "minhanh@example.test", avatar: null, roleId: "admin", roleName: "BOARD_ADMIN" },
+    { userId: "00000000-0000-4000-8000-000000000102", boardId: "board", name: "Phạm Minh Hằng — Nhóm nghiên cứu sản phẩm", email: "minh.hang.research.team@example.test", avatar: null, roleId: "viewer", roleName: "BOARD_VIEWER" },
+  ];
+  const headers = { "Access-Control-Allow-Origin": "http://127.0.0.1:4173", "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,OPTIONS" };
+  await page.route(/\/boards\/board\/members(?:\?|$)/, (route) => route.request().method() === "OPTIONS" ? route.fulfill({ status: 204, headers }) : route.fulfill({ headers, json: { success: true, data: members } }));
+  await page.route(/\/roles(?:\?|$)/, (route) => route.request().method() === "OPTIONS" ? route.fulfill({ status: 204, headers }) : route.fulfill({ headers, json: { success: true, data: [{ id: "admin", name: "BOARD_ADMIN", status: "ACTIVE" }, { id: "viewer", name: "BOARD_VIEWER", status: "ACTIVE" }] } }));
+  await page.goto("/boards/board");
+  await expect(page.locator(".board-header")).toBeVisible();
+  for (const control of await page.locator(".board-header .ui-button").all()) {
+    expect((await control.boundingBox())!.height).toBe(44);
+  }
+  await page.getByRole("button", { name: "Thành viên bảng", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const footer = dialog.locator('[data-slot="dialog-footer"]');
+  const controls = await footer.locator("button").all();
+  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
+  for (const box of boxes) expect(Math.abs(box!.height - boxes[0]!.height)).toBeLessThanOrEqual(1);
+  if (info.project.use.viewport!.width >= 640) {
+    for (const box of boxes) expect(Math.abs(box!.y - boxes[0]!.y)).toBeLessThanOrEqual(1);
+  } else {
+    for (const box of boxes) expect(Math.abs(box!.width - boxes[0]!.width)).toBeLessThanOrEqual(1);
+  }
+  await expect(dialog.locator(".member-row")).toHaveCount(2);
+  const roles = await dialog.getByRole("combobox", { name: /Vai trò của/ }).all();
+  const roleBoxes = await Promise.all(roles.map((role) => role.boundingBox()));
+  expect(Math.abs(roleBoxes[0]!.x - roleBoxes[1]!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(roleBoxes[0]!.width - roleBoxes[1]!.width)).toBeLessThanOrEqual(1);
+  expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath("member-alignment.jpg") });
+});
+
 test.beforeEach(async ({ api }) => { expect(api.authenticated).toBe(true); });
 
 test("login keeps failed drafts, defers private chunks and returns to the requested card", async ({ page, api }) => {
@@ -140,6 +210,10 @@ test("keyboard and pointer drag preserve confirmed ordering", async ({ page, api
 });
 
 test("card hover completion, colored labels and aligned task dates work without opening details", async ({ page, api }, info) => {
+  await page.route("http://api.e2e.test/cards/c1", async (route) => {
+    if (route.request().method() === "PATCH") await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fallback();
+  });
   api.cards[0].dueDate = "2026-11-10T12:27:00.000Z";
   api.cards[0].cardLabels = [{ id: "cl1", label: { id: "label1", name: "Cần duyệt", color: "#ef4444" } }];
   await page.goto("/boards/board");
@@ -213,7 +287,8 @@ test("core screens fit the viewport and retain semantic controls", async ({ page
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator("button button, a button, button a").count()).toBe(0);
     expect(await page.locator("body").evaluate((node) => getComputedStyle(node).fontSize)).toBe("14px");
-    expect(await page.locator("h1").first().evaluate((node) => getComputedStyle(node).fontSize)).toBe("22px");
+    const compactTitle = name === "board" || name === "card" || (info.project.use.viewport!.width < 640 && name !== "login");
+    expect(await page.locator("h1").first().evaluate((node) => getComputedStyle(node).fontSize)).toBe(compactTitle ? "22px" : "26px");
     await page.screenshot({ path: info.outputPath(name + ".jpg") });
   }
 });
@@ -251,6 +326,17 @@ test("the shadcn calendar marks assigned due dates and opens the selected day's 
   await expect(panel.getByRole("heading", { name: "Lịch công việc" })).toBeVisible();
   const today = panel.locator(`button[data-day="${dates.todayKey}"]`);
   await expect(today).toHaveAttribute("aria-label", /1 công việc đến hạn/);
+  expect(await panel.locator(".dashboard-context-content").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  const geometry = await panel.locator(".workspace-calendar").evaluate((node) => {
+    const calendar = node.getBoundingClientRect();
+    return { left: calendar.left, right: calendar.right, controls: Array.from(node.querySelectorAll("button"), (button) => { const box = button.getBoundingClientRect(); return { left: box.left, right: box.right, width: box.width }; }) };
+  });
+  expect(geometry.controls.length).toBeGreaterThan(28);
+  for (const box of geometry.controls) {
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.left).toBeGreaterThanOrEqual(geometry.left - 1);
+    expect(box.right).toBeLessThanOrEqual(geometry.right + 1);
+  }
   await expect(panel.getByRole("link", { name: new RegExp(api.cards[0].title) })).toBeVisible();
   await expect(page.locator("#board-card-c1")).toBeVisible();
   await page.screenshot({ path: info.outputPath("schedule.jpg") });
@@ -308,6 +394,8 @@ test("projects use grouped cards and the account identity stays at the top of th
   await page.screenshot({ path: info.outputPath("account-panel.jpg") });
   if (info.project.use.viewport!.width < 1280) await page.locator("#dashboard-context-close").click();
   await page.getByRole("button", { name: "Tạo dự án", exact: true }).click();
+  const footerButtons = await page.getByRole("dialog").locator('[data-slot="dialog-footer"] button').all();
+  for (const button of footerButtons) expect((await button.boundingBox())!.height).toBe(44);
   await page.getByLabel("Tên dự án", { exact: true }).fill("Dự án mới của nhóm");
   await page.getByRole("button", { name: "Tạo dự án", exact: true }).click();
   await expect(managed.getByRole("link", { name: "Dự án mới của nhóm", exact: true })).toBeVisible();
@@ -352,7 +440,7 @@ test("compact sidebar switches persist and archives open in the center", async (
   {
     const rail = phone ? page.locator('[data-mobile="true"][data-slot="sidebar"]') : page.locator('[data-slot="sidebar-inner"]');
     const railBox = (await rail.boundingBox())!;
-    for (const button of await rail.locator('nav [data-slot="sidebar-menu-button"], [data-slot="sidebar-footer"] button').all()) {
+    for (const button of await rail.locator('nav [data-slot="sidebar-menu-button"], [data-slot="sidebar-footer"] button:visible').all()) {
       const box = (await button.boundingBox())!;
       expect(Math.abs(box.x + box.width / 2 - railBox.x - railBox.width / 2)).toBeLessThan(1);
       const icon = button.locator("svg");
@@ -363,8 +451,9 @@ test("compact sidebar switches persist and archives open in the center", async (
     }
     for (const button of await rail.getByRole("group").getByRole("radio").all()) {
       const box = (await button.boundingBox())!;
-      expect(box.width).toBe(32);
-      expect(box.height).toBe(32);
+      const switchSize = info.project.use.viewport!.width < 640 ? 44 : 36;
+      expect(box.width).toBe(switchSize);
+      expect(box.height).toBe(switchSize);
     }
     for (const group of await rail.getByRole("group").all()) {
       const selected = group.getByRole("radio", { checked: true });
@@ -400,6 +489,15 @@ test("compact sidebar switches persist and archives open in the center", async (
   await page.keyboard.press("Escape");
   await expect(page.locator("#dashboard-context")).toBeHidden();
   await expect(page.locator("#dashboard-context-toggle")).toBeFocused();
+  await page.setViewportSize({ ...info.project.use.viewport!, height: 390 });
+  if (phone) await page.getByRole("button", { name: "Mở điều hướng", exact: true }).click();
+  const shortRail = phone ? page.locator('[data-mobile="true"][data-slot="sidebar"]') : page.locator('[data-slot="sidebar-inner"]');
+  expect((await shortRail.locator('[data-slot="sidebar-content"]').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const preferences = shortRail.getByRole("button", { name: "Tùy chọn hiển thị", exact: true });
+  await preferences.click();
+  await expect(page.getByRole("menuitemradio", { name: "English", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preferences).toBeFocused();
 });
 
 test("board backgrounds cover the compact and detailed board tiles", async ({ page, api }, info) => {

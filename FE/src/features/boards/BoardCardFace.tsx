@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Circle, CircleCheck, MessageSquareText, SquareCheck } from "lucide-react";
+import { Circle, CircleCheck, MessageSquareText, Paperclip, SquareCheck } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
 
@@ -18,8 +18,9 @@ export function BoardCardFace({ card, title }: { card: CardSummary; title?: Reac
     </div>}
     <div className="flex items-start gap-3 pr-7 text-sm leading-5">{title ?? <>{card.isComplete ? <CircleCheck aria-hidden="true" className="size-5 shrink-0 text-success" /> : <Circle aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />}<span className={`min-w-0 break-words ${card.isComplete ? "text-muted-foreground line-through" : ""}`}>{card.title}</span></>}</div>
     <div className="flex w-full flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-      <div className="flex items-center gap-3 tabular-nums">
+      <div className="flex flex-wrap items-center gap-3 tabular-nums">
         <span aria-label={t("board.commentCount", { count: card.commentCount })} className="inline-flex items-center gap-1"><MessageSquareText className="size-3.5" />{card.commentCount}</span>
+        {card.attachmentCount > 0 && <span role="img" aria-label={t("attachments.count", { count: card.attachmentCount })} title={t("attachments.count", { count: card.attachmentCount })} className="inline-flex items-center gap-1"><Paperclip aria-hidden="true" className="size-3.5" /><span aria-hidden="true">{card.attachmentCount}</span></span>}
         {items.length > 0 && <span aria-label={t("board.checklistCount", { completed, total: items.length })} className={`inline-flex items-center gap-1 ${completed === items.length ? "text-success" : ""}`}><SquareCheck className="size-3.5" />{completed}/{items.length}</span>}
       </div>
       {card.members.length > 0 && <AvatarGroup className="ml-auto">

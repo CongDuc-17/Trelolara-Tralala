@@ -15,7 +15,7 @@ vi.mock("@/features/auth/session-context", () => ({ useSession: () => ({ user: {
 const blocked = axiosClient.defaults.adapter;
 const now = new Date();
 const anotherDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() < 28 ? now.getDate() + 1 : now.getDate() - 1, 16);
-const task: Task = { ...testCard, status: "ACTIVE", dueDate: now.toISOString(), createdAt: now.toISOString(), list: { id: testCard.listId, name: "Đang làm", status: "ACTIVE", board: { id: "board", name: "Sản phẩm", status: "ACTIVE", projectId: "project", project: { status: "ACTIVE" } } }, cardMembers: [], cardLabels: [] };
+const task: Task = { ...testCard, _count: { attachments: 0 }, status: "ACTIVE", dueDate: now.toISOString(), createdAt: now.toISOString(), list: { id: testCard.listId, name: "Đang làm", status: "ACTIVE", board: { id: "board", name: "Sản phẩm", status: "ACTIVE", projectId: "project", project: { status: "ACTIVE" } } }, cardMembers: [], cardLabels: [] };
 let client = createQueryClient();
 let adapter: ReturnType<typeof vi.fn<AxiosAdapter>>;
 beforeEach(() => {

@@ -171,7 +171,7 @@ export function ForgotPassword() {
     setError("");
   }
 
-  return <AccessLayout title={t("auth.resetTitle")} description={step === "email" ? t("auth.resetDescription") : <>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
+  return <AccessLayout backdrop title={t("auth.resetTitle")} description={step === "email" ? t("auth.resetDescription") : <>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
     {step === "email" ? <form onSubmit={handleRequestOtp} className="space-y-5" aria-busy={isLoading}>
       <div className="space-y-2"><Label htmlFor="email">{t("profile.email")}</Label><Input id="email" name="email" type="email" autoComplete="email" required disabled={isLoading} className="h-11" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} /></div>
       {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}

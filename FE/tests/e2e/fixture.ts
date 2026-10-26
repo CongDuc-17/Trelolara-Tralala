@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test";
+import type { Checklist } from "../../src/features/cards/types";
 
 const apiOrigin = "http://api.e2e.test";
 const date = "2026-10-23T03:00:00.000Z";
@@ -6,12 +7,12 @@ const date = "2026-10-23T03:00:00.000Z";
 export function createFixture() {
   const user = { id: "00000000-0000-4000-8000-000000000101", name: "Nguyễn An", email: "an@example.test", avatar: null, address: "Thành phố Hồ Chí Minh", bio: "Điều phối sản phẩm cùng nhóm.", createdAt: date };
   const project = { id: "p1", name: "Kế hoạch sản phẩm", status: "ACTIVE", roleName: "PROJECT_ADMIN", boardsCount: 1, membersCount: 1 };
-  const board = { id: "board", projectId: project.id, name: "Phát triển sản phẩm", status: "ACTIVE", roleName: "PROJECT_ADMIN", membersCount: 1, listsCount: 3 };
+  const board = { id: "board", projectId: project.id, name: "Phát triển sản phẩm", description: "Kế hoạch chung của nhóm", status: "ACTIVE", roleName: "PROJECT_ADMIN", membersCount: 1, listsCount: 3 };
   const lists = ["Cần thực hiện", "Đang thực hiện", "Hoàn tất"].map((name, index) => ({ id: "l" + (index + 1), boardId: board.id, name, position: (index + 1) * 1000, status: "ACTIVE" }));
   const cards = ["Đối chiếu kế hoạch cùng nhóm", "Hoàn thiện hướng dẫn", "Kiểm tra bản phát hành"].map((title, index) => ({
     id: "c" + (index + 1), title, listId: index === 2 ? "l2" : "l1", description: "Giữ bản nháp khi có lỗi.", position: (index + 1) * 1000, status: "ACTIVE",
     dueDate: null as string | null, isComplete: false, isOverdue: false, reminderMinutesBefore: null as number | null, createdAt: date,
-    cardMembers: [{ id: "assignment-" + index, userId: user.id, user }], cardLabels: [] as { id: string; label: { id: string; name: string; color: string } }[], checklists: [], _count: { comments: 0 },
+    cardMembers: [{ id: "assignment-" + index, userId: user.id, user }], cardLabels: [] as { id: string; label: { id: string; name: string; color: string } }[], checklists: [] as Checklist[], _count: { comments: 0, attachments: 0 },
   }));
   const notifications = Array.from({ length: 13 }, (_, index) => ({ id: "n" + index, type: index === 1 ? "PROJECT_INVITED" : "CARD_ASSIGNED", title: "Cập nhật công việc", content: index === 1 ? "Minh Anh mời bạn tham gia dự án." : "Thẻ cần xem " + (index + 1), entityType: index === 1 ? "PROJECT" : "CARD", entityId: index === 1 ? project.id : "c1", metadata: index === 1 ? { token: "fixture-token" } : { boardId: board.id }, isRead: index === 12, createdAt: date }));
   return { user, project, board, lists, cards, notifications, authenticated: true, denied: false, failure: null as null | { path: string; status: number; message: string }, calls: [] as { method: string; path: string; search: string; body: Record<string, unknown> }[], unexpected: [] as string[], errors: [] as string[] };
@@ -74,7 +75,7 @@ export async function installFixture(page: Page, state: ReturnType<typeof create
     if (path === "/projects") return paged([state.project]);
     if (path === "/projects/p1") { if (method === "PATCH") Object.assign(state.project, body); return send(state.project); }
     if (path === "/boards" || path === "/projects/p1/boards") return paged([state.board]);
-    if (path === "/boards/board") return state.denied ? fail(403, "Quyền truy cập đã thay đổi.") : send(state.board);
+    if (path === "/boards/board") { if (method === "PATCH") Object.assign(state.board, body); return state.denied ? fail(403, "Quyền truy cập đã thay đổi.") : send(state.board); }
     if (path === "/boards/board/lists") return send(sorted(state.lists.filter((item) => !url.searchParams.has("status") || item.status === url.searchParams.get("status"))));
     if (/^\/lists\/[^/]+\/cards$/.test(path)) return send(sorted(state.cards.filter((item) => item.listId === path.split("/")[2] && (!url.searchParams.has("status") || item.status === url.searchParams.get("status")))));
     if (path === "/boards/board/labels") return send([]);
@@ -100,10 +101,11 @@ export async function installFixture(page: Page, state: ReturnType<typeof create
       const card = state.cards.find((item) => item.id === path.split("/")[2]);
       if (!card) return fail(404, "Không tìm thấy thẻ.");
       if (method === "PATCH") Object.assign(card, body);
-      return send({ ...card, commentCount: card._count.comments, members: card.cardMembers.map((member) => ({ id: member.id, userId: member.userId, userName: member.user.name, userAvatar: member.user.avatar })), labels: card.cardLabels.map(({ label }) => label), comments: [], checklists: [] });
+      return send({ ...card, attachmentCount: card._count.attachments, commentCount: card._count.comments, members: card.cardMembers.map((member) => ({ id: member.id, userId: member.userId, userName: member.user.name, userAvatar: member.user.avatar })), labels: card.cardLabels.map(({ label }) => label), comments: [], checklists: card.checklists });
     }
     if (path === "/notifications") return paged(state.notifications.filter((item) => item.isRead === (url.searchParams.get("isRead") === "true")));
     if (path === "/notifications/unread-count") return send({ count: state.notifications.filter((item) => !item.isRead).length });
+    if (path === "/notifications/read-all" && method === "PATCH") { state.notifications.forEach((item) => { item.isRead = true; }); return send(null); }
     if (/^\/notifications\/[^/]+\/read$/.test(path)) { const item = state.notifications.find((item) => item.id === path.split("/")[2]); if (item) item.isRead = true; return send(null); }
     if (/^\/invitations\//.test(path)) return send("Invitation accepted");
     state.unexpected.push(method + " " + path);

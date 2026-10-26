@@ -1,12 +1,13 @@
 import { apiClient, type ApiEnvelope } from "@/lib/apiClient";
+import i18n from "@/app/i18n";
 import type {
   Board, BoardDetails, BoardLabel, BoardMember, CatalogLifecycleInput, ChangeMemberRoleInput,
   CreateCatalogInput, Invitation, InvitationAction, InviteMemberInput, Member, MemberScope,
-  Project, ProjectMember, RemoveMemberInput, Role, UpdateCatalogInput,
+  Person, Project, ProjectMember, RemoveMemberInput, Role, UpdateCatalogInput,
 } from "./types";
 
-async function getPage<T>(url: string, page: number, signal: AbortSignal) {
-  const result = await apiClient.get<T[]>(url, { params: { page, limit: 10 }, signal });
+async function getPage<T>(url: string, page: number, signal: AbortSignal, filters: Record<string, string> = {}) {
+  const result = await apiClient.get<T[]>(url, { params: { page, limit: 10, ...filters }, signal });
   const pagination = result.pagination;
   if (!Array.isArray(result.data) || !pagination || pagination.currentPage !== page ||
     !Number.isInteger(pagination.totalPages) || pagination.totalPages < 0 ||
@@ -14,6 +15,16 @@ async function getPage<T>(url: string, page: number, signal: AbortSignal) {
     throw new Error("Phản hồi danh sách/phân trang không hợp lệ.");
   }
   return result;
+}
+export async function getPeople(name: string, page: number, signal: AbortSignal) {
+  const result = await getPage<Person>("/users", page, signal, name ? { name } : {});
+  if (result.data.some((person) => !person || typeof person.id !== "string" || typeof person.name !== "string" || typeof person.email !== "string" || !(person.avatar === undefined || person.avatar === null || typeof person.avatar === "string"))) throw new Error(i18n.t("common.invalidResponse"));
+  return result;
+}
+export async function getPerson(id: string, signal: AbortSignal) {
+  const { data } = await apiClient.get<Person>(`/users/${encodeURIComponent(id)}`, { signal });
+  if (!data || data.id !== id || typeof data.name !== "string" || typeof data.email !== "string" || [data.avatar, data.bio, data.address].some((value) => value !== undefined && value !== null && typeof value !== "string")) throw new Error(i18n.t("common.invalidResponse"));
+  return data;
 }
 
 export function getProjects(page: number, signal: AbortSignal) {
@@ -82,4 +93,9 @@ export async function inviteMember(kind: MemberScope, id: string, input: InviteM
 }
 export function respondToInvitation(token: string, action: InvitationAction) {
   return apiClient.post<string>(`/invitations/${encodeURIComponent(token)}/${action}`);
+}
+export async function createShareLink(kind: MemberScope, id: string, roleId: string) {
+  const { data } = await apiClient.post<Invitation>(`/invitations/${kind}/${id}/share-link`, { roleId });
+  if (data?.type !== "LINK" || typeof data.token !== "string" || !data.token || data.token.length > 512 || !Number.isFinite(Date.parse(data.expiresAt))) throw new Error(i18n.t("common.invalidResponse"));
+  return data;
 }

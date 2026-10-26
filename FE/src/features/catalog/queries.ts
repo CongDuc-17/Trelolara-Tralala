@@ -31,6 +31,11 @@ function usePages<T>(key: string[], fetchPage: (page: number, signal: AbortSigna
 
 export function useProjects() { return usePages(["projects"], api.getProjects); }
 export function useUserBoards() { return usePages(["boards"], api.getUserBoards); }
+export function usePeople(name: string, enabled: boolean) { return usePages(["people", name], (page, signal) => api.getPeople(name, page, signal), enabled); }
+export function usePerson(id: string, enabled: boolean) {
+  const scope = useScope();
+  return useQuery({ queryKey: [...scope, "person", id], enabled: enabled && !!scope[2], queryFn: ({ signal }) => api.getPerson(id, signal) });
+}
 export function useProjectBoards(id: string, enabled = true) {
   return usePages(["projects", id, "boards"], (page, signal) => api.getProjectBoards(id, page, signal), enabled && !!id);
 }
@@ -123,6 +128,9 @@ export function useRemoveMember(kind: MemberScope, id: string) {
 }
 export function useInviteMember(kind: MemberScope, id: string) {
   return useMutation({ mutationFn: (input: InviteMemberInput) => api.inviteMember(kind, id, input) });
+}
+export function useCreateShareLink(kind: MemberScope, id: string) {
+  return useMutation({ mutationFn: (roleId: string) => api.createShareLink(kind, id, roleId) });
 }
 export function useRespondToInvitation(token: string) {
   const invalidate = useInvalidateCatalog();
