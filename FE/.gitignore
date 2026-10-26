@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.e2e-live.local
+.env.e2e
+*.md

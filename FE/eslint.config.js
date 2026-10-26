@@ -20,4 +20,12 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: ['src/pages/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{ name: '@/lib/apiClient', message: 'Keep HTTP calls in features/*/api.ts and use the feature hooks in UI.' }],
+      }],
+    },
+  },
 ])

@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { User } from "./types";
+import type { LoginInput } from "./api";
 
 export type Session = {
   user: User | null;
@@ -8,7 +9,7 @@ export type Session = {
   error: unknown;
   retry: () => void;
   startSession: () => void;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
+  login: (credentials: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
   getMyInformation: () => Promise<void>;
 };

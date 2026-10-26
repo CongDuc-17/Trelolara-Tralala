@@ -1,149 +1,47 @@
+import { useId, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { useBoards } from "@/hooks/useBoards";
-import { useEffect } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { pageItems, useMembers } from "@/features/catalog/queries";
+import { QueryFeedback } from "@/features/catalog/QueryFeedback";
+import { useCardActions } from "@/features/cards/queries";
+import type { CardMember } from "@/features/cards/types";
+import { getApiError } from "@/lib/errors";
 
-import { useParams } from "react-router-dom";
-import { apiClient } from "@/lib/apiClient";
-import { Plus, X } from "lucide-react";
-import { useCardsStore } from "@/stores/cards.store";
-export function AddMember({ membersCard = [] }: { membersCard: any[] }) {
-  const cardId = useParams().cardId as string;
-  const { boardMembers, fetchBoardMembers } = useBoards();
-  const { addMember, removeMember } = useCardsStore();
-  // Lấy list userId đã có trên card
-  const cardMemberIds = membersCard.map(
-    (member) => member.userId || member.user?.id,
-  );
-
-  async function handleAddMemberToCard(memberId: string) {
-    try {
-      await apiClient.post(`/cards/${cardId}/members`, {
-        userId: memberId,
-      });
-
-      // Optimistic update
-      const memberToAdd = boardMembers.find(
-        (member) => member.userId === memberId,
-      );
-      if (memberToAdd) {
-        const newMember = {
-          id: memberId,
-          name: memberToAdd.name,
-          avatar: memberToAdd.avatar,
-        };
-
-        addMember(cardId, newMember);
-      }
-    } catch (error) {
-      console.error("Error adding member to card:", error);
-    }
+export function AddMember({ membersCard = [] }: { membersCard: CardMember[] }) {
+  const { t, i18n } = useTranslation();
+  const { boardId = "", cardId = "" } = useParams();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const members = useMembers("boards", boardId, open);
+  const actions = useCardActions(boardId, cardId);
+  const busy = useRef(false);
+  const id = useId();
+  const needle = search.trim().toLocaleLowerCase(i18n.resolvedLanguage);
+  const assigned = new Set(membersCard.map((member) => member.userId));
+  const available = pageItems(members.data).filter((member) => !assigned.has(member.userId) && `${member.name} ${member.email}`.toLocaleLowerCase(i18n.resolvedLanguage).includes(needle));
+  async function change(userId: string, remove = false) {
+    if (busy.current) return;
+    busy.current = true; setError("");
+    try { if (remove) await actions.removeMember(userId); else await actions.addMember(userId); }
+    catch (error) { setError(getApiError(error).message); }
+    finally { busy.current = false; }
   }
-
-  async function handleRemoveMemberFromCard(memberId: string) {
-    try {
-      await apiClient.delete(`/cards/${cardId}/members/${memberId}`);
-
-      removeMember(cardId, memberId);
-    } catch (error) {
-      console.error("Error removing member from card:", error);
-    }
-  }
-
-  useEffect(() => {
-    fetchBoardMembers();
-  }, []);
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Avatar>
-          <AvatarImage src="" alt="@shadcn" className="" />
-          <AvatarFallback>
-            <Plus />
-          </AvatarFallback>
-        </Avatar>
-      </PopoverTrigger>
-      <PopoverContent className="w-80">
-        <div className="grid gap-4">
-          <div className="space-y-2">
-            <h4 className="leading-none font-medium">Add Member</h4>
-            <p className="text-sm text-muted-foreground">
-              Set the dimensions for the layer.
-            </p>
-          </div>
-          <div className="grid gap-2">
-            <Label>Search for a member to add</Label>
-            <Input id="member-search" name="member-search" type="text" />
-          </div>
-
-          <div className="flex flex-col gap-2  overflow-y-scroll   max-h-60">
-            <div className="text-sm text-muted-foreground">Member of card</div>
-            {membersCard?.map((member, index) => (
-              <Button
-                variant={"outline"}
-                className="flex justify-between h-auto items-center hover:bg-white"
-                key={member.userId || member.user.id || index}
-              >
-                <div className="flex items-center r gap-2">
-                  <Avatar key={index}>
-                    <AvatarImage
-                      src={member.user.avatar}
-                      alt={member.user.name}
-                    />
-                    <AvatarFallback>
-                      {member.user.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>{member.user?.name}</div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveMemberFromCard(
-                      member.userId || member.user?.id,
-                    );
-                  }}
-                  className="p-1 hover:bg-red-100 rounded"
-                >
-                  <X size={16} />
-                </Button>
-              </Button>
-            ))}
-            <div className="text-sm text-muted-foreground">Member of board</div>
-            {boardMembers
-              .filter((member) => !cardMemberIds.includes(member.userId))
-              .map((member, index) => (
-                <Button
-                  variant={"outline"}
-                  className="flex justify-start h-auto items-center "
-                  key={index}
-                  onClick={() => handleAddMemberToCard(member.userId)}
-                >
-                  <div className="flex items-center gap-2">
-                    <Avatar key={index}>
-                      <AvatarImage src={member.avatar} alt={member.name} />
-                      <AvatarFallback>
-                        {member.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-
-                    <div>{member.name}</div>
-                  </div>
-                </Button>
-              ))}
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
+  return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><Button variant="outline" size="sm" aria-label={t("cardMembers.trigger")}><UserPlus className="size-4" />{t("card.members")}</Button></PopoverTrigger>
+    <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))]"><div className="space-y-4"><div className="space-y-2"><h3 className="text-sm font-semibold">{t("cardMembers.title")}</h3><p className="text-sm text-muted-foreground">{t("cardMembers.description")}</p></div><div className="space-y-2"><Label htmlFor={id}>{t("cardMembers.search")}</Label><Input id={id} value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <div className="max-h-64 space-y-3 overflow-y-auto"><h4 className="text-xs font-medium text-muted-foreground">{t("cardMembers.assigned")}</h4>
+        {membersCard.filter((member) => member.userName.toLocaleLowerCase(i18n.resolvedLanguage).includes(needle)).map((member) => <div key={member.userId} className="flex min-w-0 items-center gap-2 rounded-md border p-2"><Avatar className="size-7 shrink-0"><AvatarImage src={member.userAvatar ?? undefined} alt={member.userName} /><AvatarFallback>{member.userName.charAt(0).toUpperCase()}</AvatarFallback></Avatar><span className="min-w-0 flex-1 break-words text-sm">{member.userName}</span><Button variant="ghost" size="icon" className="size-8 shrink-0 hover:text-destructive" disabled={actions.pending} aria-label={t("cardMembers.remove", { name: member.userName })} onClick={() => { void change(member.userId, true); }}><X className="size-4" /></Button></div>)}
+        <h4 className="text-xs font-medium text-muted-foreground">{t("cardMembers.available")}</h4><QueryFeedback query={members} label={t("cardMembers.resource")} />
+        {members.isSuccess && available.length === 0 && <p className="text-sm text-muted-foreground">{t("cardMembers.empty")}</p>}
+        {available.map((member) => <Button key={member.userId} aria-label={member.name} variant="ghost" className="h-auto w-full justify-start whitespace-normal p-2 text-left" disabled={actions.pending} onClick={() => { void change(member.userId); }}><Avatar className="size-7 shrink-0"><AvatarImage src={member.avatar ?? undefined} alt={member.name} /><AvatarFallback>{member.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar><span className="min-w-0 break-words"><span className="block">{member.name}</span><span className="block break-all text-xs font-normal text-muted-foreground">{member.email}</span></span></Button>)}
+      </div>
+    </div></PopoverContent>
+  </Popover>;
 }

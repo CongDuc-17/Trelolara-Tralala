@@ -1,82 +1,30 @@
-import { useState } from "react";
-import { Plus, X } from "lucide-react";
-import { KanbanBoardColumnButton } from "@/components/kanban";
+import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Plus } from "lucide-react";
+import { getApiError } from "@/lib/errors";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-export function CreateCard({
-  listId,
-  onCardCreated,
-}: {
-  listId: string;
-  onCardCreated: (listId: string, title: string) => Promise<void>;
-}) {
-  const [isCreating, setIsCreating] = useState(false);
+export function CreateCard({ listId, onCardCreated }: { listId: string; onCardCreated: (listId: string, title: string) => Promise<void> }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  async function handleCreateCard() {
-    if (!title.trim()) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      await onCardCreated(listId, title);
-      setTitle("");
-      setIsCreating(false);
-    } catch (error) {
-      console.error("Failed to create card:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const busy = useRef(false);
+  function cancel() { setOpen(false); setTitle(""); setError(""); }
+  async function create(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy.current || !title.trim()) return;
+    busy.current = true; setPending(true); setError("");
+    try { await onCardCreated(listId, title); cancel(); }
+    catch (error) { setError(getApiError(error).message); }
+    finally { busy.current = false; setPending(false); }
   }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      handleCreateCard();
-    } else if (e.key === "Escape") {
-      setTitle("");
-      setIsCreating(false);
-    }
-  }
-
-  if (isCreating) {
-    return (
-      <div className="p-2 flex gap-2">
-        <input
-          type="text"
-          placeholder="Enter title of the card..."
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          autoFocus
-          disabled={isLoading}
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
-        />
-        <button
-          onClick={handleCreateCard}
-          disabled={!title.trim() || isLoading}
-          className="px-2 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm  disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Add
-        </button>
-        <button
-          onClick={() => {
-            setTitle("");
-            setIsCreating(false);
-          }}
-          disabled={isLoading}
-          className="px-2 py-2 text-gray-500 hover:text-gray-700 disabled:opacity-50"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <KanbanBoardColumnButton onClick={() => setIsCreating(true)}>
-      <Plus className="size-4 mr-2" />
-      Add Card
-    </KanbanBoardColumnButton>
-  );
+  if (!open) return <Button type="button" variant="ghost" size="sm" className="h-9 w-full justify-start text-muted-foreground" onClick={() => setOpen(true)}><Plus className="size-4" />{t("board.addCard")}</Button>;
+  return <form onSubmit={create} className="w-full space-y-2 rounded-md p-1"><Label htmlFor={`new-card-${listId}`}>{t("board.cardTitle")}</Label><Input id={`new-card-${listId}`} placeholder={t("board.cardPlaceholder")} autoFocus value={title} maxLength={100} disabled={pending} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && !pending) { event.preventDefault(); event.stopPropagation(); cancel(); } }} className="min-w-0 bg-card" />
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <div className="flex gap-2"><Button type="submit" size="sm" disabled={pending || !title.trim()}>{t(pending ? "common.adding" : "common.add")}</Button><Button type="button" variant="ghost" size="sm" disabled={pending} onClick={cancel}>{t("common.cancel")}</Button></div>
+  </form>;
 }

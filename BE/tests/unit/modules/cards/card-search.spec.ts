@@ -134,6 +134,8 @@ describe('card discovery filters and scoped persistence', () => {
 		const f = fixture();
 		await f.repository.search(id, query, undefined, now);
 		const args = f.cards.findMany.mock.calls[0][0];
+		expect(args.select._count).toEqual({ select: { attachments: true } });
+		expect(args.select).not.toHaveProperty('attachments');
 		expect(args.where.AND[0].AND).toContainEqual({
 			cardMembers: { some: { userId: id } },
 		});

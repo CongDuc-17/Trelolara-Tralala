@@ -1,5 +1,6 @@
 import axios from "axios";
 import { ConfigurationError } from "./env";
+import i18n from "@/app/i18n";
 
 export function getErrorMessage(error: unknown, fallback: string): string {
   if (
@@ -35,10 +36,6 @@ export function getApiError(error: unknown) {
     : axios.isAxiosError(error) && !error.response ? "network"
     : "unknown";
   const fallback = kind === "configuration" && error instanceof Error ? error.message
-    : kind === "network" ? "Không thể kết nối máy chủ. Vui lòng thử lại."
-    : kind === "timeout" ? "Yêu cầu hết thời gian chờ. Vui lòng thử lại."
-    : kind === "forbidden" ? "Bạn không có quyền truy cập."
-    : kind === "unauthorized" ? "Phiên đăng nhập đã hết hạn."
-    : "Không thể hoàn tất yêu cầu. Vui lòng thử lại.";
+    : i18n.t(`errors.${["network", "timeout", "forbidden", "unauthorized"].includes(kind) ? kind : "fallback"}`);
   return { kind, status, message: getErrorMessage(error, fallback) };
 }

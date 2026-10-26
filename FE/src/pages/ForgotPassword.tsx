@@ -1,21 +1,15 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
-import { toast, Toaster } from "sonner";
-
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient } from "@/lib/apiClient";
+import { AccessLayout } from "@/components/layout/AccessLayout";
+import { PasswordInput } from "@/features/auth/PasswordInput";
 import { getApiError } from "@/lib/errors";
+import { useMemo } from "react";
+import { useResetPassword, useSendOtp } from "@/features/auth/queries";
 import { useSession } from "@/features/auth/session-context";
 import { useResendCooldown } from "@/features/auth/useResendCooldown";
 import { authLink, safeReturnTo } from "@/features/auth/redirect";
@@ -60,6 +54,9 @@ function saveEmail(email: string) {
 }
 
 export function ForgotPassword() {
+  const { t } = useTranslation();
+  const requestOtp = useSendOtp();
+  const resetPassword = useResetPassword();
   const navigate = useNavigate();
   const session = useSession();
   const [params] = useSearchParams();
@@ -69,8 +66,6 @@ export function ForgotPassword() {
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [step, setStep] = useState<"email" | "reset">(savedEmail ? "reset" : "email");
   const { resendIn, startCooldown } = useResendCooldown();
   const pending = useRef(false);
@@ -79,7 +74,7 @@ export function ForgotPassword() {
 
   const canSubmitReset = useMemo(
     () =>
-      otp.trim().length === 6 &&
+      /^\d{6}$/.test(otp.trim()) &&
       newPassword.length >= 8 &&
       confirmPassword.length >= 8 &&
       newPassword === confirmPassword,
@@ -90,7 +85,7 @@ export function ForgotPassword() {
     if (pending.current || resendIn > 0) return;
     const normalizedEmail = targetEmail.trim();
     if (!normalizedEmail) {
-      setError("Email is required");
+      setError(t("auth.emailRequired"));
       return;
     }
 
@@ -99,23 +94,18 @@ export function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      await apiClient.post(
-        "/auth/send-otp",
-        { email: normalizedEmail },
-        { withCredentials: true },
-      );
+      await requestOtp.mutateAsync({ email: normalizedEmail });
 
       saveEmail(normalizedEmail);
       setEmail(normalizedEmail);
       setStep("reset");
       startCooldown();
-      toast.success("OTP sent to your email");
+      toast.success(t("auth.codeSuccess"));
     } catch (error) {
       const issue = getApiError(error);
       if (issue.kind === "canceled") return;
       const message = issue.message;
       setError(message);
-      toast.error(message);
     } finally {
       pending.current = false;
       setIsLoading(false);
@@ -132,18 +122,18 @@ export function ForgotPassword() {
     if (pending.current) return;
     setError("");
 
-    if (otp.trim().length !== 6) {
-      setError("OTP must be 6 characters");
+    if (!/^\d{6}$/.test(otp.trim())) {
+      setError(t("auth.codeRequired"));
       return;
     }
 
     if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters");
+      setError(t("auth.passwordRequired"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("Password confirmation does not match");
+      setError(t("auth.mismatch"));
       return;
     }
 
@@ -151,26 +141,21 @@ export function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      await apiClient.post(
-        "/auth/forgot-password",
-        {
-          email: email.trim(),
-          newPassword,
-          otp: otp.trim(),
-        },
-        { withCredentials: true },
-      );
+      await resetPassword.mutateAsync({
+        email: email.trim(),
+        newPassword,
+        otp: otp.trim(),
+      });
 
       localStorage.removeItem(SAVED_EMAIL_KEY);
       session.startSession();
-      toast.success("Password reset successfully");
+      toast.success(t("auth.resetSuccess"));
       navigate(authLink("/login", returnTo), { replace: true });
     } catch (error) {
       const issue = getApiError(error);
       if (issue.kind === "canceled") return;
       const message = issue.message;
       setError(message);
-      toast.error(message);
     } finally {
       pending.current = false;
       setIsLoading(false);
@@ -186,173 +171,19 @@ export function ForgotPassword() {
     setError("");
   }
 
-  return (
-    <>
-      <Toaster position="top-right" />
-      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle><h1>Reset Password</h1></CardTitle>
-            <CardDescription>
-              {step === "email"
-                ? "Enter your email to receive a verification code"
-                : `Enter the OTP sent to ${email}`}
-            </CardDescription>
-            <CardAction>
-              <Link to={authLink("/login", returnTo)}>
-                <Button variant="link">Back to Login</Button>
-              </Link>
-            </CardAction>
-          </CardHeader>
-
-          <CardContent>
-            {step === "email" ? (
-              <form onSubmit={handleRequestOtp}>
-                <div className="flex flex-col gap-6">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Email"
-                      required
-                      disabled={isLoading}
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setError("");
-                      }}
-                    />
-                  </div>
-
-                  {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Sending OTP..." : "Send OTP"}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleResetPassword}>
-                <div className="flex flex-col gap-6">
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="otp">OTP</Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0 text-sm"
-                        disabled={isLoading || resendIn > 0}
-                        onClick={() => sendOtp()}
-                      >
-                        {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend OTP"}
-                      </Button>
-                    </div>
-                    <Input
-                      id="otp"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="6-digit OTP"
-                      required
-                      disabled={isLoading}
-                      value={otp}
-                      onChange={(e) => {
-                        setOtp(e.target.value.trim());
-                        setError("");
-                      }}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="new-password">New password</Label>
-                    <div className="relative">
-                      <Input
-                        id="new-password"
-                        type={showNewPassword ? "text" : "password"}
-                        placeholder="At least 8 characters"
-                        required
-                        minLength={8}
-                        disabled={isLoading}
-                        value={newPassword}
-                        onChange={(e) => {
-                          setNewPassword(e.target.value);
-                          setError("");
-                        }}
-                      />
-                      <button
-                        type="button"
-                        aria-label={showNewPassword ? "Hide new password" : "Show new password"}
-                        onClick={() => setShowNewPassword((current) => !current)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-900"
-                      >
-                        {showNewPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="confirm-password">Confirm password</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirm-password"
-                        type={showConfirmPassword ? "text" : "password"}
-                        placeholder="Repeat new password"
-                        required
-                        minLength={8}
-                        disabled={isLoading}
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          setError("");
-                        }}
-                      />
-                      <button
-                        type="button"
-                        aria-label={showConfirmPassword ? "Hide password confirmation" : "Show password confirmation"}
-                        onClick={() =>
-                          setShowConfirmPassword((current) => !current)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 transition-colors hover:text-gray-900"
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={isLoading || !canSubmitReset}
-                    >
-                      {isLoading ? "Resetting password..." : "Reset Password"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full"
-                      disabled={isLoading}
-                      onClick={handleChangeEmail}
-                    >
-                      Use a different email
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </>
-  );
+  return <AccessLayout backdrop title={t("auth.resetTitle")} description={step === "email" ? t("auth.resetDescription") : <>{t("auth.codeSent")} <span className="font-medium text-foreground">{email}</span></>}>
+    {step === "email" ? <form onSubmit={handleRequestOtp} className="space-y-5" aria-busy={isLoading}>
+      <div className="space-y-2"><Label htmlFor="email">{t("profile.email")}</Label><Input id="email" name="email" type="email" autoComplete="email" required disabled={isLoading} className="h-11" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} /></div>
+      {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="h-11 w-full" disabled={isLoading}>{t(isLoading ? "auth.sendingCode" : "auth.sendCode")}</Button>
+    </form> : <form onSubmit={handleResetPassword} className="space-y-4" aria-busy={isLoading}>
+      <div className="space-y-2"><Label htmlFor="otp">{t("auth.otp")}</Label><Input id="otp" name="otp" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required disabled={isLoading} value={otp} className="h-11 tracking-widest" onChange={(event) => { setOtp(event.target.value.trim()); setError(""); }} /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-muted-foreground">{t("auth.codeHint")}</span><Button type="button" variant="link" className="h-11 p-0" disabled={isLoading || resendIn > 0} onClick={() => { void sendOtp(); }}>{resendIn > 0 ? t("auth.resendIn", { seconds: resendIn }) : t("auth.resendCode")}</Button></div></div>
+      <div className="space-y-2"><Label htmlFor="new-password">{t("password.new")}</Label><PasswordInput id="new-password" name="new-password" autoComplete="new-password" required minLength={8} disabled={isLoading} value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setError(""); }} /></div>
+      <div className="space-y-2"><Label htmlFor="confirm-password">{t("auth.confirmPassword")}</Label><PasswordInput id="confirm-password" name="confirm-password" autoComplete="new-password" confirmation required minLength={8} disabled={isLoading} value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError(""); }} /></div>
+      {error && <p role="alert" className="break-words text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="h-11 w-full" disabled={isLoading || !canSubmitReset}>{t(isLoading ? "auth.resetting" : "auth.resetTitle")}</Button>
+      <Button type="button" variant="ghost" className="h-11 w-full" disabled={isLoading} onClick={handleChangeEmail}>{t("auth.differentEmail")}</Button>
+    </form>}
+    <p className="text-center text-sm"><Link to={authLink("/login", returnTo)} className="rounded-sm text-muted-foreground underline underline-offset-4">{t("auth.backToLogin")}</Link></p>
+  </AccessLayout>;
 }

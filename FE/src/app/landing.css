@@ -1,0 +1,41 @@
+.landing { display: flex; min-height: 100svh; flex-direction: column; }
+.landing .ui-button { min-height: 2.75rem; border-radius: .625rem; }
+.landing main { display: flex; flex: 1; align-items: center; justify-content: center; padding: 1rem; }
+.landing-hero { width: min(100%, 54rem); margin-inline: auto; padding-block: 1rem; text-align: center; }
+.landing-eyebrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; margin-bottom: 1.5rem; font-size: .75rem; line-height: 1.6; font-weight: 500; letter-spacing: .08em; color: var(--muted-foreground); }
+.landing-eyebrow > span { width: .375rem; height: .375rem; border-radius: 100%; background: var(--foreground); }
+.landing h1 { max-width: 16ch; margin-inline: auto; font-size: clamp(2.5rem, 5.8vw, 5.5rem); font-weight: 600; line-height: 1.06; letter-spacing: -.055em; text-wrap: balance; }
+.landing-intro { max-width: 35rem; margin: 1.5rem auto 1.75rem; color: var(--muted-foreground); font-size: 1rem; line-height: 1.8; text-wrap: pretty; }
+.landing .landing-primary { min-height: 3rem; padding-inline: 1.5rem; background: var(--primary); color: var(--primary-foreground); }
+.landing .landing-primary:hover { background: color-mix(in srgb, var(--primary) 85%, var(--card)); }
+.landing-hero-notes { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem 1.25rem; margin-top: 1.25rem; color: var(--muted-foreground); font-size: .75rem; }
+.landing-hero-notes > span { display: inline-flex; align-items: center; gap: .375rem; }
+.landing-footer { flex-shrink: 0; padding: 1rem 4rem 1.5rem; color: var(--muted-foreground); font-size: .75rem; line-height: 1.5; text-align: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .landing-hero-copy > * { animation: public-arrive 500ms cubic-bezier(.2,.8,.2,1) both; }
+  .landing-hero-copy > :nth-child(2) { animation-delay: 40ms; }
+  .landing-hero-copy > :nth-child(3) { animation-delay: 80ms; }
+  .landing-hero-copy > :nth-child(4) { animation-delay: 120ms; }
+  .landing-hero-copy > :nth-child(5) { animation-delay: 160ms; }
+  .landing-hero-copy > :focus-within { animation: none; }
+  .landing-primary:hover svg { transform: translateX(3px); }
+  .landing-primary svg { transition: transform 180ms; }
+}
+@media (max-width: 767px) {
+  .landing h1 { font-size: clamp(2.375rem, 9vw, 4rem); }
+  .landing-intro { margin-block: 1.25rem 1.5rem; }
+}
+@media (max-height: 680px) {
+  .landing .public-header { min-height: 3.5rem; }
+  .landing main { padding-block: .5rem; }
+  .landing-hero { padding-block: 0; }
+  .landing h1 { font-size: clamp(1.875rem, 6vh, 3rem); }
+  .landing-eyebrow { margin-bottom: .75rem; font-size: .6875rem; }
+  .landing-intro { margin-block: .75rem; font-size: .875rem; line-height: 1.6; }
+  .landing-hero-notes { margin-top: .75rem; }
+  .landing-footer { padding-block: .5rem; }
+}
+@media (max-height: 450px) { .landing-eyebrow, .landing-footer { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-copy > * { animation: none; }
+}

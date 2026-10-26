@@ -83,6 +83,7 @@ export interface CardQuery
 		cardLabels: number;
 		checklists: number;
 		comments: number;
+		attachments: number;
 	};
 	cardMembers?: CardMemberView[];
 	cardLabels?: CardLabelView[];
@@ -93,7 +94,7 @@ export interface CardListEntry extends CardRecord {
 	cardMembers: CardMemberView[];
 	cardLabels: CardLabelView[];
 	checklists: ChecklistView[];
-	_count: { comments: number };
+	_count: { comments: number; attachments: number };
 }
 export interface CardListSummary extends CardListEntry {
 	isOverdue: boolean;
@@ -112,6 +113,7 @@ export interface CardDetails {
 	labelCount: number;
 	checklistCount: number;
 	commentCount: number;
+	attachmentCount: number;
 	createdAt: Date;
 	_links: { members: string; labels: string; checklists: string; comments: string };
 	members?: {

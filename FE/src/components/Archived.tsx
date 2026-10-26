@@ -1,257 +1,72 @@
-import { Button } from "@/components/ui/button";
-import {
-  DialogTitle,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArchiveRestore, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider,
-} from "./ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
 import { useState } from "react";
-import type { Board, Project } from "@/hooks/useProjects";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ArchiveRestore, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import type { Board, Project } from "@/features/catalog/types";
 
 type ArchivedProps = {
   projects: Project[];
   boards: Board[];
+  pending?: boolean;
   handleRestoreProject: (projectId: string) => void;
   handleDeleteProject: (projectId: string) => void;
   handleRestoreBoard: (boardId: string) => void;
   handleDeleteBoard: (boardId: string) => void;
 };
 
-export function Archived({
-  projects,
-  boards,
-  handleRestoreProject,
-  handleDeleteProject,
-  handleRestoreBoard,
-  handleDeleteBoard,
-}: ArchivedProps) {
-  const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
-  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
-  const [isAlertOpen, setIsAlertOpen] = useState(false);
+export function Archived({ projects, boards, pending, handleRestoreProject, handleDeleteProject, handleRestoreBoard, handleDeleteBoard }: ArchivedProps) {
+  const { t } = useTranslation();
+  const [toDelete, setToDelete] = useState<{ kind: "projects" | "boards"; id: string; name: string } | null>(null);
+  const archivedProjects = projects.filter((project) => project.status === "ARCHIVED");
+  const archivedBoards = boards.filter((board) => board.status === "ARCHIVED");
 
-  // GOM CHUNG HÀM XỬ LÝ: Tự động kiểm tra xem đang xóa Board hay Project
-  const handleConfirmDeletion = async () => {
-    if (boardToDelete) {
-      await handleDeleteBoard(boardToDelete);
-      setBoardToDelete(null);
-    } else if (projectToDelete) {
-      await handleDeleteProject(projectToDelete);
-      setProjectToDelete(null);
-    }
-    setIsAlertOpen(false);
-  };
-
-  // Reset state khi người dùng bấm Hủy (Cancel) hoặc click ra ngoài popup
-  const handleOpenChange = (open: boolean) => {
-    setIsAlertOpen(open);
-    if (!open) {
-      setBoardToDelete(null);
-      setProjectToDelete(null);
-    }
-  };
-
-  return (
-    <TooltipProvider>
-      <Dialog>
-        {/* Chuyển from <div> thay vì <form> vì Dialog Trigger tự xử lý onSubmit */}
-        <div className="inline-block">
-          <DialogTrigger asChild>
-            <Button variant="outline">Archived Items</Button>
-          </DialogTrigger>
-
-          <DialogContent className="sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Archived Items</DialogTitle>
-            </DialogHeader>
-
-            <Tabs defaultValue="projects" className="w-full">
-              <TabsList className="w-full">
-                <TabsTrigger value="projects">
-                  Projects
-                  <Badge variant="outline" className="ml-2">
-                    {projects.filter((p) => p.status === "ARCHIVED").length}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="boards">
-                  Boards
-                  <Badge variant="outline" className="ml-2">
-                    {boards.filter((b) => b.status === "ARCHIVED").length}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="projects">
-                <div className="grid grid-cols-1 gap-4">
-                  {projects.map(
-                    (project) =>
-                      project.status === "ARCHIVED" && (
-                        <Card
-                          key={project.id}
-                          className="flex flex-row items-center justify-between gap-2"
-                        >
-                          <CardHeader>
-                            <div className="flex items-center gap-3">
-                              <CardTitle>{project.name}</CardTitle>
-                              <Badge>{project.boardsCount} boards</Badge>
-                              <Badge variant="outline">
-                                {project.membersCount} members
-                              </Badge>
-                            </div>
-                            <CardDescription>
-                              {project.description}
-                            </CardDescription>
-                          </CardHeader>
-                          <div className="flex gap-2 pr-4">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleRestoreProject(project.id)
-                                  }
-                                >
-                                  <ArchiveRestore className="hover:cursor-pointer hover:text-blue-500 transition-colors" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Restore Project</p>
-                              </TooltipContent>
-                            </Tooltip>
-
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setProjectToDelete(project.id);
-                                    setIsAlertOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="hover:cursor-pointer hover:text-[#ff0000] transition-colors" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Delete Project</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </Card>
-                      ),
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="boards">
-                <div className="grid grid-cols-2 gap-6 pr-8">
-                  {boards.map(
-                    (board) =>
-                      board.status === "ARCHIVED" && (
-                        <Card
-                          key={board.id}
-                          className="h-36 cursor-pointer hover:shadow-lg transition-shadow relative overflow-hidden group"
-                          style={
-                            board.background
-                              ? {
-                                  backgroundImage: `url(${board.background})`,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                }
-                              : { backgroundColor: "#f3f4f6" }
-                          }
-                        >
-                          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-
-                          <div className="absolute bottom-0 w-full text-left p-2 bg-white/90 backdrop-blur-sm font-medium border-t flex justify-between items-center">
-                            {board.name}
-                            <div className="flex gap-2 ">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRestoreBoard(board.id)}
-                                  >
-                                    <ArchiveRestore className="hover:cursor-pointer hover:text-blue-500 transition-colors" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Restore Board</p>
-                                </TooltipContent>
-                              </Tooltip>
-
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Trash2
-                                    className="hover:cursor-pointer hover:text-[#ff0000] transition-colors"
-                                    onClick={() => {
-                                      setBoardToDelete(board.id);
-                                      setIsAlertOpen(true);
-                                    }}
-                                  />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete Board</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </div>
-                        </Card>
-                      ),
-                  )}
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            {/* ĐƯA ALERT DIALOG RA NGOÀI ĐỂ KHÔNG BỊ RÀNG BUỘC BỞI TABS */}
-            <AlertDialog open={isAlertOpen} onOpenChange={handleOpenChange}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete
-                    the item and all of its data.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleConfirmDeletion}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    Confirm
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </DialogContent>
-        </div>
-      </Dialog>
-    </TooltipProvider>
-  );
+  return <>
+    <Tabs defaultValue="projects" className="min-w-0 gap-4">
+      <TabsList variant="line" className="h-11! w-full justify-start border-b sm:w-auto [&_button]:h-11 [&_button]:flex-none [&_button]:px-4">
+        <TabsTrigger value="projects">{t("archive.projects")}</TabsTrigger>
+        <TabsTrigger value="boards">{t("archive.boards")}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="projects" className="divide-y">
+        {!archivedProjects.length && <Empty className="items-start gap-3 border p-5 text-left md:p-5"><EmptyHeader className="max-w-none items-start text-left"><EmptyTitle className="text-sm tracking-normal">{t("archive.emptyProjects")}</EmptyTitle><EmptyDescription>{t("archive.emptyHint")}</EmptyDescription></EmptyHeader><EmptyContent className="items-start"><Button asChild variant="outline" className="h-11"><Link to="/projects">{t("overview.browse")}</Link></Button></EmptyContent></Empty>}
+        {archivedProjects.map((project) => <article key={project.id} className="archive-row flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+          <div className="min-w-0 flex-1 basis-48 space-y-1">
+            <h3 className="break-words text-sm font-medium">{project.name}</h3>
+            {project.description && <p className="line-clamp-2 break-words text-xs text-muted-foreground">{project.description}</p>}
+            <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+              {project.boardsCount != null && <span>{t("common.boards", { count: project.boardsCount })}</span>}
+              {project.membersCount != null && <span>{t("common.members", { count: project.membersCount })}</span>}
+            </p>
+          </div>
+          <div className="flex justify-end gap-1">
+            <Button variant="outline" className="h-11 gap-2 border-border bg-card shadow-none" disabled={pending} aria-label={`${t("archive.restoreProject")} ${project.name}`} onClick={() => handleRestoreProject(project.id)}><ArchiveRestore className="size-4" />{t("archive.restore")}</Button>
+            <Button variant="ghost" size="icon" className="size-11 text-destructive hover:text-destructive" disabled={pending} aria-label={`${t("archive.deleteProject")} ${project.name}`} title={t("archive.deleteProject")} onClick={() => setToDelete({ kind: "projects", id: project.id, name: project.name })}><Trash2 className="size-4" /></Button>
+          </div>
+        </article>)}
+      </TabsContent>
+      <TabsContent value="boards" className="divide-y">
+        {!archivedBoards.length && <Empty className="items-start gap-3 border p-5 text-left md:p-5"><EmptyHeader className="max-w-none items-start text-left"><EmptyTitle className="text-sm tracking-normal">{t("archive.emptyBoards")}</EmptyTitle><EmptyDescription>{t("archive.emptyHint")}</EmptyDescription></EmptyHeader><EmptyContent className="items-start"><Button asChild variant="outline" className="h-11"><Link to="/dashboard">{t("overview.projectsTitle")}</Link></Button></EmptyContent></Empty>}
+        {archivedBoards.map((board) => <article key={board.id} className="archive-row flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+          <div className="min-w-0 flex-1 basis-48 space-y-1"><h3 className="break-words text-sm font-medium">{board.name}</h3>{board.projectName && <p className="break-words text-xs text-muted-foreground">{board.projectName}</p>}</div>
+          <div className="flex justify-end gap-1">
+          <Button variant="outline" className="h-11 shrink-0 gap-2 border-border bg-card shadow-none" disabled={pending} aria-label={`${t("archive.restoreBoard")} ${board.name}`} onClick={() => handleRestoreBoard(board.id)}><ArchiveRestore className="size-4" />{t("archive.restore")}</Button>
+          <Button variant="ghost" size="icon" className="size-11 shrink-0 text-destructive hover:text-destructive" disabled={pending} aria-label={`${t("archive.deleteBoard")} ${board.name}`} title={t("archive.deleteBoard")} onClick={() => setToDelete({ kind: "boards", id: board.id, name: board.name })}><Trash2 className="size-4" /></Button>
+          </div>
+        </article>)}
+      </TabsContent>
+    </Tabs>
+    <AlertDialog open={toDelete !== null} onOpenChange={(open) => { if (!open) setToDelete(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader><AlertDialogTitle>{t("archive.confirmTitle")}</AlertDialogTitle><AlertDialogDescription>{t("archive.confirmDescription")}</AlertDialogDescription></AlertDialogHeader>
+        <p className="break-words text-sm font-medium">{toDelete?.name}</p>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={pending} onClick={() => { if (toDelete) { if (toDelete.kind === "projects") handleDeleteProject(toDelete.id); else handleDeleteBoard(toDelete.id); } }}>{t("archive.delete")}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>;
 }

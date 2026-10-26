@@ -24,7 +24,13 @@ const baseSelect = {
 	createdAt: true,
 } as const;
 const counts = {
-	select: { cardMembers: true, cardLabels: true, checklists: true, comments: true },
+	select: {
+		cardMembers: true,
+		cardLabels: true,
+		checklists: true,
+		comments: true,
+		attachments: true,
+	},
 } as const;
 const userSelect = { id: true, name: true, avatar: true } as const;
 
@@ -77,7 +83,7 @@ export class CardsRepository {
 						},
 					},
 				},
-				_count: { select: { comments: true } },
+				_count: { select: { comments: true, attachments: true } },
 			},
 		});
 	}

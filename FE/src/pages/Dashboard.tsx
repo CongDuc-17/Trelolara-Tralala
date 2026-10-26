@@ -1,302 +1,76 @@
-import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { CreateProject } from "@/components/projects/CreateProject";
-import { Card } from "@/components/ui/card";
-import { useProjects } from "@/hooks/useProjects";
-import type { Board, Project } from "@/hooks/useProjects";
-import { Trello } from "lucide-react";
+import { ArrowRight, FolderKanban } from "lucide-react";
 import { Link } from "react-router-dom";
-import { CreateBoard } from "@/components/boards/CreateBoard";
-import { Notifications } from "@/components/Notifications";
-import { Toaster } from "@/components/ui/sonner";
-
-import { Archived } from "@/components/Archived";
-import { apiClient } from "@/lib/apiClient";
-import { Skeleton } from "@/components/ui/skeleton";
+import { pageItems, useProjects, useUserBoards } from "@/features/catalog/queries";
+import { LoadMore, QueryFeedback } from "@/features/catalog/QueryFeedback";
+import { BoardTile, ProjectBoardGrid } from "@/features/catalog/ProjectBoardGrid";
+import { Button } from "@/components/ui/button";
 
 export function Dashboard() {
-  const { projects, userBoards, loading, error, fetchProjectsWithBoards } =
-    useProjects({
-      includeBoards: true,
-    });
-
-  const {
-    myProjects,
-    sharedProjects,
-    guestBoards,
-    archivedProjects,
-    archivedBoards,
-  } = useMemo(() => {
-    const my: Project[] = [];
-    const shared: Project[] = [];
-    const guestBoardsList: Board[] = [];
-    const archived: Project[] = [];
-    const archivedBoardsList: Board[] = [];
-    const memberProjectIds = new Set(projects.map((project) => project.id));
-
-    for (const project of projects) {
-      project.boards?.forEach((board) => {
-        if (board.status === "ARCHIVED") {
-          archivedBoardsList.push({ ...board, projectName: project.name });
-        }
-      });
-
-      if (project.status === "ARCHIVED") {
-        archived.push(project);
-      } else if (project.status === "ACTIVE") {
-        if (project.roleName === "PROJECT_ADMIN") {
-          my.push(project);
-        } else if (
-          project.roleName === "PROJECT_MEMBER" ||
-          project.roleName === "PROJECT_VIEWER" ||
-          project.roleName === "MEMBER"
-        ) {
-          shared.push(project);
-        } else {
-          project.boards?.forEach((board) => {
-            if (board.status === "ACTIVE") {
-              guestBoardsList.push({ ...board, projectName: project.name });
-            }
-          });
-        }
-      }
-    }
-
-    for (const board of userBoards) {
-      if (memberProjectIds.has(board.projectId ?? "")) {
-        continue;
-      }
-
-      if (board.status === "ARCHIVED") {
-        archivedBoardsList.push(board);
-      } else if (board.status === "ACTIVE") {
-        guestBoardsList.push(board);
-      }
-    }
-
-    return {
-      myProjects: my,
-      sharedProjects: shared,
-      guestBoards: guestBoardsList,
-      archivedProjects: archived,
-      archivedBoards: archivedBoardsList,
-    };
-  }, [projects, userBoards]);
-
-  const projectGroups = [
-    { id: "my-projects", title: "My Projects", data: myProjects },
-    { id: "shared-projects", title: "Shared Projects", data: sharedProjects },
+  const { t } = useTranslation();
+  const projectsQuery = useProjects();
+  const boardsQuery = useUserBoards();
+  const projects = pageItems(projectsQuery.data);
+  const boards = pageItems(boardsQuery.data);
+  const activeBoards = boards.filter((board) => board.status === "ACTIVE");
+  const activeProjects = projects.filter((project) => project.status === "ACTIVE");
+  const membershipComplete = projectsQuery.isSuccess && !projectsQuery.hasNextPage;
+  const memberIds = new Set(projects.map((project) => project.id));
+  const guestBoards = membershipComplete ? activeBoards.filter((board) => !memberIds.has(board.projectId ?? "")) : [];
+  const groups = [
+    { id: "managed", title: t("overview.managed"), data: activeProjects.filter((project) => project.roleName === "PROJECT_ADMIN") },
+    { id: "joined", title: t("overview.joined"), data: activeProjects.filter((project) => project.roleName !== "PROJECT_ADMIN") },
   ];
 
-  const handleRestoreProject = async (projectId: string) => {
-    try {
-      await apiClient.patch(`/projects/${projectId}/restore`);
-      await fetchProjectsWithBoards();
-    } catch (error) {
-      console.error("Error restoring project:", error);
-    }
-  };
-
-  const handleDeleteProject = async (projectId: string) => {
-    try {
-      await apiClient.delete(`/projects/${projectId}`);
-      await fetchProjectsWithBoards();
-    } catch (error) {
-      console.error("Error deleting project:", error);
-    }
-  };
-
-  const handleRestoreBoard = async (boardId: string) => {
-    try {
-      await apiClient.patch(`/boards/${boardId}/restore`);
-      await fetchProjectsWithBoards();
-    } catch (error) {
-      console.error("Error restoring board:", error);
-    }
-  };
-
-  const handleDeleteBoard = async (boardId: string) => {
-    try {
-      await apiClient.delete(`/boards/${boardId}`);
-      await fetchProjectsWithBoards();
-    } catch (error) {
-      console.error("Error deleting board:", error);
-    }
-  };
-
   return (
-    <>
-      <Toaster position="top-right" />
-      <div className="sticky w-full top-0 z-10 shadow-md flex justify-between items-center px-4 py-2 pr-12 bg-white">
-        <h1 className="text-2xl font-bold p-4 ">Dashboard</h1>
-        <Notifications />
-      </div>
-      <main className="h-screen overflow-y-auto pb-24">
-        <div className="p-8 flex justify-between items-center">
-          <div>
-            <div className="text-3xl font-bold">Dashboard</div>
-            <div className="text-gray-500 mt-1">
-              Welcome to the Dashboard! Here you can manage your projects and
-              tasks efficiently.
+        <div className="app-page min-w-0 space-y-4 p-4 md:space-y-6 md:p-6">
+          <header className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 space-y-1"><h1 className="text-2xl font-semibold tracking-tight">{t("overview.title")}</h1><p className="text-sm leading-6 text-muted-foreground">{t("overview.description")}</p></div><Button asChild className="h-11"><Link to="/my-work">{t("nav.myWork")}<ArrowRight className="size-4" /></Link></Button></header>
+          <section aria-label={t("nav.workspace")} className="app-summary space-y-2 border-y py-3">
+            <p className="text-xs text-muted-foreground">{t(boardsQuery.hasNextPage || projectsQuery.hasNextPage ? "overview.loadedCatalog" : "overview.yourCatalog")}</p>
+            <dl className="flex flex-wrap gap-x-6 gap-y-2">
+              {[
+                { label: t("overview.activeBoards"), value: boardsQuery.data ? activeBoards.length : "—", ariaLabel: t("overview.activeBoardsLabel") },
+                { label: t("overview.activeProjects"), value: projectsQuery.data ? activeProjects.length : "—" },
+              ].map((metric) => <div key={metric.label} className="flex min-w-0 items-baseline gap-2">
+                <dt className="text-xs text-muted-foreground first-letter:uppercase">{metric.label}</dt>
+                <dd aria-label={metric.ariaLabel} className="text-sm font-semibold tabular-nums">{metric.value}</dd>
+              </div>)}
+            </dl>
+          </section>
+          <div id="projects" className="scroll-mt-6 space-y-5">
+            <div id="boards" className="grid scroll-mt-6 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2">
+              <h2 className="text-base font-semibold">{t("overview.projectsTitle")}</h2>
+              <Link to="/projects" className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-muted-foreground hover:text-foreground">{t("overview.browse")}<ArrowRight className="size-4" /></Link>
+              <p className="col-span-2 text-sm text-muted-foreground">{t("overview.projectsDescription")}</p>
             </div>
-          </div>
-          <div>
-            <CreateProject />
-          </div>
-        </div>
-
-        <div className="pl-8">
-          {error && <div>Error: {String(error)}</div>}
-
-          {!loading &&
-            !error &&
-            projects.length === 0 &&
-            userBoards.length === 0 && (
-              <div className="text-gray-500">No projects found.</div>
-            )}
-
-          {/* SKELETON LOADING UI (Mô phỏng chính xác layout Project) */}
-          {loading && projects.length === 0 && userBoards.length === 0 && (
-            <div className="flex flex-col gap-12">
-              <section>
-                {/* Tên Section (VD: My Projects) */}
-                <Skeleton className="h-8 w-48 mb-6" />
-
-                <div className="mb-8">
-                  <div className="flex justify-between items-start mr-8">
-                    <div className="w-full">
-                      {/* Icon Trello + Tên Project */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <Skeleton className="h-8 w-8 rounded-md" />
-                        <Skeleton className="h-8 w-64 rounded-md" />
-                      </div>
-                      {/* Description Project */}
-                      <Skeleton className="h-5 w-96 mb-6 rounded-md" />
-                    </div>
-                    {/* Nút Options (Ellipsis) */}
-                    <Skeleton className="h-10 w-10 rounded-full" />
+            <QueryFeedback query={projectsQuery} empty={activeProjects.length === 0} label={t("overview.activeProjects")} />
+            {projectsQuery.isSuccess && activeProjects.length === 0 && <CreateProject />}
+            {groups.map((group) => group.data.length > 0 && <section key={group.id} className="space-y-4">
+              <h3 className="text-sm font-medium text-muted-foreground">{group.title}</h3>
+              {group.data.map((project) => <article key={project.id} className="project-group space-y-3 border-b pb-4 last:border-b-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/projects/${project.id}`} className="inline-flex max-w-full items-center gap-2 rounded-sm font-medium hover:text-primary">
+                      <FolderKanban className="size-4 shrink-0 text-muted-foreground" /><span className="break-words">{project.name}</span><ArrowRight className="size-3.5 shrink-0" />
+                    </Link>
                   </div>
-
-                  {/* Lưới chứa 2 Boards */}
-                  <div className="grid grid-cols-4 gap-6 pr-8">
-                    <Skeleton className="h-36 w-full rounded-xl" />
-                    <Skeleton className="h-36 w-full rounded-xl" />
-                  </div>
+                  {project.membersCount !== undefined && <span className="shrink-0 text-xs text-muted-foreground">{t("common.members", { count: project.membersCount })}</span>}
                 </div>
-              </section>
-            </div>
-          )}
-
-          {!error && (projects.length > 0 || userBoards.length > 0) && (
-            <div className="flex flex-col gap-12">
-              {/* RENDER MY PROJECTS & SHARED PROJECTS */}
-              {projectGroups.map(
-                (group) =>
-                  group.data.length > 0 && (
-                    <section key={group.id}>
-                      <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2 mr-8">
-                        {group.title}
-                      </h2>
-
-                      {group.data.map((project) => (
-                        <div key={project.id} className="mb-8">
-                          <div className="flex justify-between items-start mr-8">
-                            <div>
-                              <Link to={`/projects/${project.id}`}>
-                                <div className="text-2xl font-medium mb-2 flex items-center gap-2 hover:text-blue-600 transition-colors">
-                                  <Trello />
-                                  {project.name}
-                                </div>
-                              </Link>
-                              <div className="text-md text-gray-600 mb-6 flex items-center gap-2">
-                                {project.description}
-                              </div>
-                            </div>
-                            {/* <div className="flex items-center gap-4 cursor-pointer hover:bg-gray-100 p-2 rounded-full transition-colors">
-                              <EllipsisVertical className="text-gray-500" />
-                            </div> */}
-                          </div>
-
-                          <div className="grid grid-cols-4 gap-6 pr-8">
-                            {project.boards
-                              ?.filter((board) => board.status === "ACTIVE")
-                              .map((b) => (
-                                <Link to={`/boards/${b.id}`} key={b.id}>
-                                  <Card
-                                    className="h-36 cursor-pointer hover:shadow-lg transition-shadow relative overflow-hidden group"
-                                    style={
-                                      b.background
-                                        ? {
-                                            backgroundImage: `url(${b.background})`,
-                                            backgroundSize: "cover",
-                                            backgroundPosition: "center",
-                                          }
-                                        : { backgroundColor: "#f3f4f6" }
-                                    }
-                                  >
-                                    <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-                                    <div className="absolute bottom-0 w-full text-center p-2 bg-white/90 backdrop-blur-sm font-medium border-t">
-                                      {b.name}
-                                    </div>
-                                  </Card>
-                                </Link>
-                              ))}
-
-                            {/* Chỉ hiển thị nút CreateBoard ở những project thực sự là thành viên */}
-                            <CreateBoard projectId={project.id} />
-                          </div>
-                        </div>
-                      ))}
-                    </section>
-                  ),
-              )}
-
-              {/* RENDER GUEST BOARDS */}
-              {guestBoards.length > 0 && (
-                <section>
-                  <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2 mr-8">
-                    Guest Boards
-                  </h2>
-                  <div className="grid grid-cols-4 gap-6 pr-8">
-                    {guestBoards.map((b) => (
-                      <Link to={`/boards/${b.id}`} key={b.id}>
-                        <Card
-                          className="h-36 cursor-pointer hover:shadow-lg transition-shadow relative overflow-hidden group"
-                          style={
-                            b.background
-                              ? {
-                                  backgroundImage: `url(${b.background})`,
-                                  backgroundSize: "cover",
-                                  backgroundPosition: "center",
-                                }
-                              : { backgroundColor: "#f3f4f6" }
-                          }
-                        >
-                          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
-                          <div className="absolute bottom-0 w-full flex flex-col p-2 bg-white/90 backdrop-blur-sm border-t text-center">
-                            <span className="font-medium truncate">
-                              {b.name}
-                            </span>
-                          </div>
-                        </Card>
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* ARCHIVED SECTION */}
-              <Archived
-                projects={archivedProjects}
-                boards={archivedBoards}
-                handleRestoreProject={handleRestoreProject}
-                handleDeleteProject={handleDeleteProject}
-                handleRestoreBoard={handleRestoreBoard}
-                handleDeleteBoard={handleDeleteBoard}
-              />
-            </div>
-          )}
+                <ProjectBoardGrid projectId={project.id} activeOnly />
+              </article>)}
+            </section>)}
+            <LoadMore query={projectsQuery} label={t("common.project")} />
+          </div>
+          <section className="space-y-3 border-t pt-5">
+            <h2 className="text-base font-semibold">{t("nav.guestBoards")}</h2>
+            <p className="text-sm text-muted-foreground">{t("overview.guestDescription")}</p>
+            {!membershipComplete && !projectsQuery.isError && <p className="text-sm text-muted-foreground">{t("overview.loadProjects")}</p>}
+            {projectsQuery.isError && <p className="text-sm text-muted-foreground">{t("overview.retryProjects")}</p>}
+            <QueryFeedback query={boardsQuery} empty={membershipComplete && guestBoards.length === 0} label={t(boardsQuery.hasNextPage ? "nav.guestLoaded" : "nav.guest")} />
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-3">{guestBoards.map((board) => <BoardTile key={board.id} board={board} />)}</div>
+            <LoadMore query={boardsQuery} label={t("nav.catalogBoards")} />
+          </section>
         </div>
-      </main>
-    </>
   );
 }

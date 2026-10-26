@@ -1,93 +1,42 @@
-"use client";
+import { useSidebar } from "@/components/ui/sidebar-context";
+import { Archive, CheckCheck, CircleUserRound, Columns3, FolderKanban, LayoutDashboard, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { DisplayPreferences } from "@/components/layout/DisplayPreferences";
+import { SidebarLogout } from "@/components/layout/SidebarLogout";
 
-import * as React from "react";
-import { NavMain } from "@/components/nav-main";
-import { NavUser } from "@/components/nav-user";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenuButton,
-  SidebarRail,
-  SidebarTrigger,
-  useSidebar,
-} from "@/components/ui/sidebar";
-import { useSession } from "@/features/auth/session-context";
-import { useProjects, type Board } from "@/hooks/useProjects";
-
-import { GiSharkFin } from "react-icons/gi";
-import { Link } from "react-router";
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user } = useSession();
-  // LẤY THÊM TRẠNG THÁI LOADING TỪ HOOK
-  const { projects, userBoards, loading } = useProjects({
-    includeBoards: true,
-  });
-  const { open, setOpen } = useSidebar();
-
-  const guestBoardsList: Board[] = [];
-  const memberProjectIds = new Set(projects.map((project) => project.id));
-
-  for (const board of userBoards) {
-    if (memberProjectIds.has(board.projectId ?? "")) {
-      continue;
-    }
-
-    if (board.status === "ARCHIVED") {
-      continue;
-    } else if (board.status === "ACTIVE") {
-      guestBoardsList.push(board);
-    }
-  }
-
-  return (
-    <Sidebar collapsible="icon" {...props} className="relative">
-      {open && (
-        <SidebarTrigger className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground absolute right-2 top-2" />
-      )}
-
-      <SidebarHeader>
-        <SidebarMenuButton
-          size="lg"
-          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-        >
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-2 w-full"
-            onClick={(e) => {
-              if (!open) {
-                e.preventDefault();
-                setOpen(true);
-              }
-            }}
-          >
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <GiSharkFin className="size-5" />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">Trelolara</span>
-              <span className="truncate text-xs">Tralala</span>
-            </div>
-          </Link>
-        </SidebarMenuButton>
-      </SidebarHeader>
-
-      <SidebarContent>
-        {/* TRUYỀN isLoading XUỐNG NAVMAIN */}
-        <NavMain
-          projects={projects}
-          guestBoards={guestBoardsList}
-          isLoading={loading}
-        />
-      </SidebarContent>
-
-      <SidebarFooter>
-        <NavUser user={user} />
-      </SidebarFooter>
-
-      <SidebarRail />
-    </Sidebar>
-  );
+export function AppSidebar() {
+  const { t } = useTranslation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const pathname = useLocation().pathname.toLowerCase();
+  function closeMobile() { if (isMobile) setOpenMobile(false); }
+  return <Sidebar collapsible="icon" variant="floating" className="dashboard-rail p-0 md:inset-y-5 md:left-5 md:h-auto">
+    <SidebarHeader className="items-center gap-2 px-0 py-4">
+      <Link to="/dashboard" onClick={closeMobile} className="workspace-brand inline-flex size-11 items-center justify-center rounded-md" aria-label={`Trelolara — ${t("nav.overview")}`} title="Trelolara"><Columns3 className="size-5 text-primary" /></Link>
+      {isMobile && <SidebarMenuButton className="size-9 justify-center p-0" onClick={closeMobile} aria-label={t("nav.close")}><X /></SidebarMenuButton>}
+    </SidebarHeader>
+    <SidebarContent className="py-3">
+      <nav aria-label={t("nav.main")}>
+        <SidebarMenu className="items-center gap-2">
+          {[
+            { to: "/dashboard", label: "nav.overview", icon: LayoutDashboard, active: pathname === "/dashboard" },
+            { to: "/my-work", label: "nav.myWork", icon: CheckCheck, active: pathname.startsWith("/my-work") },
+            { to: "/projects", label: "nav.projects", icon: FolderKanban, active: pathname.startsWith("/projects") || pathname.startsWith("/boards") },
+            { to: "/archived", label: "archive.title", icon: Archive, active: pathname === "/archived" },
+            { to: "/me", label: "nav.profile", icon: CircleUserRound, active: pathname === "/me" },
+          ].map(({ to, label, icon: Icon, active }) => <SidebarMenuItem key={to}>
+            <SidebarMenuButton asChild tooltip={t(label)} isActive={active} className="size-11 justify-center p-3 group-data-[collapsible=icon]:size-11! group-data-[collapsible=icon]:p-3!">
+              <Link to={to} aria-label={t(label)} aria-current={active ? "page" : undefined} onClick={closeMobile}><Icon /><span className="sr-only">{t(label)}</span></Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>)}
+        </SidebarMenu>
+      </nav>
+    </SidebarContent>
+    <SidebarFooter className="items-center gap-4 px-0 pb-5">
+      <div className="rail-preferences-full"><DisplayPreferences sidebar /></div>
+      <div className="rail-preferences-menu"><DisplayPreferences /></div>
+      <SidebarLogout />
+    </SidebarFooter>
+  </Sidebar>;
 }

@@ -1,0 +1,35 @@
+.public-shell { --muted-foreground: color-mix(in srgb, var(--foreground) 75%, var(--background)); position: relative; isolation: isolate; background: var(--background); color: var(--foreground); }
+.public-backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--background); }
+.public-backdrop-media { position: absolute; inset: 0; opacity: .18; filter: invert(1); }
+.dark .public-backdrop-media { opacity: .2; filter: none; }
+.public-backdrop :is(img, canvas) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dither-burn-canvas { opacity: 0; transition: opacity 400ms; }
+.dither-burn-canvas[data-ready="true"] { opacity: 1; }
+.public-motion-control { position: fixed; right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 20; }
+.public-motion-control .ui-button { width: 2.75rem; height: 2.75rem; background: var(--card); color: var(--muted-foreground); }
+.public-header { display: flex; width: min(100% - 3rem, 76rem); min-height: 5rem; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 1rem; margin-inline: auto; }
+.public-brand { display: inline-flex; align-items: center; gap: .75rem; border-radius: .75rem; font-size: 1.125rem; font-weight: 600; letter-spacing: -.035em; }
+.public-brand > span { display: inline-flex; width: 2.75rem; height: 2.75rem; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: .875rem; background: var(--card); }
+.public-shell :is(a, button) { cursor: pointer; }
+.public-shell a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.access-layout.auth-shell { min-height: 100dvh; background: var(--background); --muted-foreground: color-mix(in srgb, var(--foreground) 75%, var(--background)); }
+.auth-shell .access-header { height: auto; padding: 0; }
+.auth-shell main { padding-block: 1rem 2rem; }
+.auth-shell .access-card { max-width: 29rem; padding: 2rem; border-radius: 1.5rem; border-color: color-mix(in srgb, var(--border) 75%, transparent); background: color-mix(in srgb, var(--card) 97%, transparent); box-shadow: 0 20px 60px -36px #0005; }
+.auth-shell .access-card > :first-child { padding-bottom: 0; text-align: center; }
+.auth-shell .access-card h1 { font-size: 1.625rem; letter-spacing: -.035em; }
+.auth-shell .auth-form :is([data-slot="input"], [data-slot="select-trigger"]) { background: var(--background); }
+.auth-shell .auth-form > button[type="submit"] { min-height: 3rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .auth-shell .access-card { animation: public-arrive 260ms cubic-bezier(.2,.8,.2,1); }
+  .public-shell .ui-button { transition: color 160ms, background-color 160ms, border-color 160ms, transform 100ms; }
+  .public-shell .ui-button:not(:disabled):active { transform: scale(.98); }
+}
+@keyframes public-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 639px) {
+  .public-header { width: calc(100% - 2rem); min-height: 4.5rem; }
+  .public-brand { gap: .5rem; font-size: 1rem; }
+  .auth-shell main { padding-block: .5rem 1.5rem; }
+  .auth-shell .access-card { padding: 1.5rem; border-radius: 1.25rem; }
+  .auth-shell .access-card h1 { font-size: 1.625rem; }
+}

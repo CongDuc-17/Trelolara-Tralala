@@ -14,6 +14,7 @@ export const cardSearchPageSchema = z.object({
 			position: z.number(),
 			listId: z.uuid(),
 			createdAt: z.date(),
+			_count: z.object({ attachments: z.number().int().nonnegative() }),
 			list: z.object({
 				id: z.uuid(),
 				name: z.string(),

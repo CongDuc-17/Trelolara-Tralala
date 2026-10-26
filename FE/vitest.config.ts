@@ -7,11 +7,12 @@ export default mergeConfig(
     // Tests must never inherit credentials or service URLs from a developer's .env.
     envDir: false,
     test: {
+      include: ["tests/unit/**/*.test.{ts,tsx}"],
       environment: "jsdom",
       environmentOptions: {
         jsdom: { url: "http://localhost:5173/login" },
       },
-      setupFiles: ["./src/test/setup.ts"],
+      setupFiles: ["./tests/support/setup.ts"],
       clearMocks: true,
       restoreMocks: true,
       unstubGlobals: true,
